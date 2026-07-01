@@ -1,0 +1,19 @@
+# EVCC Configuration
+evcc:
+  # The hostname or IP address of your EVCC instance.
+  # Can be overridden via the EVCC_HOST environment variable.
+  host: "localhost"
+  port: 12345
+  # Relative API path for charging status (typically /httpapi)
+  api_endpoint: "/httpapi"
+
+# Pricing configuration - adjust to your tariff structure
+pricing:
+  # Price per kWh for energy from your photovoltaic system
+  pv_price_per_kwh: 0.20  # €/kWh
+  
+  # Price per kWh for energy drawn from the public grid
+  grid_price_per_kwh: 0.30  # €/kWh
+  
+  # Price per kWh for external charging (e.g., public charging station)
+  external_price_per_kwh: 0.35  # €/kWh
