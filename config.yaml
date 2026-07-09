@@ -1,19 +1,17 @@
-# EVCC Configuration
+app:
+  auto_sync_minutes: 0
+  currency: EUR
+  mock_mode: true
+  vehicle_name: M3
 evcc:
-  # The hostname or IP address of your EVCC instance.
-  # Can be overridden via the EVCC_HOST environment variable.
-  host: "localhost"
-  port: 12345
-  # Relative API path for charging status (typically /httpapi)
-  api_endpoint: "/httpapi"
-
-# Pricing configuration - adjust to your tariff structure
-pricing:
-  # Price per kWh for energy from your photovoltaic system
-  pv_price_per_kwh: 0.20  # €/kWh
-  
-  # Price per kWh for energy drawn from the public grid
-  grid_price_per_kwh: 0.30  # €/kWh
-  
-  # Price per kWh for external charging (e.g., public charging station)
-  external_price_per_kwh: 0.35  # €/kWh
+  api_token: ''
+  host: evcc.home
+  password: ''
+  port: 7070
+  use_tls: false
+pricing_defaults:
+  feedin_price_per_kwh: 0.08
+  grid_price_per_kwh: 0.32
+teslamate:
+  api_token: ''
+  url: http://teslamate:4000/api
