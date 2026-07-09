@@ -34,40 +34,87 @@ Die App speichert importierte Sitzungen lokal in SQLite. Manuelle Korrekturen
 (Extern-Preise, Extra-Kosten, Preisperioden) leben in der App-DB – ein erneuter
 Sync überschreibt nur, was sich an der Quelle geändert hat (Dedupe via ID).
 
-## Installation auf Alpine Docker LXC (Homeserver)
+## Installation auf Alpine LXC (Homeserver)
+
+Voraussetzung: Ein Alpine-LXC, in dem Docker laufen kann (auf Proxmox/Host
+muss das LXC die **Nesting**-/Docker-Funktion haben). Die App erreicht EVCC und
+TeslaMate über ein gemeinsames Docker-Netzwerk – beide müssen dort hängen.
+
+### 1. Docker im LXC einrichten (einmalig)
 
 ```bash
-# 1. Repo klonen
-git clone https://github.com/bjk201/cartanklogger.git
-cd cartanklogger
-
-# 2. Docker-Netzwerk anlegen (EVCC + TeslaMate müssen beitreten)
-docker network create home-net
-docker network connect home-net <evcc-container>
-docker network connect home-net <teslamate-container>
-
-# 3. Starten
-docker compose up -d --build
+apk add docker docker-compose   # docker + compose-Plugin
+rc-update add docker default
+service docker start
 ```
 
-App erreichbar auf **http://<host>:8881**.
+### 2. Repo klonen
 
-### Verbindung konfigurieren
+```bash
+apk add git
+git clone https://github.com/bjk201/cartanklogger.git
+cd cartanklogger
+```
 
-In `config.yaml` (oder später in der Web-UI unter *Verwaltung*):
+### 3. Docker-Netzwerk anlegen und EVCC + TeslaMate verbinden
+
+```bash
+docker network create home-net
+# Containernamen anpassen – 'evcc' und 'teslamate' sind Beispiele:
+docker network connect home-net evcc
+docker network connect home-net teslamate
+```
+
+> Die Containernamen findest du mit `docker ps`. Sie müssen exakt zu den
+> Hostnamen in `config.yaml` passen (siehe unten).
+
+### 4. Verbindung in config.yaml prüfen/anpassen
 
 ```yaml
 evcc:
-  host: "evcc"          # Container-Name oder IP
+  host: evcc            # Container-Name von EVCC (auf home-net)
   port: 7070
   password: ""          # EVCC Admin-Passwort
-  # api_token: ""       # alternativ: EVCC API-Token (Authorization: Bearer)
 teslamate:
-  url: "http://teslamate:4000/api"   # GraphQL-Endpoint
-  # api_token: ""       # falls abgesichert
+  url: http://teslamate:4000/api   # GraphQL-Endpoint
 ```
 
-Danach in der Web-UI → **Daten abrufen → Alle synchronisieren**.
+Falls dein EVCC-Container anders heißt, hier eintragen (oder später in der
+Web-UI unter *Verwaltung → Verbindung*).
+
+### 5. Starten
+
+```bash
+docker compose up -d --build
+```
+
+### 6. Öffnen
+
+Die App lauscht im Container auf Port 5000, nach außen auf **13131**:
+
+```
+http://<LXC-IP>:13131
+```
+
+LXC-IP herausfinden:
+
+```bash
+ip -4 addr show eth0   # bzw. die verwendete Schnittstelle
+```
+
+Öffne diese URL im Browser deines Macs (oder jedem Gerät im Heimnetz).
+Erster Start → in der Web-UI *Verwaltung → Testdaten einspielen* (optional zum
+Ausprobieren) oder sofort *Daten abrufen → Alle synchronisieren*.
+
+### 7. Logs / Neustart
+
+```bash
+docker compose logs -f cartanklogger   # Logs verfolgen
+docker compose restart cartanklogger   # neu starten
+docker compose pull && docker compose up -d --build   # nach git pull aktualisieren
+```
+
+App erreichbar auf **http://<host>:13131**.
 
 > **Hinweis:** Chart.js/Bootstrap werden per CDN geladen → die Oberfläche
 > braucht Internet. Für rein lokalen Betrieb kannst du die Libs vendor-n.

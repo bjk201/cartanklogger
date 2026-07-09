@@ -3,7 +3,7 @@ services:
     build: .
     container_name: cartanklogger
     ports:
-      - "8881:5000"
+      - "13131:5000"
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./data:/app/data

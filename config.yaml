@@ -1,11 +1,11 @@
 app:
   auto_sync_minutes: 0
   currency: EUR
-  mock_mode: true
+  mock_mode: false
   vehicle_name: M3
 evcc:
   api_token: ''
-  host: evcc.home
+  host: evcc
   password: ''
   port: 7070
   use_tls: false
