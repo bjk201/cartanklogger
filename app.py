@@ -219,15 +219,17 @@ def compute_home_cost(charged_kwh, solar_percentage, on_date):
     feedin_price = get_price_at("feedin", on_date)
 
     grid_cost = grid_kwh * grid_price
-    pv_cost = pv_kwh * feedin_price  # entgangene Einspeisevergütung
-    total = grid_cost + pv_cost
+    pv_cost = pv_kwh * feedin_price
+    grid_cost_r = round(grid_cost, 2)
+    pv_cost_r = round(pv_cost, 2)
+    total = round(grid_cost_r + pv_cost_r, 2)  # Spalten addieren sich exakt auf
     ppk = (total / charged_kwh) if charged_kwh > 0 else 0.0
     return {
         "pv_kwh": round(pv_kwh, 3),
         "grid_kwh": round(grid_kwh, 3),
-        "grid_cost": round(grid_cost, 2),
-        "pv_cost": round(pv_cost, 2),
-        "total_cost": round(total, 2),
+        "grid_cost": grid_cost_r,
+        "pv_cost": pv_cost_r,
+        "total_cost": total,
         "price_per_kwh": round(ppk, 4),
         "grid_price": grid_price,
         "feedin_price": feedin_price,
