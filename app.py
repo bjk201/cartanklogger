@@ -449,7 +449,10 @@ def sync_teslamate():
         tm_cost = s.get("cost")
         cost_total = float(tm_cost) if tm_cost not in (None, "") else 0.0
         ppk = (cost_total / energy) if (cost_total and energy) else 0.0
-        try:
+        existing = db.execute(
+            "SELECT id, manual_price, cost_total FROM external_sessions WHERE teslamate_session_id=?",
+            (sid,)).fetchone()
+        if existing is None:
             cur = db.execute(
                 """INSERT OR IGNORE INTO external_sessions
                    (teslamate_session_id, started_at, finished_at, location_name, address,
@@ -466,8 +469,12 @@ def sync_teslamate():
                 ),
             )
             inserted += cur.rowcount
-        except sqlite3.IntegrityError:
-            pass
+        elif existing["manual_price"] == 0 and cost_total > 0:
+            # Auto-Eintrag: Kosten aus TeslaMate uebernehmen, falls gepflegt
+            db.execute(
+                """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?
+                   WHERE id=?""",
+                (round(cost_total, 2), round(ppk, 4), energy, existing["id"]))
     db.commit()
     return {"inserted": inserted, "fetched": len(sessions)}
 
@@ -775,23 +782,42 @@ def api_recompute():
     return jsonify({"ok": True})
 
 
-@app.route("/api/external/<int:sid>/price", methods=["PUT"])
-def api_external_price(sid):
+@app.route("/api/external/<int:sid>", methods=["PUT", "DELETE"])
+def api_external_detail(sid):
     db = get_db()
+    if request.method == "DELETE":
+        db.execute("DELETE FROM external_sessions WHERE id = ?", (sid,))
+        db.commit()
+        return jsonify({"ok": True})
+
     d = request.get_json(force=True)
-    cost = float(d.get("cost_total", 0))
-    energy = db.execute(
-        "SELECT energy_kwh FROM external_sessions WHERE id = ?", (sid,)
-    ).fetchone()
-    if not energy:
-        return jsonify({"ok": False, "error": "not found"}), 404
-    ppk = (cost / energy["energy_kwh"]) if energy["energy_kwh"] else 0
+    allowed = ("location_name", "address", "provider", "started_at", "finished_at",
+               "energy_kwh", "odometer_start", "cost_total")
+    fields = {k: d[k] for k in allowed if k in d}
+    if not fields:
+        return jsonify({"ok": False, "error": "keine Felder"}), 400
+
+    # Bei Kosten-/Energie-Aenderung €/kWh neu ableiten
+    if "cost_total" in fields or "energy_kwh" in fields:
+        cur = db.execute(
+            "SELECT energy_kwh, cost_total FROM external_sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        if not cur:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        energy = float(fields.get("energy_kwh", cur["energy_kwh"]) or 0)
+        cost = float(fields.get("cost_total", cur["cost_total"]) or 0)
+        fields["price_per_kwh"] = round(cost / energy, 4) if energy > 0 else 0.0
+
+    set_parts = [f"{k} = ?" for k in fields]
+    # Nur bei expliziter Kostenaenderung als manuell markieren
+    if "cost_total" in fields:
+        set_parts.append("manual_price = 1")
     db.execute(
-        "UPDATE external_sessions SET cost_total = ?, price_per_kwh = ?, manual_price = 1 WHERE id = ?",
-        (cost, round(ppk, 4), sid),
+        f"UPDATE external_sessions SET {', '.join(set_parts)} WHERE id = ?",
+        list(fields.values()) + [sid],
     )
     db.commit()
-    return jsonify({"ok": True, "cost_total": cost, "price_per_kwh": round(ppk, 4)})
+    return jsonify({"ok": True, **fields})
 
 
 @app.route("/api/extra-costs", methods=["GET", "POST", "DELETE"])

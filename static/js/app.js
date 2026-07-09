@@ -81,12 +81,18 @@ function renderHome(rows) {
 
 function renderExt(rows) {
   const tb = document.querySelector("#tblExt tbody");
+  const srcBadge = (r) => {
+    if (r.cost_total > 0 && r.manual_price == 1) return '<span class="badge bg-success">manuell</span>';
+    if (r.cost_total > 0) return '<span class="badge bg-secondary">TeslaMate</span>';
+    return '<span class="badge bg-warning text-dark">fehlt</span>';
+  };
   tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${r.started_at ? r.started_at.slice(0,10) : "–"}</td>
     <td>${r.location_name||r.address||""}</td><td>${r.provider||""}</td>
     <td>${fmtKwh(r.energy_kwh)}</td>
     <td class="cost">${fmtEUR(r.cost_total)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer_start!=null?Number(r.odometer_start).toLocaleString("de-DE"):"–"}</td>
+    <td>${srcBadge(r)}</td>
     <td><button class="btn btn-sm btn-outline-primary editPrice">Preis</button></td>
   </tr>`).join("");
   tb.querySelectorAll(".editPrice").forEach(b => b.addEventListener("click", () => {
@@ -94,7 +100,7 @@ function renderExt(rows) {
     const cur = b.closest("tr").querySelector(".cost").textContent;
     const val = prompt("Belasteten Preis (€) eingeben:", cur.replace(/[^0-9.,]/g,"").replace(",","."));
     if (val == null) return;
-    fetch(`/api/external/${id}/price`, {method:"PUT", headers:{"Content-Type":"application/json"},
+    fetch(`/api/external/${id}`, {method:"PUT", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({cost_total: parseFloat(val.replace(",","."))})})
       .then(r=>r.json()).then(()=>loadAll());
   }));
