@@ -11,18 +11,20 @@ services:
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=false
-    # Mit dem Netzwerk verbinden, in dem EVCC + TeslaMate laufen:
-    networks:
-      - home-net
+    # EVCC läuft bei dir in einem eigenen LXC (eigene LAN-IP, NICHT Docker).
+    # Deshalb ist KEIN gemeinsames Docker-Netz ("home-net") nötig:
+    #   - gib in der Web-Oberfläche (Admin) einfach die LAN-IP deines EVCC
+    #     ein, z.B. http-Host: 192.168.1.x , Port 7070
+    #   - TeslaMate: falls als Docker-Container erreichbar, dessen Container-Name
+    #     oder LAN-IP eintragen (z.B. http://192.168.1.y:4000/api)
+    # "home-net" nur aktivieren, wenn EVCC/TeslaMate ebenfalls Docker-Container
+    # im selben Netz sind. Dann unten networks: home-net einkommentieren
+    # und `docker network create home-net` ausführen.
+    # networks:
+    #   - home-net
     restart: unless-stopped
 
-# Erstelle dieses Netzwerk und stelle sicher, dass deine evcc- und teslamate-
-# Container ebenfalls in "home-net" hängen (docker network connect home-net <container>).
-# Alternativ: netzwerk-Modus "host" unten aktivieren und in config.yaml
-# Hostnamen wie "192.168.x.x" oder "host.docker.internal" nutzen.
-#    network_mode: host
-
-networks:
-  home-net:
-    name: home-net
-    external: true   # muss bereits existieren: docker network create home-net
+# networks:
+#   home-net:
+#     name: home-net
+#     external: true
