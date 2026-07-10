@@ -288,6 +288,10 @@ class EVCCClient:
                 app.logger.warning(f"EVCC Login fehlgeschlagen: {r.status_code}")
             except Exception as e:
                 app.logger.warning(f"EVCC Login Fehler: {e}")
+        # Kein Passwort/Token konfiguriert -> EVCC ohne Auth (REST offen)
+        if not self.api_token and not self.password:
+            self._authed = True
+            return True
         return False
 
     def get_sessions(self, since_days=365):
