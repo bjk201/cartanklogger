@@ -311,50 +311,55 @@ class EVCCClient:
 
 
 # ---------------------------------------------------------------------------
-# TeslaMate Client (GraphQL API)
+# TeslaMate Client (REST via teslamateapi, z.B. http://host:8080/api/v1)
 # ---------------------------------------------------------------------------
 class TeslaMateClient:
-    QUERY_A = """
-    query($limit: Int) {
-      chargingSessions(limit: $limit) {
-        id startDate endDate odometer chargeEnergyAdded
-        address latitude longitude geofence cost durationMin
-        startBatteryLevel endBatteryLevel
-      }
-    }"""
-    QUERY_B = """
-    query($limit: Int) {
-      chargingSessions(limit: $limit) {
-        id startDate endDate odometer energyAdded
-        address latitude longitude geofence cost durationMin
-      }
-    }"""
-
     def __init__(self, url, token=""):
-        self.url = url
+        # Basis-URL der teslamateapi, z.B. http://192.168.1.x:8080/api/v1
+        self.base = url.rstrip("/")
+        if not self.base.endswith("/v1"):
+            # falls nur ".../api" oder ".../api/" angegeben wurde
+            if self.base.endswith("/api"):
+                self.base = self.base + "/v1"
+            elif self.base.endswith("/api/"):
+                self.base = self.base.rstrip("/") + "/v1"
         self.token = token
+
+    def _cars(self):
+        try:
+            r = requests.get(f"{self.base}/cars", timeout=20)
+            if r.status_code == 200:
+                return [c["car_id"] for c in r.json().get("data", {}).get("cars", [])]
+        except Exception as e:
+            app.logger.warning(f"TeslaMate /cars Fehler: {e}")
+        return []
 
     def get_charging_sessions(self, limit=300):
         if mock_mode():
             return _mock_teslamate_sessions()
-        headers = {"Content-Type": "application/json"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-        for q in (self.QUERY_A, self.QUERY_B):
-            try:
-                r = requests.post(
-                    self.url,
-                    json={"query": q, "variables": {"limit": limit}},
-                    headers=headers,
-                    timeout=20,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    if "errors" not in data:
-                        return data.get("data", {}).get("chargingSessions", [])
-                    app.logger.warning(f"TeslaMate GraphQL Fehler: {data.get('errors')}")
-            except Exception as e:
-                app.logger.warning(f"TeslaMate Abruf Fehler: {e}")
+        try:
+            car_ids = self._cars()
+            if not car_ids:
+                # Fallback: einfach Car 1 versuchen
+                car_ids = [1]
+            out = []
+            for cid in car_ids:
+                try:
+                    r = requests.get(
+                        f"{self.base}/cars/{cid}/charges",
+                        params={"limit": limit},
+                        timeout=30,
+                    )
+                    if r.status_code != 200:
+                        app.logger.warning(f"TeslaMate /charges: {r.status_code}")
+                        continue
+                    charges = r.json().get("data", {}).get("charges", [])
+                    out.extend(charges)
+                except Exception as e:
+                    app.logger.warning(f"TeslaMate /charges Fehler: {e}")
+            return out
+        except Exception as e:
+            app.logger.warning(f"TeslaMate Abruf Fehler: {e}")
         return []
 
 
@@ -441,12 +446,12 @@ def sync_teslamate():
     now = datetime.now().isoformat()
     inserted = 0
     for s in sessions:
-        sid = s.get("id")
+        sid = s.get("charge_id")
         if sid is None:
             continue
-        started = _parse_dt(s.get("startDate")) or datetime.now()
-        finished = _parse_dt(s.get("endDate"))
-        energy = float(s.get("chargeEnergyAdded") or s.get("energyAdded") or 0)
+        started = _parse_dt(s.get("start_date")) or datetime.now()
+        finished = _parse_dt(s.get("end_date"))
+        energy = float(s.get("charge_energy_added") or s.get("charge_energy_used") or 0)
         if energy <= 0:
             continue
         provider = _detect_provider(s.get("geofence"), s.get("address"))

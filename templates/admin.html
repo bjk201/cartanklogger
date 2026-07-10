@@ -31,11 +31,12 @@
                         <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="evcc_tls"><label class="form-check-label small">HTTPS verwenden</label></div></div>
                     </div>
                     <hr>
-                    <h6>TeslaMate (GraphQL)</h6>
+                    <h6>TeslaMate (REST / teslamateapi)</h6>
                     <div class="row g-2">
-                        <div class="col-8"><input class="form-control form-control-sm" id="tm_url" placeholder="URL (z.B. http://teslamate:4000/api)"></div>
+                        <div class="col-8"><input class="form-control form-control-sm" id="tm_url" placeholder="URL (z.B. http://192.168.1.x:8080/api/v1)"></div>
                         <div class="col-4"><input class="form-control form-control-sm" id="tm_token" placeholder="Token (opt.)"></div>
                     </div>
+                    <div class="small text-muted mt-1">Die teslamateapi (Port 8080) nutzen, nicht den teslamate-GraphQL-Port 4000.</div>
                     <hr>
                     <h6>Allgemein</h6>
                     <div class="row g-2">

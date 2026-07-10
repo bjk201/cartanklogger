@@ -14,4 +14,4 @@ pricing_defaults:
   grid_price_per_kwh: 0.32
 teslamate:
   api_token: ''
-  url: http://teslamate:4000/api
+  url: http://teslamateapi:8080/api/v1
