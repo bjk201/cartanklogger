@@ -5,20 +5,15 @@ WORKDIR /app
 
 # Build-Tools für evtl. native Abhängigkeiten (psycopg2 nicht nötig, hier nur std)
 RUN apk add --no-cache \
-    gcc musl-dev libffi-dev \
-    su-exec
+    gcc musl-dev libffi-dev
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-# Nicht als root laufen (Sicherheit)
-RUN adduser -D -u 1000 cartank && \
-    mkdir -p /app/data && chown -R cartank:cartank /app && \
-    chmod +x /app/entrypoint.sh
-
-USER cartank
+# Rechte vorbereiten (Entrypoint korrigiert Bind-Mount-Rechte zur Laufzeit)
+RUN mkdir -p /app/data && chmod +x /app/entrypoint.sh
 
 ENV CONFIG_PATH=/app/config.yaml
 ENV DB_PATH=/app/data/cartanklogger.db
