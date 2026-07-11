@@ -730,11 +730,12 @@ def api_config():
         for section in ("evcc", "teslamate", "app"):
             if section in d and isinstance(d[section], dict):
                 for k, v in d[section].items():
-                    if k in config.get(section, {}):
+                    # home_addresses darf auch neu angelegt werden (kann in alter config fehlen)
+                    if k in config.get(section, {}) or (section == "app" and k == "home_addresses"):
                         # leere Passwörter/Tokens nicht überschreiben (sonst würden sie gelöscht)
                         if k in ("password", "api_token") and (v == "" or v is None):
                             continue
-                        config[section][k] = v
+                        config.setdefault(section, {})[k] = v
         # pricing_defaults
         if "pricing_defaults" in d and isinstance(d["pricing_defaults"], dict):
             config.setdefault("pricing_defaults", {})
@@ -806,15 +807,18 @@ def _tm_grouped_sessions(rows):
         return []
     groups, cur = [], [rows[0]]
     for r in rows[1:]:
-        prev_end = r.get("finished_at") or cur[-1].get("started_at")
+        prev = cur[-1]
+        prev_end = prev.get("finished_at") or prev.get("started_at")
         this_start = r.get("started_at")
         try:
             gap = (datetime.fromisoformat(this_start) -
                    datetime.fromisoformat(prev_end)).total_seconds() / 60
         except Exception:
             gap = 999
-        same_addr = (cur[-1].get("address") or "").strip() == (r.get("address") or "").strip()
-        if gap < TM_MERGE_GAP_MIN and same_addr:
+        same_addr = (prev.get("address") or "").strip() == (r.get("address") or "").strip()
+        # Nie ueber Tagesgrenzen zusammenfassen: pro Tag eine getrennte Ladung.
+        same_day = (this_start or "")[:10] == (prev.get("started_at") or "")[:10]
+        if gap < TM_MERGE_GAP_MIN and same_addr and same_day:
             cur.append(r)
         else:
             groups.append(cur)
@@ -850,10 +854,33 @@ def _build_merged(rows):
     from collections import defaultdict
     days = defaultdict(lambda: {"evcc": [], "tm_home": [], "tm_ext": []})
 
-    # EVCC (immer Zuhause, fuehrend)
+    # EVCC (immer Zuhause, fuehrend) -> nach STARTTAG buchen
+    # Zusaetzlich Zeitfenster [created, finished] merken, um TM-Teilladungen
+    # (die ueber Mitternacht in andere Kalendertage rutschen) derselben
+    # EVCC-Sitzung / demselben Starttag zuzuordnen.
+    evcc_windows = []  # (start_dt, end_dt, day)
     for r in rows.get("home", []):
         day = (r.get("created") or "")[:10]
         days[day]["evcc"].append(r)
+        try:
+            sdt = datetime.fromisoformat(r.get("created"))
+            edt = datetime.fromisoformat(r.get("finished")) if r.get("finished") else sdt
+            evcc_windows.append((sdt, edt, day))
+        except Exception:
+            pass
+    evcc_windows.sort(key=lambda w: w[0])
+
+    def _assign_day(charge_start_iso):
+        """Ordnet eine TM-Ladung dem EVCC-Sitzungstag zu (Fenster enthaelt Start).
+        Faellt zurueck auf den eigenen Kalendertag, wenn kein EVCC-Fenster passt."""
+        try:
+            cdt = datetime.fromisoformat(charge_start_iso)
+        except Exception:
+            return (charge_start_iso or "")[:10]
+        for sdt, edt, day in evcc_windows:
+            if sdt <= cdt <= edt:
+                return day
+        return (charge_start_iso or "")[:10]
 
     # TeslaMate: nach Zuhause vs. Extern trennen
     ext_rows, home_rows = [], []
@@ -863,11 +890,15 @@ def _build_merged(rows):
         else:
             ext_rows.append(r)
 
-    # TM-Zuhause gruppieren (fuer Ladeverluste added/used)
-    for g in _tm_grouped_sessions(home_rows):
-        day = (g["start"] or "")[:10]
-        days[day]["tm_home"].append(g)
-    # TM-Extern gruppieren (echte Fremdladungen, eigene Energie)
+    # TM-Zuhause: pro EVCC-Sitzungstag buckets bilden, dann gruppieren
+    home_by_day = defaultdict(list)
+    for r in home_rows:
+        home_by_day[_assign_day(r.get("started_at"))].append(r)
+    for day, rws in home_by_day.items():
+        for g in _tm_grouped_sessions(rws):
+            days[day]["tm_home"].append(g)
+
+    # TM-Extern gruppieren (echte Fremdladungen, eigene Energie, nach Kalendertag)
     for g in _tm_grouped_sessions(ext_rows):
         day = (g["start"] or "")[:10]
         days[day]["tm_ext"].append(g)
@@ -878,10 +909,22 @@ def _build_merged(rows):
         ev_kwh = sum(float(e.get("charged_kwh") or 0) for e in v["evcc"])
         ev_cost = sum(float(e.get("total_cost") or 0) for e in v["evcc"])
         ev_solar = (sum(float(e.get("solar_percentage") or 0) for e in v["evcc"]) / len(v["evcc"])) if v["evcc"] else 0
-        # TM-Zuhause NUR fuer Ladeverluste (added=Akku, used=Wand)
+        # TM-Zuhause: added = im Akku angekommen. ECHTER Ladeverlust zuhause
+        # = EVCC-Wallbox (Wand) - TM added (Akku).
+        # ABER: TeslaMate hat teils Datenluecken (Auto offline etc.). Dann ist
+        # TM_added << EVCC und die Differenz ist KEIN Verlust, sondern eine
+        # fehlende TM-Ladung. Verlust daher nur zeigen, wenn plausibel:
+        # - TM added deckt >=70% der EVCC-kWh ab (sonst Datenluecke)
+        # - Verlust liegt zwischen 0 und 30% (physikalisch realistisch)
         tmh_added = sum(t["added"] for t in v["tm_home"])
         tmh_used = sum(t["used"] for t in v["tm_home"])
-        home_loss = round(tmh_used - tmh_added, 2) if (tmh_added and tmh_used) else 0.0
+        home_loss = None  # None = nicht ermittelbar -> Frontend zeigt "–"
+        if ev_kwh > 0 and tmh_added > 0:
+            coverage = tmh_added / ev_kwh
+            loss = ev_kwh - tmh_added
+            loss_pct = loss / ev_kwh
+            if coverage >= 0.70 and 0 <= loss_pct <= 0.30:
+                home_loss = round(loss, 2)
 
         # --- Extern: nur echte Fremdladungen ---
         ext_kwh = sum(t["added"] for t in v["tm_ext"])

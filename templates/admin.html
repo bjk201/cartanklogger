@@ -42,6 +42,11 @@
                     <div class="row g-2">
                         <div class="col-8"><input class="form-control form-control-sm" id="vehicle_name" placeholder="Fahrzeugname"></div>
                         <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="mock_mode"><label class="form-check-label small">Mock-Modus</label></div></div>
+                        <div class="col-12">
+                            <label class="form-label small mb-0 mt-1">Zuhause-Adressen (kommagetrennt)</label>
+                            <input class="form-control form-control-sm" id="home_addresses" placeholder="z.B. Dammstraße, Garage">
+                            <div class="form-text">TeslaMate-Ladungen an diesen Adressen gelten als <strong>Zuhause</strong> (dieselben wie EVCC) – sie werden nicht als extern gezählt und nicht doppelt addiert. Alles andere (z.&nbsp;B. Supercharger) = extern.</div>
+                        </div>
                     </div>
                     <div class="d-grid mt-2"><button class="btn btn-primary btn-sm" id="saveCfg">Speichern</button></div>
                     <div id="cfgMsg" class="small mt-2"></div>
@@ -164,6 +169,7 @@ async function loadCfg() {
   $("tm_token").value = "";
   $("vehicle_name").value = c.app?.vehicle_name||"";
   $("mock_mode").checked = !!c.app?.mock_mode;
+  $("home_addresses").value = (c.app?.home_addresses || []).join(", ");
   if (c.app?.mock_mode) $("seedBtn").style.display = "";
 }
 
@@ -172,7 +178,8 @@ $("saveCfg").onclick = async () => {
     evcc: { host:$("evcc_host").value, port:parseInt($("evcc_port").value)||7070,
             password:$("evcc_password").value, api_token:$("evcc_api_token").value, use_tls:$("evcc_tls").checked },
     teslamate: { url:$("tm_url").value, api_token:$("tm_token").value },
-    app: { vehicle_name:$("vehicle_name").value, mock_mode:$("mock_mode").checked }
+    app: { vehicle_name:$("vehicle_name").value, mock_mode:$("mock_mode").checked,
+           home_addresses: $("home_addresses").value.split(",").map(s=>s.trim()).filter(s=>s) }
   };
   const r = await fetch("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
   const j = await r.json();
