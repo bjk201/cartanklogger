@@ -5,7 +5,7 @@ app:
   vehicle_name: M3
 evcc:
   api_token: ''
-  host: evcc
+  host: 192.168.1.15
   password: ''
   port: 7070
   use_tls: false
@@ -14,4 +14,4 @@ pricing_defaults:
   grid_price_per_kwh: 0.32
 teslamate:
   api_token: ''
-  url: http://teslamateapi:8080/api/v1
+  url: http://192.168.1.21:8080/api/v1
