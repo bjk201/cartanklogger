@@ -84,38 +84,50 @@ function renderHome(rows) {
 function renderMerged(rows) {
   const tb = document.querySelector("#tblMerged tbody");
   tb.innerHTML = rows.map((r, i) => {
-    const hasEv = r.evcc && r.evcc.length;
-    const hasTm = r.tm && r.tm.length;
-    // Aufklapp-Detail: EVCC einzeln, dann TM-Gruppen mit Fragmenten
-    let detail = '<ul class="mb-0 ps-3">';
-    if (hasEv) {
-      detail += `<li><strong>EVCC (${r.evcc.length}x)</strong></li>`;
+    // Aufklapp-Detail: Zuhause (EVCC einzeln + TM-Zuhause) und Extern getrennt
+    let detail = '<div class="row"><div class="col-md-6">';
+    detail += '<strong>🏠 Zuhause</strong><ul class="mb-2 ps-3">';
+    if (r.evcc && r.evcc.length) {
       for (const e of r.evcc) {
-        detail += `<li style="margin-left:1rem">${e.created ? e.created.slice(11,16) : ""} ${fmtKwh(e.charged_kwh)} · ${fmtEUR(e.total_cost)}</li>`;
+        detail += `<li>EVCC ${e.created ? e.created.slice(11,16) : ""} · ${fmtKwh(e.charged_kwh)} · ${fmtEUR(e.total_cost)} · PV ${fmtPct(e.solar_percentage)}</li>`;
       }
     }
-    if (hasTm) {
-      detail += `<li><strong>TeslaMate (${r.tm.length}x Gruppe)</strong></li>`;
-      for (const t of r.tm) {
-        const frags = (t.frags || []);
-        detail += `<li style="margin-left:1rem">${t.start ? t.start.slice(11,16) : ""}–${t.end ? t.end.slice(11,16) : ""} added ${fmtKwh(t.added)} · used ${fmtKwh(t.used)} · Verlust ${fmtKwh(t.used - t.added)} (${t.n_frags} Fragm.)</li>`;
+    if (r.tm_home && r.tm_home.length) {
+      for (const t of r.tm_home) {
+        detail += `<li class="text-muted">TeslaMate ${t.address || ""}: added ${fmtKwh(t.added)} / used ${fmtKwh(t.used)} → Verlust ${fmtKwh(t.used - t.added)} (${t.n_frags} Teil-Lad.)</li>`;
       }
     }
-    if (!hasEv && !hasTm) detail += "<li>keine Daten</li>";
-    detail += "</ul>";
+    if (!(r.evcc && r.evcc.length) && !(r.tm_home && r.tm_home.length)) detail += "<li>–</li>";
+    detail += '</ul></div><div class="col-md-6">';
+    detail += '<strong>🔌 Extern</strong><ul class="mb-0 ps-3">';
+    if (r.tm_ext && r.tm_ext.length) {
+      for (const t of r.tm_ext) {
+        detail += `<li>${t.address || "Extern"} ${t.start ? t.start.slice(11,16) : ""}–${t.end ? t.end.slice(11,16) : ""}: ${fmtKwh(t.added)} · ${fmtEUR(t.cost)} (${t.n_frags} Teil-Lad.)</li>`;
+      }
+    } else {
+      detail += "<li>–</li>";
+    }
+    detail += "</ul></div></div>";
+
+    const stationBadges = (r.stations || []).map(s => {
+      const isExt = !/garage|dammstr/i.test(s);
+      return `<span class="badge ${isExt ? 'bg-warning text-dark' : 'bg-success'} me-1">${s}</span>`;
+    }).join("");
+
     return `<tr>
       <td>${r.day || "–"}</td>
-      <td>${r.station || "–"}</td>
-      <td>${fmtKwh(r.evcc_kwh)}</td>
-      <td>${fmtEUR(r.evcc_cost)}</td>
-      <td>${r.evcc_solar_pct != null ? fmtPct(r.evcc_solar_pct) : "–"}</td>
-      <td>${fmtKwh(r.tm_added)}</td>
-      <td>${fmtKwh(r.tm_used)}</td>
-      <td>${fmtKwh(r.tm_loss)}</td>
-      <td>${fmtEUR(r.tm_cost)}</td>
+      <td>${stationBadges}</td>
+      <td>${fmtKwh(r.home_kwh)}</td>
+      <td>${fmtEUR(r.home_cost)}</td>
+      <td>${r.home_kwh > 0 ? fmtPct(r.home_solar_pct) : "–"}</td>
+      <td>${r.home_loss ? fmtKwh(r.home_loss) : "–"}</td>
+      <td>${r.ext_kwh > 0 ? fmtKwh(r.ext_kwh) : "–"}</td>
+      <td>${r.ext_kwh > 0 ? fmtEUR(r.ext_cost) : "–"}</td>
+      <td><strong>${fmtKwh(r.total_kwh)}</strong></td>
+      <td><strong>${fmtEUR(r.total_cost)}</strong></td>
       <td><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#m${i}">▾</button></td>
     </tr>
-    <tr class="collapse-row"><td colspan="10" class="p-0">
+    <tr class="collapse-row"><td colspan="11" class="p-0">
       <div class="collapse" id="m${i}"><div class="p-2 bg-light">${detail}</div></div>
     </td></tr>`;
   }).join("");

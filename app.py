@@ -442,8 +442,23 @@ def sync_evcc():
     return {"inserted": inserted, "fetched": len(sessions)}
 
 
+def _home_addresses():
+    """Liste der als 'Zuhause' geltenden Adress-Substrings (aus config)."""
+    return [a.strip().lower() for a in config.get("app", {}).get("home_addresses", []) if a and a.strip()]
+
+
+def _is_home_address(geofence, address):
+    """True, wenn eine TeslaMate-Ladung an einer Zuhause-Adresse stattfand.
+    Diese Ladungen sind IDENTISCH mit den EVCC-Ladungen (doppeltes Tracking)
+    und duerfen NICHT als extern gezaehlt/addiert werden."""
+    text = f"{geofence or ''} {address or ''}".lower()
+    return any(h in text for h in _home_addresses())
+
+
 def _detect_provider(geofence, address):
     text = f"{geofence or ''} {address or ''}".lower()
+    if _is_home_address(geofence, address):
+        return "Zuhause"
     if "supercharger" in text:
         return "Tesla Supercharger"
     if geofence:
@@ -585,10 +600,14 @@ def build_stats(days=365):
     home = db.execute(
         "SELECT * FROM home_sessions WHERE created >= ? ORDER BY created ASC", (cutoff,)
     ).fetchall()
-    ext = db.execute(
+    ext_all = db.execute(
         "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at ASC",
         (cutoff,),
     ).fetchall()
+    # WICHTIG: TeslaMate-Ladungen an Zuhause-Adressen (Dammstraße/Garage) sind
+    # dieselben wie die EVCC-Ladungen (doppeltes Tracking). Sie duerfen NICHT
+    # als extern gezaehlt oder zur Energie/Distanz addiert werden.
+    ext = [r for r in ext_all if not _is_home_address(r["location_name"], r["address"])]
     extras = db.execute(
         "SELECT * FROM extra_costs WHERE date >= ? ORDER BY date DESC", (cutoff,)
     ).fetchall()
@@ -821,36 +840,90 @@ def _tm_grouped_sessions(rows):
 
 
 def _build_merged(rows):
+    """Eine Zeile PRO TAG. Grundsatz:
+    - Zuhause = EVCC (Wallbox Garage) IST fuehrend fuer kWh/Kosten/km.
+    - TeslaMate-Zuhause (Dammstraße/Garage) = DIESELBEN Ladungen wie EVCC,
+      werden NUR fuer added/used -> Ladeverluste genutzt, NIE zur Energie addiert.
+    - Extern = nur TeslaMate-Ladungen an Fremd-Adressen (z.B. Supercharger Engen).
+    Mehrere Ladestationen pro Tag bleiben in der Aufklapp-Liste sichtbar.
+    """
     from collections import defaultdict
-    merged = defaultdict(lambda: {"evcc": [], "tm": []})
+    days = defaultdict(lambda: {"evcc": [], "tm_home": [], "tm_ext": []})
+
+    # EVCC (immer Zuhause, fuehrend)
     for r in rows.get("home", []):
         day = (r.get("created") or "")[:10]
-        station = r.get("loadpoint") or "Zuhause"
-        merged[(day, station)]["evcc"].append(r)
-    for g in _tm_grouped_sessions(rows.get("external", [])):
+        days[day]["evcc"].append(r)
+
+    # TeslaMate: nach Zuhause vs. Extern trennen
+    ext_rows, home_rows = [], []
+    for r in rows.get("external", []):
+        if _is_home_address(r.get("location_name"), r.get("address")):
+            home_rows.append(r)
+        else:
+            ext_rows.append(r)
+
+    # TM-Zuhause gruppieren (fuer Ladeverluste added/used)
+    for g in _tm_grouped_sessions(home_rows):
         day = (g["start"] or "")[:10]
-        station = g["address"] or "Extern"
-        merged[(day, station)]["tm"].append(g)
+        days[day]["tm_home"].append(g)
+    # TM-Extern gruppieren (echte Fremdladungen, eigene Energie)
+    for g in _tm_grouped_sessions(ext_rows):
+        day = (g["start"] or "")[:10]
+        days[day]["tm_ext"].append(g)
+
     result = []
-    for (day, station), v in merged.items():
+    for day, v in days.items():
+        # --- Zuhause: EVCC ist fuehrend ---
         ev_kwh = sum(float(e.get("charged_kwh") or 0) for e in v["evcc"])
         ev_cost = sum(float(e.get("total_cost") or 0) for e in v["evcc"])
-        ev_solar = sum(float(e.get("solar_percentage") or 0) for e in v["evcc"]) / len(v["evcc"]) if v["evcc"] else 0
-        tm_added = sum(t["added"] for t in v["tm"])
-        tm_used = sum(t["used"] if "used" in t else t["added"] for t in v["tm"])
-        tm_cost = sum(t["cost"] for t in v["tm"])
+        ev_solar = (sum(float(e.get("solar_percentage") or 0) for e in v["evcc"]) / len(v["evcc"])) if v["evcc"] else 0
+        # TM-Zuhause NUR fuer Ladeverluste (added=Akku, used=Wand)
+        tmh_added = sum(t["added"] for t in v["tm_home"])
+        tmh_used = sum(t["used"] for t in v["tm_home"])
+        home_loss = round(tmh_used - tmh_added, 2) if (tmh_added and tmh_used) else 0.0
+
+        # --- Extern: nur echte Fremdladungen ---
+        ext_kwh = sum(t["added"] for t in v["tm_ext"])
+        ext_used = sum(t["used"] for t in v["tm_ext"])
+        ext_cost = sum(t["cost"] for t in v["tm_ext"])
+        ext_loss = round(ext_used - ext_kwh, 2) if (ext_kwh and ext_used) else 0.0
+
+        # Ladestationen des Tages (fuer "mehrere Stationen sichtbar")
+        stations = []
+        if v["evcc"]:
+            stations.append("Garage (EVCC)")
+        for g in v["tm_home"]:
+            a = g.get("address") or "Zuhause"
+            if a not in stations:
+                stations.append(a)
+        for g in v["tm_ext"]:
+            a = g.get("address") or "Extern"
+            if a not in stations:
+                stations.append(a)
+
         result.append({
             "day": day,
-            "station": station,
-            "evcc_kwh": round(ev_kwh, 2),
-            "evcc_cost": round(ev_cost, 2),
-            "evcc_solar_pct": round(ev_solar * 100, 1) if ev_solar <= 1 else round(ev_solar, 1),
-            "tm_added": round(tm_added, 2),
-            "tm_used": round(tm_used, 2),
-            "tm_loss": round(tm_used - tm_added, 2),
-            "tm_cost": round(tm_cost, 2),
+            "stations": stations,           # Liste aller genutzten Stationen
+            "n_stations": len(stations),
+            # Zuhause (EVCC fuehrend)
+            "home_kwh": round(ev_kwh, 2),
+            "home_cost": round(ev_cost, 2),
+            "home_solar_pct": round(ev_solar, 1),
+            "home_loss": home_loss,
+            "tm_home_added": round(tmh_added, 2),
+            "tm_home_used": round(tmh_used, 2),
+            # Extern (nur Fremd)
+            "ext_kwh": round(ext_kwh, 2),
+            "ext_cost": round(ext_cost, 2),
+            "ext_loss": ext_loss,
+            # Gesamt (Zuhause EVCC + echte Externe, KEINE Doppelzaehlung)
+            "total_kwh": round(ev_kwh + ext_kwh, 2),
+            "total_cost": round(ev_cost + ext_cost, 2),
+            # Detail-Daten fuer Aufklappen
             "evcc": v["evcc"],
-            "tm": v["tm"],
+            "tm_home": v["tm_home"],
+            "tm_ext": v["tm_ext"],
         })
     result.sort(key=lambda x: x["day"], reverse=True)
     return result
