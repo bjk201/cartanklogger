@@ -132,6 +132,7 @@ def init_db(db):
             longitude         REAL,
             provider          TEXT,
             energy_kwh        REAL,
+            energy_used_kwh   REAL,
             odometer_start    REAL,
             cost_total        REAL,
             price_per_kwh     REAL,
@@ -161,6 +162,11 @@ def init_db(db):
         );
         """
     )
+    # Spalte energy_used_kwh nur ergaenzen, falls aeltere DB (Migration).
+    # SQLite unterstuetzt kein "ADD COLUMN IF NOT EXISTS" im executescript.
+    cols = [r[1] for r in db.execute("PRAGMA table_info(external_sessions)")]
+    if "energy_used_kwh" not in cols:
+        db.execute("ALTER TABLE external_sessions ADD COLUMN energy_used_kwh REAL")
     db.commit()
     seed_price_periods(db)
 
@@ -403,7 +409,14 @@ def sync_evcc():
         if charged <= 0:
             continue
         solar = s.get("solarPercentage")
-        cost = compute_home_cost(charged, solar, created)
+        # EVCC liefert solarPercentage als 0..1 -> auf 0..100 normieren
+        try:
+            solar_f = float(solar) if solar is not None else 0.0
+        except (TypeError, ValueError):
+            solar_f = 0.0
+        if solar_f <= 1.0 and solar_f > 0:
+            solar_f = solar_f * 100.0
+        cost = compute_home_cost(charged, solar_f, created)
         try:
             cur = db.execute(
                 """INSERT OR IGNORE INTO home_sessions
@@ -452,6 +465,7 @@ def sync_teslamate():
         started = _parse_dt(s.get("start_date")) or datetime.now()
         finished = _parse_dt(s.get("end_date"))
         energy = float(s.get("charge_energy_added") or s.get("charge_energy_used") or 0)
+        energy_used = float(s.get("charge_energy_used") or energy)
         if energy <= 0:
             continue
         provider = _detect_provider(s.get("geofence"), s.get("address"))
@@ -465,15 +479,15 @@ def sync_teslamate():
             cur = db.execute(
                 """INSERT OR IGNORE INTO external_sessions
                    (teslamate_session_id, started_at, finished_at, location_name, address,
-                    latitude, longitude, provider, energy_kwh, odometer_start,
+                    latitude, longitude, provider, energy_kwh, energy_used_kwh, odometer_start,
                     cost_total, price_per_kwh, manual_price, imported_at, raw)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sid, started.isoformat(),
                     finished.isoformat() if finished else None,
                     s.get("geofence") or "", s.get("address") or "",
                     s.get("latitude"), s.get("longitude"), provider,
-                    energy, s.get("odometer"),
+                    energy, energy_used, s.get("odometer"),
                     cost_total, round(ppk, 4), 0, now, json.dumps(s, default=str),
                 ),
             )
@@ -481,9 +495,9 @@ def sync_teslamate():
         elif existing["manual_price"] == 0 and cost_total > 0:
             # Auto-Eintrag: Kosten aus TeslaMate uebernehmen, falls gepflegt
             db.execute(
-                """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?
+                """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?, energy_used_kwh=?
                    WHERE id=?""",
-                (round(cost_total, 2), round(ppk, 4), energy, existing["id"]))
+                (round(cost_total, 2), round(ppk, 4), energy, energy_used, existing["id"]))
     db.commit()
     return {"inserted": inserted, "fetched": len(sessions)}
 
@@ -758,6 +772,95 @@ def api_sessions():
         r.update(c)
     ext = [dict(r) for r in db.execute("SELECT * FROM external_sessions ORDER BY started_at DESC")]
     return jsonify({"home": home, "external": ext})
+
+
+# ---------------------------------------------------------------------------
+# Zusammenfassung: pro Tag + Ladestation, EVCC führend + TeslaMate-Werte
+# (TeslaMate-PV-Fragmente werden bei Lücke < 60min + gleicher Adresse gemerged)
+# ---------------------------------------------------------------------------
+TM_MERGE_GAP_MIN = 60
+
+def _tm_grouped_sessions(rows):
+    """external_sessions (TeslaMate) nach Adresse + Zeitlücke zu Sessions gruppieren."""
+    rows = sorted(rows, key=lambda r: (r.get("started_at") or ""))
+    if not rows:
+        return []
+    groups, cur = [], [rows[0]]
+    for r in rows[1:]:
+        prev_end = r.get("finished_at") or cur[-1].get("started_at")
+        this_start = r.get("started_at")
+        try:
+            gap = (datetime.fromisoformat(this_start) -
+                   datetime.fromisoformat(prev_end)).total_seconds() / 60
+        except Exception:
+            gap = 999
+        same_addr = (cur[-1].get("address") or "").strip() == (r.get("address") or "").strip()
+        if gap < TM_MERGE_GAP_MIN and same_addr:
+            cur.append(r)
+        else:
+            groups.append(cur)
+            cur = [r]
+    groups.append(cur)
+    out = []
+    for g in groups:
+        added = sum(float(x.get("energy_kwh") or 0) for x in g)
+        used = sum(float(x.get("energy_used_kwh") or x.get("energy_kwh") or 0) for x in g)
+        cost = sum(float(x.get("cost_total") or 0) for x in g)
+        out.append({
+            "tm_ids": [x.get("teslamate_session_id") for x in g],
+            "start": g[0].get("started_at"),
+            "end": g[-1].get("finished_at"),
+            "address": g[0].get("address") or g[0].get("location_name") or "",
+            "added": round(added, 2),
+            "used": round(used, 2),
+            "cost": round(cost, 2),
+            "n_frags": len(g),
+            "frags": g,
+        })
+    return out
+
+
+def _build_merged(rows):
+    from collections import defaultdict
+    merged = defaultdict(lambda: {"evcc": [], "tm": []})
+    for r in rows.get("home", []):
+        day = (r.get("created") or "")[:10]
+        station = r.get("loadpoint") or "Zuhause"
+        merged[(day, station)]["evcc"].append(r)
+    for g in _tm_grouped_sessions(rows.get("external", [])):
+        day = (g["start"] or "")[:10]
+        station = g["address"] or "Extern"
+        merged[(day, station)]["tm"].append(g)
+    result = []
+    for (day, station), v in merged.items():
+        ev_kwh = sum(float(e.get("charged_kwh") or 0) for e in v["evcc"])
+        ev_cost = sum(float(e.get("total_cost") or 0) for e in v["evcc"])
+        ev_solar = sum(float(e.get("solar_percentage") or 0) for e in v["evcc"]) / len(v["evcc"]) if v["evcc"] else 0
+        tm_added = sum(t["added"] for t in v["tm"])
+        tm_used = sum(t["used"] if "used" in t else t["added"] for t in v["tm"])
+        tm_cost = sum(t["cost"] for t in v["tm"])
+        result.append({
+            "day": day,
+            "station": station,
+            "evcc_kwh": round(ev_kwh, 2),
+            "evcc_cost": round(ev_cost, 2),
+            "evcc_solar_pct": round(ev_solar * 100, 1) if ev_solar <= 1 else round(ev_solar, 1),
+            "tm_added": round(tm_added, 2),
+            "tm_used": round(tm_used, 2),
+            "tm_loss": round(tm_used - tm_added, 2),
+            "tm_cost": round(tm_cost, 2),
+            "evcc": v["evcc"],
+            "tm": v["tm"],
+        })
+    result.sort(key=lambda x: x["day"], reverse=True)
+    return result
+
+
+@app.route("/api/merged")
+def api_merged():
+    sess = api_sessions().get_json()
+    return jsonify(_build_merged(sess))
+
 
 
 @app.route("/api/price-periods", methods=["GET", "POST", "DELETE"])

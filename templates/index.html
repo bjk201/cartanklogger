@@ -56,6 +56,7 @@
     <ul class="nav nav-tabs" id="dataTabs" role="tablist">
         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabMerged">Zusammenfassung</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
     </ul>
     <div class="tab-content">
@@ -77,6 +78,19 @@
                     <thead><tr>
                         <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
                         <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="tabMerged">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="tblMerged">
+                    <thead><tr>
+                        <th>Datum</th><th>Ladestation</th>
+                        <th>EVCC kWh</th><th>EVCC €</th><th>PV%</th>
+                        <th>TM added</th><th>TM used</th><th>Verluste</th>
+                        <th>TM €</th><th>aufklappen</th>
                     </tr></thead>
                     <tbody></tbody>
                 </table>

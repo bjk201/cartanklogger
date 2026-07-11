@@ -9,10 +9,12 @@ const fmtPct = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {ma
 async function loadAll() {
   const stats = await (await fetch(`/api/stats?days=${currentDays}`)).json();
   const sess = await (await fetch(`/api/sessions`)).json();
+  const merged = await (await fetch(`/api/merged`)).json();
   renderSummary(stats);
   renderCharts(stats);
   renderHome(sess.home);
   renderExt(sess.external);
+  renderMerged(merged);
   renderExtra();
 }
 
@@ -77,6 +79,46 @@ function renderHome(rows) {
     <td>${fmtEUR(r.total_cost)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
   </tr>`).join("");
+}
+
+function renderMerged(rows) {
+  const tb = document.querySelector("#tblMerged tbody");
+  tb.innerHTML = rows.map((r, i) => {
+    const hasEv = r.evcc && r.evcc.length;
+    const hasTm = r.tm && r.tm.length;
+    // Aufklapp-Detail: EVCC einzeln, dann TM-Gruppen mit Fragmenten
+    let detail = '<ul class="mb-0 ps-3">';
+    if (hasEv) {
+      detail += `<li><strong>EVCC (${r.evcc.length}x)</strong></li>`;
+      for (const e of r.evcc) {
+        detail += `<li style="margin-left:1rem">${e.created ? e.created.slice(11,16) : ""} ${fmtKwh(e.charged_kwh)} · ${fmtEUR(e.total_cost)}</li>`;
+      }
+    }
+    if (hasTm) {
+      detail += `<li><strong>TeslaMate (${r.tm.length}x Gruppe)</strong></li>`;
+      for (const t of r.tm) {
+        const frags = (t.frags || []);
+        detail += `<li style="margin-left:1rem">${t.start ? t.start.slice(11,16) : ""}–${t.end ? t.end.slice(11,16) : ""} added ${fmtKwh(t.added)} · used ${fmtKwh(t.used)} · Verlust ${fmtKwh(t.used - t.added)} (${t.n_frags} Fragm.)</li>`;
+      }
+    }
+    if (!hasEv && !hasTm) detail += "<li>keine Daten</li>";
+    detail += "</ul>";
+    return `<tr>
+      <td>${r.day || "–"}</td>
+      <td>${r.station || "–"}</td>
+      <td>${fmtKwh(r.evcc_kwh)}</td>
+      <td>${fmtEUR(r.evcc_cost)}</td>
+      <td>${r.evcc_solar_pct != null ? fmtPct(r.evcc_solar_pct) : "–"}</td>
+      <td>${fmtKwh(r.tm_added)}</td>
+      <td>${fmtKwh(r.tm_used)}</td>
+      <td>${fmtKwh(r.tm_loss)}</td>
+      <td>${fmtEUR(r.tm_cost)}</td>
+      <td><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#m${i}">▾</button></td>
+    </tr>
+    <tr class="collapse-row"><td colspan="10" class="p-0">
+      <div class="collapse" id="m${i}"><div class="p-2 bg-light">${detail}</div></div>
+    </td></tr>`;
+  }).join("");
 }
 
 function renderExt(rows) {
