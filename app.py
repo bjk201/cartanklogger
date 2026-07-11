@@ -978,7 +978,98 @@ def api_merged():
     return jsonify(_build_merged(sess))
 
 
+@app.route("/api/roadtrip")
+def api_roadtrip():
+    """Roadtrip-/Reise-Ansicht (iOS Roadtrip-App-Stil): Tageswerte km/kWh/€/Station + Kennzahlen + Ladestopps (lat/lng)."""
+    db = get_db()
+    evcc = [dict(r) for r in db.execute(
+        "SELECT created, finished, charged_kwh, total_cost, odometer, solar_percentage, loadpoint "
+        "FROM home_sessions ORDER BY created ASC")]
+    tm = [dict(r) for r in db.execute(
+        "SELECT started_at, finished_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, "
+        "latitude, longitude, address FROM external_sessions ORDER BY started_at ASC")]
 
+    from collections import defaultdict
+    day_kwh = defaultdict(float)
+    day_cost = defaultdict(float)
+    day_stations = defaultdict(set)
+    day_pins = defaultdict(list)
+
+    for e in evcc:
+        day = (e.get("created") or "")[:10]
+        day_kwh[day] += float(e.get("charged_kwh") or 0)
+        day_cost[day] += float(e.get("total_cost") or 0)
+        day_stations[day].add("Garage (EVCC)")
+
+    for t in tm:
+        day = (t.get("started_at") or "")[:10]
+        addr = t.get("address") or "?"
+        day_stations[day].add(addr)
+        lat = t.get("latitude")
+        lng = t.get("longitude")
+        if lat is not None and lng is not None:
+            day_pins[day].append({
+                "lat": lat, "lng": lng, "address": addr,
+                "kwh": round(float(t.get("energy_kwh") or 0), 2),
+                "cost": round(float(t.get("cost_total") or 0), 2),
+            })
+
+    # km ueber odometer: Tages-Diff (max odometer pro Tag - VorTag)
+    odo_points = []
+    for e in evcc:
+        try:
+            odo_points.append(((e.get("created") or "")[:10], float(e.get("odometer") or 0)))
+        except Exception:
+            pass
+    for t in tm:
+        try:
+            odo_points.append(((t.get("started_at") or "")[:10], float(t.get("odometer_start") or 0)))
+        except Exception:
+            pass
+    day_odo = defaultdict(float)
+    for day, o in odo_points:
+        day_odo[day] = max(day_odo[day], o)
+    days_sorted = sorted(day_odo.keys())
+    day_km = {}
+    prev = 0.0
+    for d in days_sorted:
+        o = day_odo[d]
+        day_km[d] = round(o - prev, 1) if prev > 0 else 0.0
+        prev = o
+
+    per_day = []
+    for day in days_sorted:
+        per_day.append({
+            "day": day,
+            "km": day_km.get(day, 0),
+            "kwh": round(day_kwh.get(day, 0), 2),
+            "cost": round(day_cost.get(day, 0), 2),
+            "stations": sorted(day_stations.get(day, [])),
+            "pins": day_pins.get(day, []),
+        })
+    per_day.sort(key=lambda x: x["day"], reverse=True)
+
+    total_km = round(sum(day_km.values()), 1)
+    total_kwh = round(sum(day_kwh.values()), 2)
+    total_cost = round(sum(day_cost.values()), 2)
+    avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
+    avg_cost_100 = round(total_cost / (total_km / 100.0), 2) if total_km > 0 else 0
+
+    stops = []
+    for day, pins in day_pins.items():
+        for p in pins:
+            stops.append({**p, "day": day})
+
+    return jsonify({
+        "per_day": per_day,
+        "stops": stops,
+        "totals": {
+            "km": total_km, "kwh": total_kwh, "cost": total_cost,
+            "avg_consumption_kwh_100km": avg_consumption,
+            "avg_cost_per_100km": avg_cost_100,
+            "n_days": len(days_sorted),
+        },
+    })
 @app.route("/api/price-periods", methods=["GET", "POST", "DELETE"])
 def api_price_periods():
     db = get_db()

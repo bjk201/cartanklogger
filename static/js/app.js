@@ -10,11 +10,13 @@ async function loadAll() {
   const stats = await (await fetch(`/api/stats?days=${currentDays}`)).json();
   const sess = await (await fetch(`/api/sessions`)).json();
   const merged = await (await fetch(`/api/merged`)).json();
+  const trip = await (await fetch(`/api/roadtrip`)).json();
   renderSummary(stats);
   renderCharts(stats);
   renderHome(sess.home);
   renderExt(sess.external);
   renderMerged(merged);
+  renderRoadtrip(trip);
   renderExtra();
 }
 
@@ -188,3 +190,100 @@ async function init() {
   loadAll();
 }
 init();
+
+// --- Roadtrip / Reise-Ansicht (iOS Roadtrip-App-Stil) ---
+let tripMap = null;
+let tripChart = null;
+
+function renderRoadtrip(data) {
+  const t = data.totals || {};
+
+  // 1) Kennzahlen-Kacheln
+  document.getElementById("tripCards").innerHTML = [
+    kpi("🛣️ Gesamt km", t.km?.toLocaleString("de-DE") + " km"),
+    kpi("⚡ Geladen", t.kwh?.toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh"),
+    kpi("💶 Ausgaben", fmtEUR(t.cost)),
+    kpi("🔋 Ø Verbrauch", t.avg_consumption_kwh_100km?.toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh/100km"),
+    kpi("💡 Ø Kosten", fmtEUR(t.avg_cost_per_100km) + "/100km"),
+    kpi("📆 Tage", t.n_days),
+  ].join("");
+
+  // 2) Karte mit Ladestopps
+  const stops = data.stops || [];
+  if (!tripMap && window.L) {
+    tripMap = L.map("tripMap").setView([49.05, 9.25], 6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap", maxZoom: 19
+    }).addTo(tripMap);
+  }
+  if (tripMap) {
+    tripMap.eachLayer(l => { if (l instanceof L.Marker) tripMap.removeLayer(l); });
+    if (stops.length) {
+      const bounds = [];
+      stops.forEach(s => {
+        const m = L.marker([s.lat, s.lng]).addTo(tripMap);
+        m.bindPopup(`<b>${s.address}</b><br>${s.day}<br>${fmtKwh(s.kwh)} · ${fmtEUR(s.cost)}`);
+        bounds.push([s.lat, s.lng]);
+      });
+      tripMap.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+
+  // 3) Tagesbalken (km / kWh / €)
+  const days = (data.per_day || []).slice().reverse(); // chronologisch
+  const maxKm = Math.max(...days.map(d => d.km), 1);
+  const maxKwh = Math.max(...days.map(d => d.kwh), 1);
+  const maxEur = Math.max(...days.map(d => d.cost), 1);
+  document.getElementById("tripDays").innerHTML = days.map(d => `
+    <div class="border rounded p-2">
+      <div class="d-flex justify-content-between small fw-bold">
+        <span>${d.day}</span>
+        <span class="text-muted">${d.km.toLocaleString("de-DE")} km · ${fmtKwh(d.kwh)} · ${fmtEUR(d.cost)}</span>
+      </div>
+      <div class="progress mt-1" style="height:8px">
+        <div class="progress-bar bg-info" style="width:${(d.km/maxKm*100)}%"></div>
+      </div>
+      <div class="progress mt-1" style="height:8px">
+        <div class="progress-bar bg-success" style="width:${(d.kwh/maxKwh*100)}%"></div>
+      </div>
+      <div class="progress mt-1" style="height:8px">
+        <div class="progress-bar bg-warning" style="width:${(d.cost/maxEur*100)}%"></div>
+      </div>
+      <div class="small text-muted mt-1">${d.stations.map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join("")}</div>
+    </div>`).join("");
+
+  // 4) Chart kWh vs € pro Tag
+  const labels = days.map(d => d.day);
+  if (tripChart) tripChart.destroy();
+  const ctx = document.getElementById("chartTrip");
+  if (ctx && window.Chart) {
+    tripChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "kWh", data: days.map(d => d.kwh), backgroundColor: "#198754", yAxisID: "y" },
+          { label: "€", data: days.map(d => d.cost), backgroundColor: "#ffc107", yAxisID: "y1" },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { position: "left", title: { display: true, text: "kWh" } },
+          y1: { position: "right", title: { display: true, text: "€" }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+}
+
+function kpi(label, value) {
+  return `<div class="col-6 col-md-4 col-lg-2">
+    <div class="card h-100 text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">${label}</div>
+        <div class="fs-5 fw-bold">${value}</div>
+      </div>
+    </div>
+  </div>`;
+}
