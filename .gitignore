@@ -8,3 +8,4 @@ data/*.db
 # local venv
 sentry/.venv/
 .venv/
+data/

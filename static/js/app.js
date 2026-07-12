@@ -12,11 +12,13 @@ async function loadAll() {
   const merged = await (await fetch(`/api/merged`)).json();
   const trip = await (await fetch(`/api/roadtrip`)).json();
   const chartData = await (await fetch(`/api/charts`)).json();
+  __chartData = chartData;
+  __statsData = stats;
   renderSummary(stats);
   renderCharts(stats);
   renderHome(sess.home);
   renderExt(sess.external);
-  renderMerged(merged);
+  renderMerged(merged, trip.per_day || []);
   renderRoadtrip(trip);
   renderStats(chartData);
   renderExtra();
@@ -49,10 +51,14 @@ function renderSummary(s) {
 
 function renderCharts(s) {
   const h = s.home, e = s.external, x = s.extra;
+  const srcEl = document.getElementById("chartSource");
+  const monEl = document.getElementById("chartMonthly");
+  if (!srcEl || !monEl || !window.Chart) return;
+  if (srcEl.clientWidth === 0 && srcEl.offsetParent === null) return; // Tab verborgen
   // Source donut
   const srcData = [h.grid_kwh, h.pv_kwh, e.kwh];
   if (charts.source) charts.source.destroy();
-  charts.source = new Chart(document.getElementById("chartSource"), {
+  charts.source = new Chart(srcEl, {
     type: "doughnut",
     data: { labels: ["Zuhause Netz", "Zuhause PV", "Extern"],
       datasets: [{ data: srcData, backgroundColor: ["#0d6efd","#198754","#0dcaf0"] }]},
@@ -61,7 +67,7 @@ function renderCharts(s) {
   // Monthly stacked
   const m = s.monthly;
   if (charts.monthly) charts.monthly.destroy();
-  charts.monthly = new Chart(document.getElementById("chartMonthly"), {
+  charts.monthly = new Chart(monEl, {
     type: "bar",
     data: { labels: m.map(d=>d.month),
       datasets: [
@@ -86,7 +92,53 @@ function renderHome(rows) {
   </tr>`).join("");
 }
 
-function renderMerged(rows) {
+function renderMerged(rows, perDay) {
+  // --- KPI-Kacheln (wichtigste Infos auf einen Blick) ---
+  const days = rows.length;
+  const totKwh = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
+  const totCost = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
+  const totKm = (perDay || []).reduce((a, d) => a + (d.km || 0), 0);
+  const extKwh = rows.reduce((a, r) => a + (r.ext_kwh || 0), 0);
+  const homeLoss = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
+  const cons = totKm > 0 ? totKwh / (totKm / 100) : 0;
+  const consNet = cons * (1 - 0.15); // ~15% Ladeverluste -> Akku (≈ Tesla)
+  document.getElementById("mergedKpis").innerHTML = [
+    kpiStat("🛣️ Gefahrene km", `${Math.round(totKm).toLocaleString("de-DE")} km`),
+    kpiStat("⚡ Geladene kWh", `${totKwh.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("💶 Ausgaben", fmtEUR(totCost)),
+    kpiStat("🔋 Ø Verbrauch", `${cons.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh/100km`, `von der Wand · Akku ≈ ${consNet.toLocaleString("de-DE", {minimumFractionDigits:1})}`),
+    kpiStat("🔌 Extern", `${extKwh.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("📉 Ladeverlust", `${homeLoss.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+  ].join("");
+
+  // --- Tages-Balkendiagramm km + kWh ---
+  const mergedChartDay = (perDay || []).slice().reverse();
+  const labels = mergedChartDay.map(d => d.day);
+  if (window.Chart) {
+    if (window.__mergedDayChart) window.__mergedDayChart.destroy();
+    const ctx = document.getElementById("mergedDayChart");
+    if (ctx) {
+      window.__mergedDayChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "km", data: mergedChartDay.map(d => d.km), backgroundColor: "#6f42c1", yAxisID: "y" },
+            { label: "kWh", data: mergedChartDay.map(d => d.kwh), backgroundColor: "#198754", yAxisID: "y1" },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { position: "left", title: { display: true, text: "km" } },
+            y1: { position: "right", title: { display: true, text: "kWh" }, grid: { drawOnChartArea: false } },
+          },
+        },
+      });
+    }
+  }
+
+  // --- Tabelle ---
   const tb = document.querySelector("#tblMerged tbody");
   tb.innerHTML = rows.map((r, i) => {
     // Aufklapp-Detail: Zuhause (EVCC einzeln + TM-Zuhause) und Extern getrennt
@@ -207,6 +259,9 @@ function drawStatChart(canvasId, labels, values, color, unit, dec) {
   if (statCharts[canvasId]) statCharts[canvasId].destroy();
   const ctx = document.getElementById(canvasId);
   if (!ctx || !window.Chart) return;
+  // Canvas nicht sichtbar (Tab verborgen) -> 0px Breite -> Chart.js Fehler.
+  // Skip: wird beim Tab-Wechsel neu gezeichnet.
+  if (ctx.clientWidth === 0 && ctx.offsetParent === null) return;
   const mean = avg(values);
   const meanLine = values.map(() => mean);
   statCharts[canvasId] = new Chart(ctx, {
@@ -280,12 +335,13 @@ function renderStats(data) {
   ].join("");
 }
 
-function kpiStat(label, value) {
+function kpiStat(label, value, sub) {
   return `<div class="col-6 col-md-4 col-lg-2">
     <div class="card h-100 text-center shadow-sm">
       <div class="card-body py-2">
         <div class="text-muted small">${label}</div>
         <div class="fs-6 fw-bold">${value}</div>
+        <div class="small opacity-75">${sub || ""}</div>
       </div>
     </div>
   </div>`;
@@ -296,6 +352,7 @@ let tripMap = null;
 let tripChart = null;
 
 function renderRoadtrip(data) {
+  window.__lastTrip = data;
   const t = data.totals || {};
 
   // 1) Kennzahlen-Kacheln
@@ -308,12 +365,11 @@ function renderRoadtrip(data) {
     kpi("📆 Tage", t.n_days),
   ].join("");
 
-  // Karte erst bauen, wenn der Tab sichtbar ist (sonst Groesse 0 -> nur
-  // oberer linker Kachel-Ausschnitt). Wir merken uns die Stopps und
-  // zeichnen beim Tab-Wechsel.
+  // Karte erst bauen, wenn der Tab sichtbar ist (sonst Groesse 0 -> Fehler).
+  // Beim initialen Laden nichts tun; _drawTripMap() wird via shown.bs.tab
+  // getriggert, sobald der Reise-Tab geklickt wird.
   window.__tripStops = data.stops || [];
   if (window.__tripTabVisible && window.L) _drawTripMap();
-  else if (window.L) _initTripMapLazy();
 
   // 3) Tagesbalken (km / kWh / €)
   const days = (data.per_day || []).slice().reverse(); // chronologisch
@@ -338,12 +394,12 @@ function renderRoadtrip(data) {
       <div class="small text-muted mt-1">${d.stations.map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join("")}</div>
     </div>`).join("");
 
-  // 4) Chart kWh vs € pro Tag
+  // 4) Chart kWh vs € pro Tag (nur wenn Tab sichtbar, sonst 0px Fehler)
   const labels = days.map(d => d.day);
-  if (tripChart) tripChart.destroy();
-  const ctx = document.getElementById("chartTrip");
-  if (ctx && window.Chart) {
-    tripChart = new Chart(ctx, {
+  const tripCtx = document.getElementById("chartTrip");
+  if (tripCtx && window.Chart && !(tripCtx.clientWidth === 0 && tripCtx.offsetParent === null)) {
+    if (tripChart) tripChart.destroy();
+    tripChart = new Chart(tripCtx, {
       type: "bar",
       data: {
         labels,
@@ -402,15 +458,21 @@ function _drawTripMap() {
   }
 }
 
-// Tab-Wechsel: Reise-Tab sichtbar -> Karte neu vermessen
+// Tab-Wechsel: Reise/Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
+let __chartData = null;
+let __statsData = null;
 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
   tab.addEventListener("shown.bs.tab", (e) => {
     const target = e.target.getAttribute("data-bs-target");
     if (target === "#tabTrip") {
       window.__tripTabVisible = true;
       if (window.L) setTimeout(_drawTripMap, 50);
+      if (window.__lastTrip) setTimeout(() => renderRoadtrip(window.__lastTrip), 30);
     } else if (target === "#tabStats") {
       window.__tripTabVisible = false;
+      if (__chartData) setTimeout(() => renderStats(__chartData), 30);
+    } else if (target === "#tabHome") {
+      if (__statsData) setTimeout(() => renderCharts(__statsData), 30);
     }
   });
 });

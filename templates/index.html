@@ -55,15 +55,15 @@
 
     <!-- Tabs -->
     <ul class="nav nav-tabs" id="dataTabs" role="tablist">
-        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabMerged">Zusammenfassung</button></li>
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Zusammenfassung</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTrip">🚗 Reise</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
     </ul>
     <div class="tab-content">
-        <div class="tab-pane fade show active" id="tabHome">
+        <div class="tab-pane fade" id="tabHome">
             <div class="table-responsive">
                 <table class="table table-sm table-striped align-middle" id="tblHome">
                     <thead><tr>
@@ -86,7 +86,14 @@
                 </table>
             </div>
         </div>
-        <div class="tab-pane fade" id="tabMerged">
+        <div class="tab-pane fade show active" id="tabMerged">
+            <!-- KPI-Übersicht (wichtigste Infos auf einen Blick) -->
+            <div class="row g-2 mb-3" id="mergedKpis"></div>
+            <!-- Tages-Balkendiagramm: km + kWh -->
+            <div class="card mb-3">
+                <div class="card-header py-2">📊 Pro Tag: gefahrene km &amp; geladene kWh</div>
+                <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
+            </div>
             <p class="text-muted small mb-2">Eine Zeile pro Tag. <strong>Zuhause</strong> = EVCC-Wallbox (führend). TeslaMate-Ladungen zuhause (Dammstraße/Garage) sind dieselben Ladungen – sie liefern nur die Ladeverluste, werden nicht doppelt gezählt. <strong>Extern</strong> = nur Fremdladungen (z.&nbsp;B. Supercharger).</p>
             <div class="table-responsive">
                 <table class="table table-sm table-striped align-middle" id="tblMerged">
