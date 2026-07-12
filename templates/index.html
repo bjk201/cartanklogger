@@ -59,6 +59,7 @@
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabMerged">Zusammenfassung</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTrip">🚗 Reise</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
     </ul>
     <div class="tab-content">
@@ -121,6 +122,51 @@
                 <div class="card-header py-2">📈 kWh &amp; € pro Tag</div>
                 <div class="card-body"><canvas id="chartTrip" height="200"></canvas></div>
             </div>
+        </div>
+        <div class="tab-pane fade" id="tabStats">
+            <!-- Gesamt-KPI-Kacheln -->
+            <div class="row g-2 mb-3" id="statsKpis"></div>
+            <!-- 4 Graphen im Road-Trip-Stil -->
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ Verbrauch (kWh/100 km)</div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCons"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartCons" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">💶 Energiepreis (€/kWh)</div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiPrice"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartPrice" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">💡 Kosten (€/100 km)</div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCost100"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartCost100" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🛣️ Gesamtkilometer (kumuliert)</div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiKm"></span><span class="text-muted small ms-1">km</span></div>
+                            <canvas id="chartKm" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Sekundaer-KPIs + Kategorie-Karten -->
+            <div class="row g-2 mt-2" id="statsSecondary"></div>
         </div>
         <div class="tab-pane fade" id="tabExtra">
             <div class="table-responsive">

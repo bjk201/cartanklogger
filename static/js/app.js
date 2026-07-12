@@ -11,12 +11,14 @@ async function loadAll() {
   const sess = await (await fetch(`/api/sessions`)).json();
   const merged = await (await fetch(`/api/merged`)).json();
   const trip = await (await fetch(`/api/roadtrip`)).json();
+  const chartData = await (await fetch(`/api/charts`)).json();
   renderSummary(stats);
   renderCharts(stats);
   renderHome(sess.home);
   renderExt(sess.external);
   renderMerged(merged);
   renderRoadtrip(trip);
+  renderStats(chartData);
   renderExtra();
 }
 
@@ -190,6 +192,95 @@ async function init() {
   loadAll();
 }
 init();
+
+// --- Statistik-Ansicht (Road-Trip-App-Stil: 4 Graphen + KPIs) ---
+let statCharts = {};
+
+function avg(arr) {
+  const v = arr.filter(x => x != null && !isNaN(x));
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+
+// Einzelwerte-Linie + Flaeche + gestrichelte Durchschnittslinie
+function drawStatChart(canvasId, labels, values, color, unit, dec) {
+  if (statCharts[canvasId]) statCharts[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !window.Chart) return;
+  const mean = avg(values);
+  const meanLine = values.map(() => mean);
+  statCharts[canvasId] = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: unit, data: values,
+          borderColor: color, backgroundColor: color + "22",
+          fill: true, tension: 0.3, pointRadius: 2, spanGaps: true,
+        },
+        {
+          label: "Ø", data: meanLine,
+          borderColor: "#fff", borderDash: [6, 4], borderWidth: 1.5,
+          pointRadius: 0, fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: false, ticks: { callback: v => v?.toLocaleString("de-DE") } } },
+    },
+  });
+}
+
+function renderStats(data) {
+  const s = data.series || [];
+  const k = data.kpis || {};
+  const labels = s.map(d => d.day);
+
+  // Gesamt-KPI-Kacheln
+  document.getElementById("statsKpis").innerHTML = [
+    kpiStat("⚡ Geladen", `${k.total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("💶 Ausgaben", fmtEUR(k.total_cost)),
+    kpiStat("🛣️ Gefahren", `${k.total_km?.toLocaleString("de-DE")} km`),
+    kpiStat("🔋 Ø Verbrauch", `${k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh/100km`),
+    kpiStat("💡 Ø Kosten", `${fmtEUR(k.avg_cost_100)}/100km`),
+    kpiStat("🌱 CO₂", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
+  ].join("");
+
+  // 4 Graphen
+  drawStatChart("chartCons", labels, s.map(d => d.consumption), "#198754", "kWh/100km", 1);
+  drawStatChart("chartPrice", labels, s.map(d => d.price_per_kwh), "#0d6efd", "€/kWh", 3);
+  drawStatChart("chartCost100", labels, s.map(d => d.cost_per_100), "#ffc107", "€/100km", 2);
+  drawStatChart("chartKm", labels, s.map(d => d.cum_km), "#6f42c1", "km", 0);
+
+  // Haupt-KPIs ueber Graphen
+  document.getElementById("kpiCons").textContent = k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1}) || "–";
+  document.getElementById("kpiPrice").textContent = k.avg_price_kwh?.toLocaleString("de-DE", {minimumFractionDigits:3}) || "–";
+  document.getElementById("kpiCost100").textContent = fmtEUR(k.avg_cost_100);
+  document.getElementById("kpiKm").textContent = k.total_km?.toLocaleString("de-DE") || "–";
+
+  // Sekundaer-KPIs + Kategorie-Karten
+  const dcPct = k.dc_share_pct ?? 0;
+  document.getElementById("statsSecondary").innerHTML = [
+    kpiStat("🔌 AC geladen", `${k.ac_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("⚡ DC (Supercharger)", `${k.dc_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("⚡ DC-Anteil", `${dcPct} %`),
+    kpiStat("📏 Reichweite", `${k.last_range?.toLocaleString("de-DE")} km`),
+    kpiStat("🔋 Geladene kWh", `${k.total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("🌱 CO₂ Ø", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
+  ].join("");
+}
+
+function kpiStat(label, value) {
+  return `<div class="col-6 col-md-4 col-lg-2">
+    <div class="card h-100 text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">${label}</div>
+        <div class="fs-6 fw-bold">${value}</div>
+      </div>
+    </div>
+  </div>`;
+}
 
 // --- Roadtrip / Reise-Ansicht (iOS Roadtrip-App-Stil) ---
 let tripMap = null;

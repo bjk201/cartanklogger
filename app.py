@@ -978,6 +978,155 @@ def api_merged():
     return jsonify(_build_merged(sess))
 
 
+@app.route("/api/charts")
+def api_charts():
+    """Statistik-Ansicht (Road-Trip-App-Stil): 4 Zeitreihen + KPIs.
+    1) Verbrauch kWh/100km  2) €/kWh  3) €/100km  4) kumulierte km
+    Plus Sekundaer-KPIs: geladene kWh, Reichweite, Ladeverluste, AC/DC, CO2.
+    """
+    db = get_db()
+    evcc = [dict(r) for r in db.execute(
+        "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, "
+        "solar_percentage, loadpoint, raw FROM home_sessions ORDER BY created ASC")]
+
+    def _evcc_co2(raw):
+        try:
+            j = json.loads(raw) if isinstance(raw, str) else raw
+            return float(j.get("co2PerKWh") or 0)
+        except Exception:
+            return 0.0
+    tm = [dict(r) for r in db.execute(
+        "SELECT started_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, "
+        "latitude, longitude, address, raw FROM external_sessions ORDER BY started_at ASC")]
+
+    def _tm_range_end(raw):
+        """Reichweite (ideal) aus TeslaMate raw-JSON holen."""
+        try:
+            j = json.loads(raw) if isinstance(raw, str) else raw
+            return float(j.get("range_ideal", {}).get("end_range", 0) or 0)
+        except Exception:
+            return 0.0
+
+    from collections import defaultdict
+    # Tagesgruppierung
+    day_kwh = defaultdict(float)
+    day_cost = defaultdict(float)
+    day_odo_start = defaultdict(float)
+    day_odo_end = defaultdict(float)
+    day_price = defaultdict(list)   # €/kWh gewichtet
+    day_co2 = defaultdict(list)
+    day_dc_kwh = defaultdict(float)  # Supercharger = DC
+    day_ac_kwh = defaultdict(float)
+    day_added = defaultdict(float)   # TM added (Akku)
+    day_used = defaultdict(float)    # TM used (Wand)
+    day_range_end = defaultdict(float)
+
+    for e in evcc:
+        day = (e.get("created") or "")[:10]
+        kwh = float(e.get("charged_kwh") or 0)
+        day_kwh[day] += kwh
+        day_cost[day] += float(e.get("total_cost") or 0)
+        o = float(e.get("odometer") or 0)
+        day_odo_start[day] = min(day_odo_start[day] or o, o) if day_odo_start[day] else o
+        day_odo_end[day] = max(day_odo_end[day], o)
+        ppk = e.get("price_per_kwh")
+        if ppk: day_price[day].append((ppk, kwh))
+        co2 = _evcc_co2(e.get("raw"))
+        if co2: day_co2[day].append((co2, kwh))
+        day_ac_kwh[day] += kwh  # EVCC = AC (Wallbox)
+
+    for t in tm:
+        day = (t.get("started_at") or "")[:10]
+        kwh = float(t.get("energy_kwh") or 0)
+        added = float(t.get("energy_kwh") or 0)
+        used = float(t.get("energy_used_kwh") or 0)
+        day_added[day] += added
+        day_used[day] += used
+        o = float(t.get("odometer_start") or 0)
+        day_odo_start[day] = min(day_odo_start[day] or o, o) if day_odo_start[day] else o
+        day_odo_end[day] = max(day_odo_end[day], o)
+        is_dc = "supercharger" in (t.get("address") or "").lower()
+        if is_dc:
+            day_dc_kwh[day] += kwh
+        else:
+            day_ac_kwh[day] += kwh
+        re = _tm_range_end(t.get("raw"))
+        if re: day_range_end[day] = max(day_range_end[day], re)
+
+    days = sorted(set(list(day_kwh) + list(day_added)))
+    # km pro Tag ueber odometer-Diff (kumuliert)
+    cum_km = 0.0
+    prev_odo = None
+    series = []
+    for d in days:
+        # km an Tag = max odo_end - max odo_start des Tages (oder Diff zu VorTag)
+        o_start = day_odo_start.get(d, 0)
+        o_end = day_odo_end.get(d, 0)
+        km_day = 0.0
+        if prev_odo is not None and o_end >= prev_odo:
+            km_day = round(o_end - prev_odo, 1)
+        elif o_end > o_start:
+            km_day = round(o_end - o_start, 1)
+        prev_odo = o_end if o_end > 0 else prev_odo
+        cum_km += km_day
+
+        kwh = day_kwh.get(d, 0)
+        cost = day_cost.get(d, 0)
+        # Verbrauch kWh/100km (nur wenn km>0 UND plausibel, sonst None)
+        raw_cons = kwh / (km_day / 100.0) if km_day > 0 else None
+        consumption = round(raw_cons, 2) if (raw_cons is not None and 0 < raw_cons <= 60) else None
+        # €/kWh (gewichtet)
+        ppk_vals = day_price.get(d, [])
+        price_per_kwh = round(sum(p * w for p, w in ppk_vals) / sum(w for _, w in ppk_vals), 4) if ppk_vals else None
+        # €/100km
+        raw_c100 = cost / (km_day / 100.0) if km_day > 0 else None
+        cost_per_100 = round(raw_c100, 2) if (raw_c100 is not None and 0 <= raw_c100 <= 100) else None
+        # CO2 g/kWh (gewichtet)
+        co2_vals = day_co2.get(d, [])
+        co2 = round(sum(c * w for c, w in co2_vals) / sum(w for _, w in co2_vals), 1) if co2_vals else None
+        # Ladeverlust (EVCC-kWh - TM added), nur wenn beide da
+        added = day_added.get(d, 0)
+        loss = round(kwh - added, 2) if (kwh > 0 and added > 0) else None
+
+        series.append({
+            "day": d, "km": km_day, "cum_km": round(cum_km, 1),
+            "kwh": round(kwh, 2), "cost": round(cost, 2),
+            "consumption": consumption, "price_per_kwh": price_per_kwh,
+            "cost_per_100": cost_per_100, "co2": co2, "loss": loss,
+            "ac_kwh": round(day_ac_kwh.get(d, 0), 2),
+            "dc_kwh": round(day_dc_kwh.get(d, 0), 2),
+            "range": round(day_range_end.get(d, 0), 0),
+        })
+    series.sort(key=lambda x: x["day"])
+
+    # --- Gesamt-KPIs ---
+    total_kwh = round(sum(s["kwh"] for s in series), 2)
+    total_cost = round(sum(s["cost"] for s in series), 2)
+    total_km = round(cum_km, 1)
+    total_ac = round(sum(s["ac_kwh"] for s in series), 2)
+    total_dc = round(sum(s["dc_kwh"] for s in series), 2)
+    avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
+    avg_cost_100 = round(total_cost / (total_km / 100.0), 2) if total_km > 0 else 0
+    # gewichteter €/kWh ueber alle Tage
+    all_ppk = [(s["price_per_kwh"], s["kwh"]) for s in series if s["price_per_kwh"]]
+    avg_price_kwh = round(sum(p * w for p, w in all_ppk) / sum(w for _, w in all_ppk), 4) if all_ppk else 0
+    all_co2 = [(s["co2"], s["kwh"]) for s in series if s["co2"]]
+    avg_co2 = round(sum(c * w for c, w in all_co2) / sum(w for _, w in all_co2), 1) if all_co2 else 0
+    last_range = series[-1]["range"] if series else 0
+
+    return jsonify({
+        "series": series,
+        "kpis": {
+            "total_kwh": total_kwh, "total_cost": total_cost, "total_km": total_km,
+            "avg_consumption": avg_consumption, "avg_cost_100": avg_cost_100,
+            "avg_price_kwh": avg_price_kwh, "avg_co2": avg_co2,
+            "ac_kwh": total_ac, "dc_kwh": total_dc,
+            "dc_share_pct": round(total_dc / total_kwh * 100, 1) if total_kwh > 0 else 0,
+            "last_range": last_range,
+        },
+    })
+
+
 @app.route("/api/roadtrip")
 def api_roadtrip():
     """Roadtrip-/Reise-Ansicht (iOS Roadtrip-App-Stil): Tageswerte km/kWh/€/Station + Kennzahlen + Ladestopps (lat/lng)."""
