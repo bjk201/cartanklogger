@@ -653,7 +653,14 @@ def build_stats(days=365):
     tco = total_cost
 
     cost_per_km = (total_cost / total_dist) if total_dist > 0 else 0
-    consumption = (total_kwh / total_dist * 100) if total_dist > 0 else 0
+    # Verbrauch "von der Wand" (brutto): nur EVCC-kWh / gefahrene km.
+    # WICHTIG: Externe kWh (Supercharger) NICHT einrechnen, da deren km nicht
+    # voll in der odometer-Basis sind -> wuerde Verbrauch kuenstlich aufblaepen.
+    consumption_brutto = (home_kwh / total_dist * 100) if total_dist > 0 else 0
+    # Verbrauch "vom Akku" (netto): brutto abzgl. geschätzter Ladeverluste (~15%).
+    # Das entspricht der Tesla-Anzeige (misst nur Akku).
+    LOSS_FACTOR = 0.15
+    consumption_netto = consumption_brutto * (1 - LOSS_FACTOR) if consumption_brutto else 0
 
     # Monatliche Aggregate
     monthly = {}
@@ -702,7 +709,8 @@ def build_stats(days=365):
             "tco": round(tco, 2),
             "distance_km": round(total_dist, 1),
             "cost_per_km": round(cost_per_km, 3),
-            "consumption_kwh_per_100km": round(consumption, 2),
+            "consumption_kwh_per_100km": round(consumption_brutto, 2),
+            "consumption_net_kwh_per_100km": round(consumption_netto, 2),
         },
         "monthly": monthly_list,
     }
@@ -1170,7 +1178,8 @@ def api_charts():
             "avg_consumption": avg_consumption, "avg_cost_100": avg_cost_100,
             "avg_price_kwh": avg_price_kwh, "avg_co2": avg_co2,
             "ac_kwh": total_ac, "dc_kwh": total_dc,
-            "dc_share_pct": round(total_dc / total_kwh * 100, 1) if total_kwh > 0 else 0,
+            "charged_total_kwh": round(total_ac + total_dc, 2),
+            "dc_share_pct": round(total_dc / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
             "last_range": last_range,
         },
     })

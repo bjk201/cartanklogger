@@ -32,7 +32,7 @@ function renderSummary(s) {
     {t:"Extra-Kosten", v:fmtEUR(x.total), s:`${x.count} Einträge`, c:"warning"},
     {t:"Gesamt (TCO)", v:fmtEUR(t.tco), s:"Laden + Extra", c:"dark"},
     {t:"Kosten / km", v:fmtEUR(t.cost_per_km)+" /km", s:`${Number(t.distance_km).toLocaleString("de-DE")} km gefahren`, c:"secondary"},
-    {t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:"Ø über gefahrene km", c:"secondary"},
+    {t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:`von der Wand · Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)}`, c:"secondary"},
     {t:"PV-Anteil", v:fmtPct(h.pv_share_pct), s:"Solar am Zuhause-Laden", c:"success"},
   ];
   document.getElementById("summaryCards").innerHTML = cards.map(c => `
@@ -240,7 +240,7 @@ function renderStats(data) {
 
   // Gesamt-KPI-Kacheln
   document.getElementById("statsKpis").innerHTML = [
-    kpiStat("⚡ Geladen", `${k.total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("⚡ Geladen", `${k.charged_total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("💶 Ausgaben", fmtEUR(k.total_cost)),
     kpiStat("🛣️ Gefahren", `${k.total_km?.toLocaleString("de-DE")} km`),
     kpiStat("🔋 Ø Verbrauch", `${k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh/100km`),
@@ -275,7 +275,7 @@ function renderStats(data) {
     kpiStat("⚡ DC (Supercharger)", `${k.dc_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("⚡ DC-Anteil", `${dcPct} %`),
     kpiStat("📏 Reichweite", `${k.last_range?.toLocaleString("de-DE")} km`),
-    kpiStat("🔋 Geladene kWh", `${k.total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
+    kpiStat("🔋 Geladene kWh", `${k.charged_total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("🌱 CO₂ Ø", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
   ].join("");
 }
@@ -308,26 +308,12 @@ function renderRoadtrip(data) {
     kpi("📆 Tage", t.n_days),
   ].join("");
 
-  // 2) Karte mit Ladestopps
-  const stops = data.stops || [];
-  if (!tripMap && window.L) {
-    tripMap = L.map("tripMap").setView([49.05, 9.25], 6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap", maxZoom: 19
-    }).addTo(tripMap);
-  }
-  if (tripMap) {
-    tripMap.eachLayer(l => { if (l instanceof L.Marker) tripMap.removeLayer(l); });
-    if (stops.length) {
-      const bounds = [];
-      stops.forEach(s => {
-        const m = L.marker([s.lat, s.lng]).addTo(tripMap);
-        m.bindPopup(`<b>${s.address}</b><br>${s.day}<br>${fmtKwh(s.kwh)} · ${fmtEUR(s.cost)}`);
-        bounds.push([s.lat, s.lng]);
-      });
-      tripMap.fitBounds(bounds, { padding: [30, 30] });
-    }
-  }
+  // Karte erst bauen, wenn der Tab sichtbar ist (sonst Groesse 0 -> nur
+  // oberer linker Kachel-Ausschnitt). Wir merken uns die Stopps und
+  // zeichnen beim Tab-Wechsel.
+  window.__tripStops = data.stops || [];
+  if (window.__tripTabVisible && window.L) _drawTripMap();
+  else if (window.L) _initTripMapLazy();
 
   // 3) Tagesbalken (km / kWh / €)
   const days = (data.per_day || []).slice().reverse(); // chronologisch
@@ -386,4 +372,46 @@ function kpi(label, value) {
       </div>
     </div>
   </div>`;
+
+// Leaflet-Karte: erst zeichnen wenn Tab sichtbar (sonst Groesse 0)
+function _initTripMapLazy() {
+  if (tripMap || !window.L) return;
+  tripMap = L.map("tripMap").setView([49.05, 9.25], 6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap", maxZoom: 19
+  }).addTo(tripMap);
+  // Wenn der Tab spaeter sichtbar wird, Groesse neu berechnen
+  window.__tripTabVisible = false;
+}
+
+function _drawTripMap() {
+  if (!window.L) return;
+  if (!tripMap) _initTripMapLazy();
+  if (!tripMap) return;
+  tripMap.invalidateSize();
+  tripMap.eachLayer(l => { if (l instanceof L.Marker) tripMap.removeLayer(l); });
+  const stops = window.__tripStops || [];
+  if (stops.length) {
+    const bounds = [];
+    stops.forEach(s => {
+      const m = L.marker([s.lat, s.lng]).addTo(tripMap);
+      m.bindPopup(`<b>${s.address}</b><br>${s.day}<br>${fmtKwh(s.kwh)} · ${fmtEUR(s.cost)}`);
+      bounds.push([s.lat, s.lng]);
+    });
+    tripMap.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+// Tab-Wechsel: Reise-Tab sichtbar -> Karte neu vermessen
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+  tab.addEventListener("shown.bs.tab", (e) => {
+    const target = e.target.getAttribute("data-bs-target");
+    if (target === "#tabTrip") {
+      window.__tripTabVisible = true;
+      if (window.L) setTimeout(_drawTripMap, 50);
+    } else if (target === "#tabStats") {
+      window.__tripTabVisible = false;
+    }
+  });
+});
 }
