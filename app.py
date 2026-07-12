@@ -688,6 +688,8 @@ def build_stats(days=365):
         },
         "external": {
             "count": len(ext), "kwh": round(ext_kwh, 2), "cost": round(ext_cost, 2),
+            "share_pct": round(ext_kwh / total_kwh * 100, 1) if total_kwh else 0,
+            "cost_per_kwh": round(ext_cost / ext_kwh, 3) if ext_kwh else 0,
         },
         "extra": {
             "count": len(extras), "total": round(extra_total, 2),
@@ -1122,8 +1124,47 @@ def api_charts():
     avg_co2 = round(sum(c * w for c, w in all_co2) / sum(w for _, w in all_co2), 1) if all_co2 else 0
     last_range = series[-1]["range"] if series else 0
 
+    # --- SOC-basierter Intervall-Verbrauch (besser als Fill-to-Full) ---
+    # Jede EVCC-Ladung kennt SOC_start/end + kWh. Aus kWh/(SOC_end-SOC_start)
+    # ergibt sich die (brutto-)Kapazitaet je Ladung (~67 kWh bei Model Y).
+    # Verbrauch zwischen Ladung N und N+1 = (SOC_start(N+1) - SOC_end(N))/100 * Kapazitaet.
+    # Das nutzt ALLE Ladungen (nicht nur Full-Charges) -> dichte Zeitreihe.
+    soc_rows = []
+    for e in evcc:
+        raw = e.get("raw")
+        try:
+            j = json.loads(raw) if isinstance(raw, str) else raw
+            ss = float(j.get("socStart") or 0); se = float(j.get("socEnd") or 0)
+            kwh = float(e.get("charged_kwh") or 0)
+            cap = kwh / (se - ss) * 100 if (se - ss) > 0 else None
+        except Exception:
+            ss = se = kwh = cap = None
+        soc_rows.append({
+            "day": (e.get("created") or "")[:10], "created": e.get("created"),
+            "soc_start": ss, "soc_end": se, "kwh": kwh, "cap": cap,
+            "odometer": float(e.get("odometer") or 0),
+        })
+    soc_rows.sort(key=lambda x: x["created"] or "")
+    valid_caps = [r["cap"] for r in soc_rows if r["cap"] and 30 <= r["cap"] <= 120]
+    est_cap = sum(valid_caps) / len(valid_caps) if valid_caps else 75.0  # Fallback Model Y
+    soc_intervals = []
+    for a, b in zip(soc_rows, soc_rows[1:]):
+        if None in (a["soc_end"], b["soc_start"]):
+            continue
+        dsoc = b["soc_start"] - a["soc_end"]          # verbrauchte SOC seit letzter Ladung (negativ)
+        used_energy = -dsoc / 100.0 * est_cap         # kWh verbraucht (positiv)
+        km = b["odometer"] - a["odometer"]
+        cons = round(used_energy / (km / 100.0), 2) if (km > 0 and used_energy >= 0) else None
+        soc_intervals.append({
+            "day": b["day"], "date": b["created"], "dsoc": round(dsoc, 1),
+            "used_kwh": round(used_energy, 2), "km": round(km, 1),
+            "consumption": cons,  # kWh/100km ueber Intervall
+        })
+
     return jsonify({
         "series": series,
+        "soc_intervals": soc_intervals,
+        "est_capacity": round(est_cap, 1),
         "kpis": {
             "total_kwh": total_kwh, "total_cost": total_cost, "total_km": total_km,
             "avg_consumption": avg_consumption, "avg_cost_100": avg_cost_100,

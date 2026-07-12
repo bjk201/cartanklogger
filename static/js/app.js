@@ -27,7 +27,8 @@ function renderSummary(s) {
   const cards = [
     {t:"Zuhause Energie", v:fmtKwh(h.kwh), s:`${fmtKwh(h.grid_kwh)} Netz · ${fmtKwh(h.pv_kwh)} PV`, c:"primary"},
     {t:"Zuhause Kosten", v:fmtEUR(h.cost), s:`${fmtEUR(h.grid_cost)} Netz · ${fmtEUR(h.pv_cost)} PV`, c:"success"},
-    {t:"Extern Kosten", v:fmtEUR(e.cost), s:`${e.count} Sitzungen · ${fmtKwh(e.kwh)}`, c:"info"},
+    {t:"Extern Energie", v:fmtKwh(e.kwh), s:`${e.count} Sitzungen · ${fmtPct(e.share_pct)} der Energie`, c:"info"},
+    {t:"Extern Kosten", v:fmtEUR(e.cost), s:`${fmtEUR(e.cost_per_kwh)}/kWh Ø`, c:"info"},
     {t:"Extra-Kosten", v:fmtEUR(x.total), s:`${x.count} Einträge`, c:"warning"},
     {t:"Gesamt (TCO)", v:fmtEUR(t.tco), s:"Laden + Extra", c:"dark"},
     {t:"Kosten / km", v:fmtEUR(t.cost_per_km)+" /km", s:`${Number(t.distance_km).toLocaleString("de-DE")} km gefahren`, c:"secondary"},
@@ -247,11 +248,19 @@ function renderStats(data) {
     kpiStat("🌱 CO₂", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
   ].join("");
 
-  // 4 Graphen
+  // 4 Graphen (Tageswerte)
   drawStatChart("chartCons", labels, s.map(d => d.consumption), "#198754", "kWh/100km", 1);
   drawStatChart("chartPrice", labels, s.map(d => d.price_per_kwh), "#0d6efd", "€/kWh", 3);
   drawStatChart("chartCost100", labels, s.map(d => d.cost_per_100), "#ffc107", "€/100km", 2);
   drawStatChart("chartKm", labels, s.map(d => d.cum_km), "#6f42c1", "km", 0);
+
+  // 5. Graph: SOC-basierter Intervall-Verbrauch (nutzt ALLE Ladungen)
+  const si = data.soc_intervals || [];
+  const siLabels = si.map(d => d.day);
+  const siVals = si.map(d => d.consumption);
+  drawStatChart("chartSoc", siLabels, siVals, "#fd7e14", "kWh/100km", 1);
+  const siMean = avg(siVals);
+  document.getElementById("kpiSocCons").textContent = siMean != null ? siMean.toLocaleString("de-DE", {minimumFractionDigits:1}) : "–";
 
   // Haupt-KPIs ueber Graphen
   document.getElementById("kpiCons").textContent = k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1}) || "–";
