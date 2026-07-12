@@ -1046,10 +1046,14 @@ def api_charts():
         day_odo_start[day] = min(day_odo_start[day] or o, o) if day_odo_start[day] else o
         day_odo_end[day] = max(day_odo_end[day], o)
         is_dc = "supercharger" in (t.get("address") or "").lower()
-        if is_dc:
-            day_dc_kwh[day] += kwh
-        else:
-            day_ac_kwh[day] += kwh
+        # TM-Ladungen zaehlen nur zum AC/DC-Anteil, wenn sie EXTERN sind
+        # (Supercharger=DC, andere Fremd=AC). TM-Zuhause (Dammstraße/Garage)
+        # ist dieselbe Ladung wie EVCC -> NICHT nochmal zaehlen (Doppelzaehlung).
+        if not _is_home_address(t.get("address"), t.get("address")):
+            if is_dc:
+                day_dc_kwh[day] += kwh
+            else:
+                day_ac_kwh[day] += kwh
         re = _tm_range_end(t.get("raw"))
         if re: day_range_end[day] = max(day_range_end[day], re)
 
@@ -1073,14 +1077,18 @@ def api_charts():
         kwh = day_kwh.get(d, 0)
         cost = day_cost.get(d, 0)
         # Verbrauch kWh/100km (nur wenn km>0 UND plausibel, sonst None)
-        raw_cons = kwh / (km_day / 100.0) if km_day > 0 else None
+        # km muss zum geladenen kWh passen: bei ~15 kWh/100km sind 29,8 kWh ~200 km.
+        # Wenn km_day deutlich zu niedrig fuer die geladene kWh -> odometer-Luecke,
+        # dann Verbrauch/€-Werte nicht berechnen (keine Fantasiezahlen).
+        km_plausible = km_day >= (kwh * 100 / 60.0)  # max 60 kWh/100km erlaubt
+        raw_cons = kwh / (km_day / 100.0) if (km_day > 0 and km_plausible) else None
         consumption = round(raw_cons, 2) if (raw_cons is not None and 0 < raw_cons <= 60) else None
         # €/kWh (gewichtet)
         ppk_vals = day_price.get(d, [])
         price_per_kwh = round(sum(p * w for p, w in ppk_vals) / sum(w for _, w in ppk_vals), 4) if ppk_vals else None
-        # €/100km
-        raw_c100 = cost / (km_day / 100.0) if km_day > 0 else None
-        cost_per_100 = round(raw_c100, 2) if (raw_c100 is not None and 0 <= raw_c100 <= 100) else None
+        # €/100km (nur bei plausibler km)
+        raw_c100 = cost / (km_day / 100.0) if (km_day > 0 and km_plausible) else None
+        cost_per_100 = round(raw_c100, 2) if (raw_c100 is not None and 0 <= raw_c100 <= 30) else None
         # CO2 g/kWh (gewichtet)
         co2_vals = day_co2.get(d, [])
         co2 = round(sum(c * w for c, w in co2_vals) / sum(w for _, w in co2_vals), 1) if co2_vals else None
