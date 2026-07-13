@@ -929,12 +929,18 @@ def _build_merged(rows):
         tmh_added = sum(t["added"] for t in v["tm_home"])
         tmh_used = sum(t["used"] for t in v["tm_home"])
         home_loss = None  # None = nicht ermittelbar -> Frontend zeigt "–"
-        if ev_kwh > 0 and tmh_added > 0:
-            coverage = tmh_added / ev_kwh
-            loss = ev_kwh - tmh_added
-            loss_pct = loss / ev_kwh
-            if coverage >= 0.70 and 0 <= loss_pct <= 0.30:
-                home_loss = round(loss, 2)
+        # TM 'used' = Wand (brutto) -> entspricht EVCC. 'added' = Akku (netto).
+        # Deckung ueber TM_used pruefen (nicht added), weil used der EVCC-Wand
+        # am naechsten kommt. added ist immer < EVCC (Ladeverlust), daher wuerde
+        # eine added-basierte Schwellenwert-Tage mit echtem TM-Daten fälschlich
+        # ausschliessen (z.B. 06.29).
+        if ev_kwh > 0 and tmh_used > 0:
+            used_cov = tmh_used / ev_kwh
+            if 0.70 <= used_cov <= 1.30:
+                loss = ev_kwh - tmh_added      # Wand(EVCC) - Akku(TM)
+                loss_pct = loss / ev_kwh
+                if 0 <= loss_pct <= 0.35:       # physikalisch realistisch
+                    home_loss = round(loss, 2)
 
         # --- Extern: nur echte Fremdladungen ---
         ext_kwh = sum(t["added"] for t in v["tm_ext"])
