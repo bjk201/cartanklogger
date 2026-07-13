@@ -451,7 +451,19 @@ function _drawTripMap() {
   if (!window.L) return;
   if (!tripMap) _initTripMapLazy();
   if (!tripMap) return;
+  // Nur zeichnen, wenn der Reise-Pane wirklich sichtbar ist (sonst 0px ->
+  // Leaflet zeigt keine Kacheln). Falls noch display:none (waehrend Bootstrap-
+  // Fade-In), wiederholen via requestAnimationFrame, bis sichtbar.
+  const pane = document.getElementById("tabTrip");
+  if (pane && getComputedStyle(pane).display === "none") {
+    requestAnimationFrame(_drawTripMap);
+    return;
+  }
+  // Groesse neu berechnen (Tab war evtl. versteckt -> 0px). Mehrfach, damit
+  // auch nach dem Bootstrap-Fade-In die Kacheln erscheinen.
   tripMap.invalidateSize();
+  setTimeout(() => tripMap.invalidateSize(), 200);
+  setTimeout(() => tripMap.invalidateSize(), 500);
   tripMap.eachLayer(l => { if (l instanceof L.Marker) tripMap.removeLayer(l); });
   const stops = window.__tripStops || [];
   if (stops.length) {
@@ -473,13 +485,24 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
     const target = e.target.getAttribute("data-bs-target");
     if (target === "#tabTrip") {
       window.__tripTabVisible = true;
-      if (window.L) setTimeout(_drawTripMap, 50);
+      // Karte zeichnen: nach Fade-In (Bootstrap ~150ms) + mehrfaches invalidateSize.
+      if (window.L) {
+        setTimeout(_drawTripMap, 150);
+        setTimeout(_drawTripMap, 350);
+      }
       if (window.__lastTrip) setTimeout(() => renderRoadtrip(window.__lastTrip), 30);
     } else if (target === "#tabStats") {
       window.__tripTabVisible = false;
       if (__chartData) setTimeout(() => renderStats(__chartData), 30);
     } else if (target === "#tabHome") {
       if (__statsData) setTimeout(() => renderCharts(__statsData), 30);
+    }
+  });
+  // Fallback: falls shown.bs.tab nicht feuert (Bootstrap-Versionen),
+  //zeichne Karte direkt beim Klick auf den Reise-Tab.
+  tab.addEventListener("click", () => {
+    if (tab.getAttribute("data-bs-target") === "#tabTrip" && window.L) {
+      setTimeout(_drawTripMap, 200);
     }
   });
 });
