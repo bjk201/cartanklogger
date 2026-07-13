@@ -18,7 +18,7 @@ async function loadAll() {
   renderCharts(stats);
   renderHome(sess.home);
   renderExt(sess.external);
-  renderMerged(merged, trip.per_day || []);
+  renderMerged(merged, trip.per_day || [], stats.totals || {});
   renderRoadtrip(trip);
   renderStats(chartData);
   renderExtra();
@@ -92,7 +92,7 @@ function renderHome(rows) {
   </tr>`).join("");
 }
 
-function renderMerged(rows, perDay) {
+function renderMerged(rows, perDay, totals) {
   // --- KPI-Kacheln (wichtigste Infos auf einen Blick) ---
   const days = rows.length;
   const totKwh = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
@@ -102,10 +102,14 @@ function renderMerged(rows, perDay) {
   const homeLoss = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
   const cons = totKm > 0 ? totKwh / (totKm / 100) : 0;
   const consNet = cons * (1 - 0.15); // ~15% Ladeverluste -> Akku (≈ Tesla)
+  const tco = (totals && totals.tco) || 0;
+  const tco100 = (totals && totals.tco_per_100km) || 0;
   document.getElementById("mergedKpis").innerHTML = [
     kpiStat("🛣️ Gefahrene km", `${Math.round(totKm).toLocaleString("de-DE")} km`),
     kpiStat("⚡ Geladene kWh", `${totKwh.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
-    kpiStat("💶 Ausgaben", fmtEUR(totCost)),
+    kpiStat("💶 Ausgaben (Energie)", fmtEUR(totCost)),
+    kpiStat("💰 TCO gesamt", fmtEUR(tco), `inkl. Anschaffung/Versicherung/Steuer`),
+    kpiStat("💡 TCO / 100km", `${tco100.toLocaleString("de-DE", {minimumFractionDigits:2})} €`),
     kpiStat("🔋 Ø Verbrauch", `${cons.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh/100km`, `von der Wand · Akku ≈ ${consNet.toLocaleString("de-DE", {minimumFractionDigits:1})}`),
     kpiStat("🔌 Extern", `${extKwh.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("📉 Ladeverlust", `${homeLoss.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
@@ -309,13 +313,12 @@ function renderStats(data) {
   drawStatChart("chartCost100", labels, s.map(d => d.cost_per_100), "#ffc107", "€/100km", 2);
   drawStatChart("chartKm", labels, s.map(d => d.cum_km), "#6f42c1", "km", 0);
 
-  // 5. Graph: SOC-basierter Intervall-Verbrauch (nutzt ALLE Ladungen)
-  const si = data.soc_intervals || [];
-  const siLabels = si.map(d => d.day);
-  const siVals = si.map(d => d.consumption);
-  drawStatChart("chartSoc", siLabels, siVals, "#fd7e14", "kWh/100km", 1);
-  const siMean = avg(siVals);
-  document.getElementById("kpiSocCons").textContent = siMean != null ? siMean.toLocaleString("de-DE", {minimumFractionDigits:1}) : "–";
+  // 5. Graph: Verbrauch pro Tag (plausible Tageswerte, odometer-basiert)
+  const dayCons = s.map(d => d.consumption);
+  drawStatChart("chartSoc", labels, dayCons, "#fd7e14", "kWh/100km", 1);
+  const dayConsValid = dayCons.filter(v => v != null);
+  const dayMean = dayConsValid.length ? dayConsValid.reduce((a,b)=>a+b,0)/dayConsValid.length : null;
+  document.getElementById("kpiSocCons").textContent = dayMean != null ? dayMean.toLocaleString("de-DE", {minimumFractionDigits:1}) : "–";
 
   // Haupt-KPIs ueber Graphen
   document.getElementById("kpiCons").textContent = k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1}) || "–";
@@ -325,13 +328,17 @@ function renderStats(data) {
 
   // Sekundaer-KPIs + Kategorie-Karten
   const dcPct = k.dc_share_pct ?? 0;
+  const pl = data.plausibility || {};
   document.getElementById("statsSecondary").innerHTML = [
     kpiStat("🔌 AC geladen", `${k.ac_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("⚡ DC (Supercharger)", `${k.dc_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("⚡ DC-Anteil", `${dcPct} %`),
+    kpiStat("🔋 Ladeverlust", `${k.charging_loss_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`, `${k.charging_loss_pct} % der geladenen Energie (AC 10% / DC 5%)`),
     kpiStat("📏 Reichweite", `${k.last_range?.toLocaleString("de-DE")} km`),
-    kpiStat("🔋 Geladene kWh", `${k.charged_total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("🌱 CO₂ Ø", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
+    kpiStat("💡 AC Kosten", `${fmtEUR(k.ac_cost_per_100km)}/100km`),
+    kpiStat("💡 DC Kosten", `${fmtEUR(k.dc_cost_per_100km)}/100km`),
+    kpiStat("📊 Plausibilität", `${pl.lower}–${pl.upper}`, `Mittelwert ${pl.mean} ± 2σ kWh/100km (Ausreißer ausgeblendet)`),
   ].join("");
 }
 

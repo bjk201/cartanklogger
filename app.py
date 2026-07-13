@@ -30,6 +30,15 @@ DB_PATH = os.environ.get("DB_PATH", "/app/data/cartanklogger.db")
 _env_mock = os.environ.get("MOCK_MODE")
 MOCK_MODE = _env_mock.lower() in ("1", "true", "yes") if _env_mock is not None else None
 
+# --- Ladeverlust-Effizienz (ev-monitor: AC 0.90 / DC 0.95) ---
+# AC-Wallbox: ~10% Verlust, DC-Schnellladen: ~5% Verlust.
+AC_EFFICIENCY = 0.90
+DC_EFFICIENCY = 0.95
+# Plausibilitaetsgrenzen (ev-monitor: absolute bounds)
+ABS_MIN_KWH_100 = 5.0
+ABS_MAX_KWH_100 = 40.0
+SIGMA_MULTIPLIER = 2.0  # statistische Plausibilität: Mittelwert ± 2σ
+
 
 def load_config():
     defaults = {
@@ -653,6 +662,7 @@ def build_stats(days=365):
     tco = total_cost
 
     cost_per_km = (total_cost / total_dist) if total_dist > 0 else 0
+    tco_per_100km = (tco / total_dist * 100) if total_dist > 0 else 0
     # Verbrauch "von der Wand" (brutto): nur EVCC-kWh / gefahrene km.
     # WICHTIG: Externe kWh (Supercharger) NICHT einrechnen, da deren km nicht
     # voll in der odometer-Basis sind -> wuerde Verbrauch kuenstlich aufblaepen.
@@ -707,6 +717,7 @@ def build_stats(days=365):
             "cost_home_and_external": round(home_cost + ext_cost, 2),
             "cost_extra": round(extra_total, 2),
             "tco": round(tco, 2),
+            "tco_per_100km": round(tco_per_100km, 2),
             "distance_km": round(total_dist, 1),
             "cost_per_km": round(cost_per_km, 3),
             "consumption_kwh_per_100km": round(consumption_brutto, 2),
@@ -1167,18 +1178,58 @@ def api_charts():
             continue
         dsoc = b["soc_start"] - a["soc_end"]          # verbrauchte SOC seit letzter Ladung (negativ)
         used_energy = -dsoc / 100.0 * est_cap         # kWh verbraucht (positiv)
+        # P1 (ev-monitor Z.143): SoC-Delta-Korrektur.
+        #   energyConsumed = (SOC_A_end - SOC_B_end) * cap/100  [Korrektur Start/Ende-Intervall]
+        #                  + used_energy (Strecke A->B via SOC-Diff)
+        # b_charged (Energie in B geladen) ist NICHT addieren -- das ueberschaetzt,
+        # da used_energy bereits die gefahrene Strecke abdeckt.
+        soc_after_a = a["soc_end"]; soc_after_b = b["soc_end"]
+        soc_corr = (soc_after_a - soc_after_b) / 100.0 * est_cap
+        energy_consumed = used_energy + soc_corr
         km = b["odometer"] - a["odometer"]
-        cons = round(used_energy / (km / 100.0), 2) if (km > 0 and used_energy >= 0) else None
+        # Plausibilitaets-Check (ev-monitor Layer 1: absolut + Mindeststrecke).
+        # km muss zum geladenen/verbrauchten kWh passen: max 40 kWh/100km erlaubt.
+        # Mindeststrecke 20 km (ev-monitor minTripDistanceKm): kurze Intervalle
+        # mit ungenauer odometer-Diff verfaelschen den Verbrauch.
+        km_ok = km >= 20 and energy_consumed >= 0 and energy_consumed <= km / 100.0 * 40.0
+        cons = round(energy_consumed / (km / 100.0), 2) if km_ok else None
         soc_intervals.append({
             "day": b["day"], "date": b["created"], "dsoc": round(dsoc, 1),
             "used_kwh": round(used_energy, 2), "km": round(km, 1),
-            "consumption": cons,  # kWh/100km ueber Intervall
+            "consumption": cons,  # kWh/100km ueber Intervall (SoC-korrigiert)
         })
+
+    # --- Gesamt-Ladeverlust (P2): immer anzeigen, keine TM-Abhaengigkeit ---
+    # ev-monitor: Verlust = (1 - efficiency) * geladene_kWh.
+    # AC 10% Verlust, DC 5% Verlust. Das ist eine saubere, immer verfuegbare
+    # Schaetzung (im Gegensatz zu TM-added Diff, die bei Datenluecken '-' war).
+    total_loss_ac = total_ac * (1 - AC_EFFICIENCY)
+    total_loss_dc = total_dc * (1 - DC_EFFICIENCY)
+    total_charging_loss = round(total_loss_ac + total_loss_dc, 2)
+
+    # --- Statistische Plausibilitaet (P3, ev-monitor Layer 2a) ---
+    # Mittelwert +/- 2σ ueber die berechneten Intervall-Verbrauchswerte.
+    cons_vals = [s["consumption"] for s in soc_intervals if s["consumption"] is not None]
+    mean_c = std_c = lo = hi = 0
+    if cons_vals:
+        mean_c = sum(cons_vals) / len(cons_vals)
+        variance = sum((x - mean_c) ** 2 for x in cons_vals) / len(cons_vals)
+        std_c = variance ** 0.5
+        margin = std_c * SIGMA_MULTIPLIER
+        lo, hi = mean_c - margin, mean_c + margin
+        for s in soc_intervals:
+            if s["consumption"] is not None and not (lo <= s["consumption"] <= hi):
+                s["consumption"] = None  # Ausreisser ausblenden (statistisch)
+                s["outlier"] = True
+    else:
+        lo = hi = mean_c = 0
 
     return jsonify({
         "series": series,
         "soc_intervals": soc_intervals,
         "est_capacity": round(est_cap, 1),
+        "plausibility": {"mean": round(mean_c, 2), "std": round(std_c, 2) if cons_vals else 0,
+                         "lower": round(lo, 2), "upper": round(hi, 2)},
         "kpis": {
             "total_kwh": total_kwh, "total_cost": total_cost, "total_km": total_km,
             "avg_consumption": avg_consumption, "avg_cost_100": avg_cost_100,
@@ -1187,6 +1238,12 @@ def api_charts():
             "charged_total_kwh": round(total_ac + total_dc, 2),
             "dc_share_pct": round(total_dc / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
             "last_range": last_range,
+            "charging_loss_kwh": total_charging_loss,
+            "charging_loss_pct": round(total_charging_loss / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
+            # P5: AC/DC-Split (Kosten + Verbrauch)
+            "ac_share_pct": round(total_ac / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
+            "dc_cost_per_100km": round((total_dc / (total_ac + total_dc) * avg_cost_100) if (total_ac + total_dc) > 0 else 0, 2),
+            "ac_cost_per_100km": round((total_ac / (total_ac + total_dc) * avg_cost_100) if (total_ac + total_dc) > 0 else 0, 2),
         },
     })
 
