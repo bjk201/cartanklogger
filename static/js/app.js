@@ -263,9 +263,13 @@ function drawStatChart(canvasId, labels, values, color, unit, dec) {
   if (statCharts[canvasId]) statCharts[canvasId].destroy();
   const ctx = document.getElementById(canvasId);
   if (!ctx || !window.Chart) return;
-  // Canvas nicht sichtbar (Tab verborgen) -> 0px Breite -> Chart.js Fehler.
-  // Skip: wird beim Tab-Wechsel neu gezeichnet.
-  if (ctx.clientWidth === 0 && ctx.offsetParent === null) return;
+  // Canvas nicht sichtbar (Tab verborgen / Fade-In) -> 0px Breite -> Chart.js
+  // zeichnet nicht. Dann warten (requestAnimationFrame), bis sichtbar, statt
+  // komplett zu ueberspringen (sonst bleibt der Graph beim Tab-Wechsel leer).
+  if (ctx.clientWidth === 0 && ctx.offsetParent === null) {
+    requestAnimationFrame(() => drawStatChart(canvasId, labels, values, color, unit, dec));
+    return;
+  }
   const mean = avg(values);
   const meanLine = values.map(() => mean);
   statCharts[canvasId] = new Chart(ctx, {
