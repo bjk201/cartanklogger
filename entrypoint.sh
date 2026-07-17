@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# Bind-Mounts (./data, ./config.yaml) werden auf dem Host oft als root angelegt
+# Bind-Mounts (./data, ./config) werden auf dem Host oft als root angelegt
 # und sind damit fuer den Laufzeit-User NICHT schreibbar. Das fuehrt zu:
 #   sqlite3.OperationalError: unable to open database file
 # und verhindert das Speichern von Einstellungen (config.yaml) aus der UI.
@@ -11,11 +11,22 @@ set -e
 #   "setgroups: Operation not permitted"
 # deshalb starten wir die App hier direkt (kein User-Wechsel noetig,
 # da die Dateirechte oben passend gesetzt wurden).
-mkdir -p /app/data
+mkdir -p /app/data /app/config
 chown -R "$(id -u):$(id -g)" /app/data 2>/dev/null || true
-if [ -f /app/config.yaml ]; then
-  chown "$(id -u):$(id -g)" /app/config.yaml 2>/dev/null || true
-  chmod 664 /app/config.yaml 2>/dev/null || true
+chown -R "$(id -u):$(id -g)" /app/config 2>/dev/null || true
+
+# config.yaml automatisch aus config.example.yaml erzeugen, falls nicht vorhanden.
+# So reicht ein Verzeichnis-Mount (./config:/app/config) – Docker erzeugt KEIN
+# Verzeichnis aus einer (fehlenden) Datei, und das Schreiben aus der UI klappt.
+if [ ! -f /app/config/config.yaml ]; then
+  if [ -f /app/config.example.yaml ]; then
+    cp /app/config.example.yaml /app/config/config.yaml
+    chmod 664 /app/config/config.yaml 2>/dev/null || true
+  fi
+fi
+if [ -f /app/config/config.yaml ]; then
+  chown "$(id -u):$(id -g)" /app/config/config.yaml 2>/dev/null || true
+  chmod 664 /app/config/config.yaml 2>/dev/null || true
 fi
 
 # Cache-Buster: APP_VERSION muss eine Zahl (Unix-Timestamp) sein, damit der

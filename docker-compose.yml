@@ -11,8 +11,13 @@
 # WICHTIG zur Datenhaltung:
 #   - ./data  ist deine PERSISTENTE Datenbank (SQLite) -> wird 1:1 gemountet.
 #     Beim Recreate wird nichts ueberschrieben.
-#   - ./config.yaml  sind deine Verbindungseinstellungen (siehe config.example.yaml).
-#     Lege sie lokal an; sie ist in .gitignore und verlaesst deinen Rechner nicht.
+#   - ./config  ist dein Konfigurations-Verzeichnis. Die App legt darin
+#     automatisch config.yaml an (falls nicht vorhanden, basierend auf
+#     config.example.yaml). config.yaml ist in .gitignore und verlaesst
+#     deinen Rechner nicht.
+#   - WICHTIG: kein Datei-Mount (./config.yaml), sondern Verzeichnis-Mount!
+#     Sonst erzeugt Docker aus ./config.yaml ein VERZEICHNIS und das Schreiben
+#     der Config aus der UI scheitert mit "[Errno 21] Is a directory".
 #   - Passe die Pfade ggf. an dein Arbeitsverzeichnis an (relativ zum Compose-File).
 
 services:
@@ -29,9 +34,9 @@ services:
       - "13131:5000"
     volumes:
       - ./data:/app/data
-      - ./config.yaml:/app/config.yaml
+      - ./config:/app/config
     environment:
-      - CONFIG_PATH=/app/config.yaml
+      - CONFIG_PATH=/app/config/config.yaml
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=${MOCK_MODE:-false}
     restart: unless-stopped
