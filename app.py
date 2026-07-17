@@ -192,6 +192,10 @@ def _ensure_csrf():
         if err is not None:
             # csrf_protect liefert bereits eine Response (403) zurueck
             return err
+    # Konfiguration pro Request frisch laden, falls die Datei sich geaendert
+    # hat (mtime-Check). So ist ein Browser-F5 nach dem Speichern (auch im
+    # gleichen Container) immer aktuell – unabhaengig vom Modul-Start-Cache.
+    _maybe_reload_config()
 
 
 # ---------------------------------------------------------------------------
@@ -1105,13 +1109,22 @@ def api_config():
         if "pricing_defaults" in d and isinstance(d["pricing_defaults"], dict):
             config.setdefault("pricing_defaults", {})
             config["pricing_defaults"].update(d["pricing_defaults"])
-        # YAML persistieren
+        # YAML persistieren – mit Fallback, falls CONFIG_PATH ein Verzeichnis ist
+        # (z.B. alter Datei-Mount, bei dem Docker ein Verzeichnis erzeugt hat).
+        target = CONFIG_PATH
         try:
-            os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-            with open(CONFIG_PATH, "w") as f:
+            if os.path.isdir(target):
+                # CONFIG_PATH zeigt auf ein Verzeichnis -> Datei darin ablegen
+                target = os.path.join(target, "config.yaml")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as f:
                 yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
-            return jsonify({"ok": True})
+            # Globalen Cache nach dem Schreiben neu laden, damit F5 (gleicher
+            # Container) sofort die frisch gespeicherten Werte zeigt.
+            _reload_config()
+            return jsonify({"ok": True, "saved_to": target})
         except Exception as e:
+            app.logger.error(f"Config speichern fehlgeschlagen: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
     c = json.loads(json.dumps(config))
     # Passwörter/Tokens nie ausliefern
@@ -1120,6 +1133,42 @@ def api_config():
     c["teslamate"]["api_token"] = "" if c["teslamate"].get("api_token") else ""
     c["app"]["mock_mode"] = mock_mode()
     return jsonify(c)
+
+
+_config_mtime = None
+
+
+def _maybe_reload_config():
+    """Laedt die Konfiguration neu, falls die Datei sich seit dem letzten
+    Laden geaendert hat (mtime-Check). Sehr guenstig (nur stat, kein Parsen),
+    verhindert aber Cache-Staleness nach dem Speichern oder nach einem
+    erneuten Mount. Ein Browser-F5 sieht immer die persistierten Werte."""
+    global config, _config_mtime
+    try:
+        if not os.path.exists(CONFIG_PATH):
+            return
+        mtime = os.path.getmtime(CONFIG_PATH)
+        if _config_mtime is None or mtime > _config_mtime:
+            config = load_config()
+            _config_mtime = mtime
+    except Exception:
+        pass
+
+
+def _reload_config():
+    """Laedt die Konfiguration frisch aus der Datei in den globalen Cache.
+
+    Wird nach dem Speichern (api_config POST) aufgerufen, damit ein
+    Browser-F5 (gleicher Container) sofort die frisch gespeicherten Werte
+    zeigt. Setzt auch den mtime-Cache zurueck.
+    """
+    global config, _config_mtime
+    config = load_config()
+    try:
+        if os.path.exists(CONFIG_PATH):
+            _config_mtime = os.path.getmtime(CONFIG_PATH)
+    except Exception:
+        pass
 
 
 @app.route("/api/sync/evcc", methods=["POST"])
