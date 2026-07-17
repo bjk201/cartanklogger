@@ -566,9 +566,9 @@ function renderRoadtrip(data) {
   window.__lastTrip = data;
   const t = data.totals || {};
 
-  // 1) Kennzahlen-Kacheln
+  // 1) Kennzahlen-Kacheln (OHNE "Gesamt km" - das ist der Tachostand = max odometer,
+  //    der auf der Hauptseite nicht hierhin gehoert; stattdessen die nuetzlichen Werte)
   document.getElementById("tripCards").innerHTML = [
-    kpi("🛣️ Gesamt km", (t.km != null ? t.km : 0).toLocaleString("de-DE", {maximumFractionDigits:0}) + " km"),
     kpi("⚡ Geladen", (t.kwh != null ? t.kwh : 0).toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh"),
     kpi("💶 Ausgaben", fmtEUR(t.cost)),
     kpi("🔋 Ø Verbrauch", (t.avg_consumption_kwh_100km != null ? t.avg_consumption_kwh_100km : 0).toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh/100km"),
@@ -580,7 +580,8 @@ function renderRoadtrip(data) {
   // Beim initialen Laden nichts tun; _drawTripMap() wird via shown.bs.tab
   // getriggert, sobald der Reise-Tab geklickt wird.
   window.__tripStops = data.stops || [];
-  if (window.__tripTabVisible && window.L) _drawTripMap();
+  // Karte liegt jetzt auf der Hauptseite -> direkt zeichnen (sobald Leaflet da)
+  maybeDrawTripMap();
 
   // 3) Tagesbalken (km / geladene kWh / verbrauchte kWh / €) – KLARE Beschriftung
   const days = (data.per_day || []).slice().reverse(); // chronologisch
@@ -673,11 +674,7 @@ window._drawTripMap = function _drawTripMap() {
   if (!window.L) return;
   if (!tripMap) window._initTripMapLazy();
   if (!tripMap) return;
-  const pane = document.getElementById("tabTrip");
-  if (pane && getComputedStyle(pane).display === "none") {
-    requestAnimationFrame(window._drawTripMap);
-    return;
-  }
+  // Karte liegt jetzt auf der Hauptseite (immer sichtbar) -> direkt zeichnen
   tripMap.invalidateSize();
   setTimeout(() => tripMap.invalidateSize(), 200);
   setTimeout(() => tripMap.invalidateSize(), 500);
@@ -694,31 +691,26 @@ window._drawTripMap = function _drawTripMap() {
   }
 };
 
-// Tab-Wechsel: Reise/Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
+// Karte auf der Hauptseite zeichnen, sobald Daten + Leaflet da sind
+function maybeDrawTripMap() {
+  if (window.L && (window.__tripStops || []).length) {
+    window._drawTripMap();
+  } else if (window.__tripStops && window.__tripStops.length) {
+    // Leaflet noch nicht geladen -> kurz warten
+    setTimeout(maybeDrawTripMap, 300);
+  }
+}
+
+// Tab-Wechsel: Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
 let __chartData = null;
 let __statsData = null;
 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
   tab.addEventListener("shown.bs.tab", (e) => {
     const target = e.target.getAttribute("data-bs-target");
-    if (target === "#tabTrip") {
-      window.__tripTabVisible = true;
-      if (window.L) {
-        setTimeout(window._drawTripMap, 150);
-        setTimeout(window._drawTripMap, 350);
-      }
-      if (window.__lastTrip) setTimeout(() => renderRoadtrip(window.__lastTrip), 30);
-    } else if (target === "#tabStats") {
-      window.__tripTabVisible = false;
+    if (target === "#tabStats") {
       if (__chartData) setTimeout(() => renderStats(__chartData), 30);
     } else if (target === "#tabHome") {
       if (__statsData) setTimeout(() => renderCharts(__statsData), 30);
-    }
-  });
-  // Fallback: falls shown.bs.tab nicht feuert (Bootstrap-Versionen),
-  // zeichne Karte direkt beim Klick auf den Reise-Tab.
-  tab.addEventListener("click", () => {
-    if (tab.getAttribute("data-bs-target") === "#tabTrip" && window.L) {
-      setTimeout(window._drawTripMap, 200);
     }
   });
 });

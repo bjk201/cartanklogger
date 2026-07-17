@@ -796,6 +796,20 @@ def build_stats(days=365, from_date=None, to_date=None):
     ext = [r for r in ext_all if not _is_home_address(r["location_name"], r["address"])]
     extras = db.execute(extra_q + " ORDER BY date DESC", params).fetchall()
 
+    # Gesamt-km = LETZTER (neuester) Tachostand ueber alle Sessions (= Tacho km, 1:1 zum Auto-Tacho).
+    # EVCC 'odometer' ist der absolute Tachostand in km. Wir nehmen den zeitlich
+    # letzten Wert (nicht blind max), damit ein Ausreisser das Ergebnis nicht verfaelscht.
+    _odo_dated = []
+    for e in home:
+        try: _odo_dated.append(((e["created"] or "")[:19], float(e["odometer"] or 0)))
+        except Exception: pass
+    for t in ext_all:
+        try: _odo_dated.append(((t["started_at"] or "")[:19], float(t["odometer_start"] or 0)))
+        except Exception: pass
+    _odo_dated = [x for x in _odo_dated if x[1] > 0]
+    _odo_dated.sort(key=lambda x: x[0])
+    _total_km_odo = _odo_dated[-1][1] if _odo_dated else 0.0
+
     home_kwh = sum(r["charged_kwh"] for r in home)
     home_grid_cost = 0.0
     home_pv_cost = 0.0
@@ -893,7 +907,7 @@ def build_stats(days=365, from_date=None, to_date=None):
             "cost_extra": round(extra_total, 2),
             "tco": round(tco, 2),
             "tco_per_100km": round(tco_per_100km, 2),
-            "distance_km": round(total_dist, 1),
+            "distance_km": round(_total_km_odo, 1),
             "cost_per_km": round(cost_per_km, 3),
             "consumption_kwh_per_100km": round(consumption_brutto, 2),
             "consumption_net_kwh_per_100km": round(consumption_netto, 2),
@@ -1246,6 +1260,21 @@ def api_charts():
     evcc = [dict(r) for r in db.execute(
         "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, "
         "solar_percentage, loadpoint, raw FROM home_sessions ORDER BY created ASC")]
+    # Gesamt-km = LETZTER (neuester) Tachostand ueber alle Sessions (= Tacho km, 1:1 zum Auto-Tacho).
+    # EVCC 'odometer' ist der absolute Tachostand in km. Wir nehmen den zeitlich
+    # letzten Wert (nicht blind max), damit ein Ausreisser das Ergebnis nicht verfaelscht.
+    _odo_dated = []
+    for e in evcc:
+        try: _odo_dated.append(((e.get("created") or "")[:19], float(e.get("odometer") or 0)))
+        except Exception: pass
+    tm_odo = [dict(r) for r in db.execute(
+        "SELECT started_at, odometer_start FROM external_sessions")]
+    for t in tm_odo:
+        try: _odo_dated.append(((t.get("started_at") or "")[:19], float(t.get("odometer_start") or 0)))
+        except Exception: pass
+    _odo_dated = [x for x in _odo_dated if x[1] > 0]
+    _odo_dated.sort(key=lambda x: x[0])
+    _total_km_odo = _odo_dated[-1][1] if _odo_dated else 0.0
 
     def _evcc_co2(raw):
         try:
@@ -1368,7 +1397,7 @@ def api_charts():
     # --- Gesamt-KPIs ---
     total_kwh = round(sum(s["kwh"] for s in series), 2)
     total_cost = round(sum(s["cost"] for s in series), 2)
-    total_km = round(cum_km, 1)
+    total_km = round(_total_km_odo, 1)  # Tachostand (max odometer), nicht kumulative Diff
     total_ac = round(sum(s["ac_kwh"] for s in series), 2)
     total_dc = round(sum(s["dc_kwh"] for s in series), 2)
     avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
@@ -1523,32 +1552,31 @@ def api_roadtrip():
                 "cost": round(float(t.get("cost_total") or 0), 2),
             })
 
-    # km ueber odometer: kontinuierliche Diff ueber ALLE Sessions (wie build_stats),
-    # sortiert nach Zeit -> identische Gesamt-km wie Zusammenfassung.
-    odo_points = []
+    # km ueber odometer: Gesamt-km = letzter (neuester) Tachostand.
+    # EVCC liefert 'odometer' = Tachostand in km (1:1 zum Auto-Tacho).
+    # Wir nehmen den zeitlich LETZTEN erfassten Wert (nicht blind das Maximum),
+    # damit ein einzelner Ausreisser (z.B. 99999 Testdaten) das Ergebnis nicht
+    # verfaelscht. Der letzte Wert = aktuellster Stand des Fahrzeugs.
+    odo_dated = []
     for e in evcc:
         try:
-            odo_points.append(((e.get("created") or "")[:10], float(e.get("odometer") or 0)))
+            odo_dated.append(((e.get("created") or "")[:19], float(e.get("odometer") or 0)))
         except Exception:
             pass
     for t in tm:
         try:
-            odo_points.append(((t.get("started_at") or "")[:10], float(t.get("odometer_start") or 0)))
+            odo_dated.append(((t.get("started_at") or "")[:19], float(t.get("odometer_start") or 0)))
         except Exception:
             pass
-    odo_points.sort(key=lambda x: x[0])
+    odo_dated = [x for x in odo_dated if x[1] > 0]
+    total_km_calc = odo_dated[-1][1] if odo_dated else 0.0  # letzter (sortiert nach Zeit)
+    odo_dated.sort(key=lambda x: x[0])
+    # Tages-Diff nur fuer die Tagesbalken (km pro Tag), nicht fuer Gesamt-km
+    odo_points_dated = odo_dated
     day_odo = defaultdict(float)
-    for day, o in odo_points:
-        day_odo[day] = max(day_odo[day], o)
+    for day, o in odo_points_dated:
+        day_odo[day[:10]] = max(day_odo[day[:10]], o)
     days_sorted = sorted(day_odo.keys())
-    # Gesamt-km = kontinuierliche Odometer-Diff (alle Sessions)
-    total_km_calc = 0.0
-    prev_odo = None
-    for day, o in odo_points:
-        if o is not None:
-            if prev_odo is not None and o > prev_odo:
-                total_km_calc += o - prev_odo
-            prev_odo = o
     day_km = {}
     prev = 0.0
     for d in days_sorted:
