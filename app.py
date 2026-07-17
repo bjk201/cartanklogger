@@ -11,6 +11,7 @@ separate Sicht für Anschaffung/Service/Zubehör/Versicherung/Steuer.
 import os
 import json
 import sqlite3
+import subprocess
 import requests
 from datetime import datetime, date, timedelta
 from flask import Flask, render_template, jsonify, request, g, session
@@ -21,6 +22,9 @@ except ImportError:
     yaml = None
 
 app = Flask(__name__)
+# Browser zwingen, statische Dateien (app.js, css) bei jedem Request neu zu
+# holen -> kein veralteter JS/CSS-Cache nach einem Deploy.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # ---------------------------------------------------------------------------
 # Konfiguration
@@ -903,11 +907,30 @@ def build_stats(days=365, from_date=None, to_date=None):
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    # Cache-Buster: aendert sich bei jedem Build (APP_VERSION aus ENV, im
-    # Dockerfile/Build auf den Build-Timestamp gesetzt) -> Browser holt nach
-    # einem Deploy zwingend die neue app.js (kein veralteter JS-Cache).
+    # Cache-Buster: aendert sich bei jedem Container-Start (APP_VERSION aus ENV,
+    # im entrypoint auf die Startzeit gesetzt) -> Browser holt nach einem Deploy
+    # zwingend die neue app.js (kein veralteter JS-Cache).
     js_ver = os.environ.get("APP_VERSION", "1")
     return render_template("index.html", mock=mock_mode(), js_version=js_ver)
+
+
+@app.route("/api/version")
+def api_version():
+    """Sichtbare Versionsinfo, damit der User sofort sieht, welche
+    App-Version im Browser laeuft (Cache-Buster-Kontrolle)."""
+    av = os.environ.get("APP_VERSION", "unknown")
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        commit = "n/a"
+    return jsonify({
+        "app_version": av,
+        "commit": commit,
+        "mock": mock_mode(),
+    })
 
 
 @app.route("/admin")

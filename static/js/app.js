@@ -758,9 +758,34 @@ if (btnRange) {
 updateRangeLabel();
 }
 
+// --- Sichtbare Versionsanzeige (Footer) ---
+// Laedt /api/version und zeigt Build-Zeit + Commit, damit man sofort sieht,
+// ob nach einem Update wirklich die neue Version im Browser laeuft.
+(function showVersion() {
+  fetch('/api/version').then(r => r.json()).then(v => {
+    const el = document.getElementById('versionInfo');
+    if (!el) return;
+    let t = 'unbekannt';
+    if (v.app_version && v.app_version !== 'unknown') {
+      const ts = Number(v.app_version);
+      if (!isNaN(ts)) {
+        const d = new Date(ts * 1000);
+        t = d.toLocaleString('de-DE');
+      } else {
+        t = v.app_version;
+      }
+    }
+    el.innerHTML = `Build: <code>${t}</code> · Commit: <code>${v.commit || 'n/a'}</code>` +
+      (v.mock ? ' · <span class="badge bg-warning text-dark">MOCK</span>' : '');
+  }).catch(() => {
+    const el = document.getElementById('versionInfo');
+    if (el) el.textContent = 'Version nicht abrufbar';
+  });
+})();
+
 // Explizit global machen (Sicherheit gegen Scope-/Hoisting-Probleme im Browser)
 window._drawTripMap = _drawTripMap;
 window._initTripMapLazy = _initTripMapLazy;
 
 // Eindeutiger Build-Marker (zum Verifizieren, ob der Browser die neue app.js laedt)
-window.__APP_MARKER = "2026-07-17-final-r1";
+window.__APP_MARKER = "2026-07-17-final-r2";

@@ -239,5 +239,14 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ js_version }}"></script>
 
+<!-- Versions-Footer: zeigt sofort, welche App-Version laeuft (Cache-Kontrolle) -->
+<footer class="container-fluid mt-4 mb-3 text-muted small">
+  <hr>
+  <div class="d-flex justify-content-between flex-wrap">
+    <span>CarTankLogger</span>
+    <span id="versionInfo" class="text-end">Version wird geladen…</span>
+  </div>
+</footer>
+
 </body>
 </html>
