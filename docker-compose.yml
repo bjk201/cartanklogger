@@ -1,30 +1,94 @@
+version: "3.9"
+
 services:
+  # ---------------------------------------------------------------------------
+  # CartankLogger (die Anwendung mit dem vollen Bearbeitungs-/CSRF-Backend)
+  # ---------------------------------------------------------------------------
   cartanklogger:
     build: .
     container_name: cartanklogger
     ports:
       - "13131:5000"
     volumes:
-      - ./config.yaml:/app/config.yaml
+      # Persistenter Datenbereich: Daten, Datenbank, generierter Cache etc.
       - ./data:/app/data
+      # Wenn Sie andere Konfigurationsdateien benötigen, die komprimiert werden, verlinken Sie sie:
+      # - ./config.yaml:/app/config.yaml
     environment:
+      # Hauptkonfiguration
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=false
-    # EVCC läuft bei dir in einem eigenen LXC (eigene LAN-IP, NICHT Docker).
-    # Deshalb ist KEIN gemeinsames Docker-Netz ("home-net") nötig:
-    #   - gib in der Web-Oberfläche (Admin) einfach die LAN-IP deines EVCC
-    #     ein, z.B. http-Host: 192.168.1.x , Port 7070
-    #   - TeslaMate: falls als Docker-Container erreichbar, dessen Container-Name
-    #     oder LAN-IP eintragen (z.B. http://192.168.1.y:4000/api)
-    # "home-net" nur aktivieren, wenn EVCC/TeslaMate ebenfalls Docker-Container
-    # im selben Netz sind. Dann unten networks: home-net einkommentieren
-    # und `docker network create home-net` ausführen.
-    # networks:
-    #   - home-net
-    restart: unless-stopped
 
-# networks:
-#   home-net:
-#     name: home-net
-#     external: true
+      # EVCC-Konfiguration (Host/Port, optional TLS und API-Token) – setzen Sie diese in .env ein
+      - EVCC_HOST=${EVCC_HOST}
+      - EVCC_PORT=${EVCC_PORT}
+      - EVCC_USE_TLS=${EVCC_USE_TLS}
+      - EVCC_PASSWORD=${EVCC_PASSWORD}
+      - EVCC_API_TOKEN=${EVCC_API_TOKEN}
+
+      # TeslaMate-Konfiguration (URL, optional API-Token) – Einpässe über .env
+      - TESLAMATE_URL=${TESLAMATE_URL}
+      - TESLAMATE_API_TOKEN=${TESLAMATE_API_TOKEN}
+
+      # Zeitzone (wird von einigen Services verwendet)
+      - TZ=${TZ}
+
+      # Secret für Flask, optional (ersetzt Standard-DB-Pfad-hash)
+      - SECRET_KEY=${SECRET_KEY}
+
+    depends_on:
+      - evcc
+      - teslamate
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # EVCC (Ladebuchse zuhause) – typisches Docker-Image
+  # ---------------------------------------------------------------------------
+  evcc:
+    image: evcc:stable           # Ersetzen Sie dies durch die tatsächliche Tag-/Version, die Sie benötigen (z.B. 0.115.0)
+    container_name: evcc
+    # EVCC öffnet normalerweise Port 7070 (HTTP, TLS optional)
+    ports:
+      - "7070:7070"
+    # Konfigurationsvolume – Mount-Punkt spiegelt den EVCC-config.yaml wider
+    volumes:
+      - evcc_config:/etc/evcc
+    # Wenn Sie möchten, können Sie Umgebungsüberdeckungen für EVCC CLI bereitstellen (dort nicht automatisch unterstützt).
+    environment:
+      - TZ=${TZ}
+    # Cloudflare-Falten für Telegram, Auto-Update, SMS-Überdeckung – sind optional in der EVCC-Konfiguration.
+    # Für die Einfachheit belassen wir die Standardkonfig.
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # TeslaMate (Ladeprotokoll) – das offizielle Docker-Image
+  # ---------------------------------------------------------------------------
+  teslamate:
+    image: teslamate/teslamate:latest
+    container_name: teslamate
+    # Standard-APIs werden über Port 4000 bereitgestellt (verwenden Sie standardmäßig den internes Netzwerk)
+    ports:
+      - "4000:4000"
+    # Benutzerdefinierte Konfiguration und Daisy-Chains werden über ein Volume bereitgestellt.
+    volumes:
+      - teslamate_config:/etc/teslamate
+    environment:
+      - TZ=${TZ}
+    restart: unless-stopped
+    networks:
+      - internal
+
+# Volumes für jede Anwendung, um Änderungen über Container-Neustarts hinweg zu persistieren
+volumes:
+  evcc_config:
+  teslamate_config:
+
+# bridge Netzwerk, das alle Container verbindet
+networks:
+  internal:
+    driver: bridge
