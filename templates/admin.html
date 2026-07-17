@@ -63,6 +63,8 @@
                         <button class="btn btn-outline-secondary" id="syncTm">TeslaMate</button>
                     </div>
                     <button class="btn btn-outline-warning btn-sm" id="seedBtn" style="display:none">🧪 Testdaten einspielen (Seed)</button>
+                    <hr>
+                    <button class="btn btn-outline-danger btn-sm" id="resetBtn" type="button">🗑️ Alle Daten zurücksetzen</button>
                     <div id="syncMsg" class="small"></div>
                 </div>
             </div>
@@ -317,6 +319,31 @@ document.addEventListener("click", async (e) => {
     await loadExtras();
   } catch (err) {
     if (msgEl) { msgEl.textContent = "Fehler: " + err.message; msgEl.className = "text-danger small mt-2"; }
+  }
+});
+
+// Alle Daten zuruecksetzen (Reset-Button) – mit Sicherheitsabfrage
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("#resetBtn");
+  if (!btn) return;
+  e.preventDefault();
+  const ok = confirm("Wirklich ALLE Daten zuruecksetzen?\n\n"
+    + "Home-Ladungen, externe Ladungen, Extra-Kosten und Preisperioden werden geloescht.\n"
+    + "Die Verbindungs-Einstellungen (IPs) bleiben erhalten.\n\n"
+    + "Diese Aktion kann nicht rueckgaengig gemacht werden!");
+  if (!ok) return;
+  const msgEl = document.getElementById("syncMsg");
+  try {
+    const res = await csrfFetch("/api/reset", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      if (msgEl) { msgEl.textContent = "Fehler: " + (data.error || res.statusText); msgEl.className = "text-danger small"; }
+      return;
+    }
+    if (msgEl) { msgEl.textContent = "✅ Alle Daten zurueckgesetzt."; msgEl.className = "text-success small"; }
+    await loadAll();
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = "Fehler: " + err.message; msgEl.className = "text-danger small"; }
   }
 });
 

@@ -2388,6 +2388,27 @@ def api_seed():
     return jsonify({"ok": True, "message": "Testdaten eingespielt"})
 
 
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Alle gespeicherten Daten leeren (Haupt-Reset ueber Admin-UI).
+
+    Leert home_sessions, external_sessions, extra_costs, price_periods.
+    Die Konfiguration (config.yaml) bleibt unberuehrt. CSRF-geschützt.
+    """
+    err = csrf_protect()
+    if err:
+        return err
+    db = get_db()
+    db.execute("DELETE FROM home_sessions")
+    db.execute("DELETE FROM external_sessions")
+    db.execute("DELETE FROM extra_costs")
+    db.execute("DELETE FROM price_periods")
+    db.execute("DELETE FROM sqlite_sequence WHERE name IN "
+               "('home_sessions','external_sessions','extra_costs','price_periods')")
+    db.commit()
+    return jsonify({"ok": True, "message": "Alle Daten zurueckgesetzt"})
+
+
 @app.route("/api/debug/evcc")
 def api_debug_evcc():
     """Rohes EVCC-Sample (zum Felder-Check gegen echte Instanz)."""
