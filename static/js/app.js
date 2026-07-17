@@ -568,10 +568,10 @@ function renderRoadtrip(data) {
 
   // 1) Kennzahlen-Kacheln
   document.getElementById("tripCards").innerHTML = [
-    kpi("🛣️ Gesamt km", t.km?.toLocaleString("de-DE") + " km"),
-    kpi("⚡ Geladen", t.kwh?.toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh"),
+    kpi("🛣️ Gesamt km", (t.km != null ? t.km : 0).toLocaleString("de-DE", {maximumFractionDigits:0}) + " km"),
+    kpi("⚡ Geladen", (t.kwh != null ? t.kwh : 0).toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh"),
     kpi("💶 Ausgaben", fmtEUR(t.cost)),
-    kpi("🔋 Ø Verbrauch", t.avg_consumption_kwh_100km?.toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh/100km"),
+    kpi("🔋 Ø Verbrauch", (t.avg_consumption_kwh_100km != null ? t.avg_consumption_kwh_100km : 0).toLocaleString("de-DE", {minimumFractionDigits:1}) + " kWh/100km"),
     kpi("💡 Ø Kosten", fmtEUR(t.avg_cost_per_100km) + "/100km"),
     kpi("📆 Tage", t.n_days),
   ].join("");
@@ -582,44 +582,48 @@ function renderRoadtrip(data) {
   window.__tripStops = data.stops || [];
   if (window.__tripTabVisible && window.L) _drawTripMap();
 
-  // 3) Tagesbalken (km / geladene kWh / verbrauchte kWh / €)
+  // 3) Tagesbalken (km / geladene kWh / verbrauchte kWh / €) – KLARE Beschriftung
   const days = (data.per_day || []).slice().reverse(); // chronologisch
-  const maxKm = Math.max(...days.map(d => d.km), 1);
-  const maxKwh = Math.max(...days.map(d => d.kwh), 1);
+  const maxKm = Math.max(...days.map(d => d.km || 0), 1);
+  const maxKwh = Math.max(...days.map(d => d.kwh || 0), 1);
   const maxCons = Math.max(...days.map(d => d.consumed_kwh || 0), 1);
-  const maxEur = Math.max(...days.map(d => d.cost), 1);
+  const maxEur = Math.max(...days.map(d => d.cost || 0), 1);
   document.getElementById("tripDays").innerHTML = days.map(d => `
-    <div class="border rounded p-2">
+    <div class="border rounded p-2 mb-2">
       <div class="d-flex justify-content-between small fw-bold">
         <span>${d.day}</span>
-        <span class="text-muted">${d.km.toLocaleString("de-DE")} km · gel. ${fmtKwh(d.kwh)} · verbr. ${fmtKwh(d.consumed_kwh)} · ${fmtEUR(d.cost)}</span>
+        <span class="text-muted">${d.km.toLocaleString("de-DE", {maximumFractionDigits:0})} km gefahren</span>
+      </div>
+      <div class="small text-muted mb-1">
+        Geladen: <b>${fmtKwh(d.kwh)}</b> · Verbraucht: <b>${fmtKwh(d.consumed_kwh)}</b> · Kosten: <b>${fmtEUR(d.cost)}</b>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-info" style="width:${(d.km/maxKm*100)}%" title="km"></div>
+        <div class="progress-bar bg-info" style="width:${Math.max(1,(d.km||0)/maxKm*100)}%" title="km gefahren"></div>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-success" style="width:${(d.kwh/maxKwh*100)}%" title="geladene kWh"></div>
+        <div class="progress-bar bg-success" style="width:${Math.max(1,(d.kwh||0)/maxKwh*100)}%" title="geladene kWh"></div>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-danger" style="width:${(d.consumed_kwh||0)/maxCons*100}%" title="verbrauchte kWh"></div>
+        <div class="progress-bar bg-danger" style="width:${Math.max(1,(d.consumed_kwh||0)/maxCons*100)}%" title="verbrauchte kWh"></div>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-warning" style="width:${(d.cost/maxEur*100)}%" title="€"></div>
+        <div class="progress-bar bg-warning" style="width:${Math.max(1,(d.cost||0)/maxEur*100)}%" title="Kosten in €"></div>
       </div>
-      <div class="small text-muted mt-1">${d.stations.map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join("")}</div>
+      <div class="small text-muted mt-1">${d.pins.map(p => `<span class="badge bg-secondary me-1">${p.address}: ${fmtKwh(p.kwh)}</span>`).join("")}</div>
     </div>`).join("");
 
-  // Legende für die Tagesbalken-Farben
+  // 4) Legende für die Tagesbalken-Farben (mit Erklaerung)
   const legend = document.getElementById("tripDaysLegend");
   if (legend) {
     legend.innerHTML = `
-      <span class="badge bg-info">&nbsp;</span> km (gefahren) &nbsp;
-      <span class="badge bg-success">&nbsp;</span> geladene kWh (Wallbox/TM) &nbsp;
-      <span class="badge bg-danger">&nbsp;</span> verbrauchte kWh (vom Akku) &nbsp;
-      <span class="badge bg-warning text-dark">&nbsp;</span> Kosten (€)`;
+      <div class="mb-1"><span class="badge bg-info">&nbsp;</span> <b>km gefahren</b> – Strecke an diesem Tag</div>
+      <div class="mb-1"><span class="badge bg-success">&nbsp;</span> <b>geladene kWh</b> – Energie, die du geladen hast (Wallbox/TeslaMate)</div>
+      <div class="mb-1"><span class="badge bg-danger">&nbsp;</span> <b>verbrauchte kWh</b> – Energie, die der Akku abgegeben hat (gegenüber geladen = Verlust)</div>
+      <div class="mb-1"><span class="badge bg-warning text-dark">&nbsp;</span> <b>Kosten</b> – Ausgaben an diesem Tag</div>
+      <div class="small text-muted mt-2">Je länger der Balken, desto höher der Wert im Vergleich zum höchsten Tag.</div>`;
   }
 
-  // 4) Chart kWh vs € pro Tag (nur wenn Tab sichtbar, sonst 0px Fehler)
+  // 5) Chart kWh vs € pro Tag (nur wenn Tab sichtbar, sonst 0px Fehler)
   const labels = days.map(d => d.day);
   const tripCtx = document.getElementById("chartTrip");
   if (tripCtx && window.Chart && !(tripCtx.clientWidth === 0 && tripCtx.offsetParent === null)) {
@@ -655,30 +659,25 @@ function kpi(label, value) {
   </div>`;
 
 // Leaflet-Karte: erst zeichnen wenn Tab sichtbar (sonst Groesse 0)
-function _initTripMapLazy() {
+// Als window.* deklariert -> garantiert global verfuegbar (kein Scope-Problem).
+window._initTripMapLazy = function _initTripMapLazy() {
   if (tripMap || !window.L) return;
   tripMap = L.map("tripMap").setView([49.05, 9.25], 6);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap", maxZoom: 19
   }).addTo(tripMap);
-  // Wenn der Tab spaeter sichtbar wird, Groesse neu berechnen
   window.__tripTabVisible = false;
-}
+};
 
-function _drawTripMap() {
+window._drawTripMap = function _drawTripMap() {
   if (!window.L) return;
-  if (!tripMap) _initTripMapLazy();
+  if (!tripMap) window._initTripMapLazy();
   if (!tripMap) return;
-  // Nur zeichnen, wenn der Reise-Pane wirklich sichtbar ist (sonst 0px ->
-  // Leaflet zeigt keine Kacheln). Falls noch display:none (waehrend Bootstrap-
-  // Fade-In), wiederholen via requestAnimationFrame, bis sichtbar.
   const pane = document.getElementById("tabTrip");
   if (pane && getComputedStyle(pane).display === "none") {
-    requestAnimationFrame(_drawTripMap);
+    requestAnimationFrame(window._drawTripMap);
     return;
   }
-  // Groesse neu berechnen (Tab war evtl. versteckt -> 0px). Mehrfach, damit
-  // auch nach dem Bootstrap-Fade-In die Kacheln erscheinen.
   tripMap.invalidateSize();
   setTimeout(() => tripMap.invalidateSize(), 200);
   setTimeout(() => tripMap.invalidateSize(), 500);
@@ -693,7 +692,7 @@ function _drawTripMap() {
     });
     tripMap.fitBounds(bounds, { padding: [30, 30] });
   }
-}
+};
 
 // Tab-Wechsel: Reise/Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
 let __chartData = null;
@@ -703,10 +702,9 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
     const target = e.target.getAttribute("data-bs-target");
     if (target === "#tabTrip") {
       window.__tripTabVisible = true;
-      // Karte zeichnen: nach Fade-In (Bootstrap ~150ms) + mehrfaches invalidateSize.
       if (window.L) {
-        setTimeout(_drawTripMap, 150);
-        setTimeout(_drawTripMap, 350);
+        setTimeout(window._drawTripMap, 150);
+        setTimeout(window._drawTripMap, 350);
       }
       if (window.__lastTrip) setTimeout(() => renderRoadtrip(window.__lastTrip), 30);
     } else if (target === "#tabStats") {
@@ -717,10 +715,10 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
     }
   });
   // Fallback: falls shown.bs.tab nicht feuert (Bootstrap-Versionen),
-  //zeichne Karte direkt beim Klick auf den Reise-Tab.
+  // zeichne Karte direkt beim Klick auf den Reise-Tab.
   tab.addEventListener("click", () => {
     if (tab.getAttribute("data-bs-target") === "#tabTrip" && window.L) {
-      setTimeout(_drawTripMap, 200);
+      setTimeout(window._drawTripMap, 200);
     }
   });
 });
@@ -783,9 +781,5 @@ updateRangeLabel();
   });
 })();
 
-// Explizit global machen (Sicherheit gegen Scope-/Hoisting-Probleme im Browser)
-window._drawTripMap = _drawTripMap;
-window._initTripMapLazy = _initTripMapLazy;
-
 // Eindeutiger Build-Marker (zum Verifizieren, ob der Browser die neue app.js laedt)
-window.__APP_MARKER = "2026-07-17-final-r2";
+window.__APP_MARKER = "2026-07-17-final-r3";

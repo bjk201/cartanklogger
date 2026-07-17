@@ -1513,7 +1513,8 @@ def api_roadtrip():
                 "cost": round(float(t.get("cost_total") or 0), 2),
             })
 
-    # km ueber odometer: Tages-Diff (max odometer pro Tag - VorTag)
+    # km ueber odometer: kontinuierliche Diff ueber ALLE Sessions (wie build_stats),
+    # sortiert nach Zeit -> identische Gesamt-km wie Zusammenfassung.
     odo_points = []
     for e in evcc:
         try:
@@ -1525,10 +1526,19 @@ def api_roadtrip():
             odo_points.append(((t.get("started_at") or "")[:10], float(t.get("odometer_start") or 0)))
         except Exception:
             pass
+    odo_points.sort(key=lambda x: x[0])
     day_odo = defaultdict(float)
     for day, o in odo_points:
         day_odo[day] = max(day_odo[day], o)
     days_sorted = sorted(day_odo.keys())
+    # Gesamt-km = kontinuierliche Odometer-Diff (alle Sessions)
+    total_km_calc = 0.0
+    prev_odo = None
+    for day, o in odo_points:
+        if o is not None:
+            if prev_odo is not None and o > prev_odo:
+                total_km_calc += o - prev_odo
+            prev_odo = o
     day_km = {}
     prev = 0.0
     for d in days_sorted:
@@ -1536,8 +1546,48 @@ def api_roadtrip():
         day_km[d] = round(o - prev, 1) if prev > 0 else 0.0
         prev = o
 
+    # --- Pins deduplizieren: pro Adresse nur EIN Pin (Summe der kWh) ---
+    # Zuerst alle Adressen sammeln, die als "Zuhause" (Wallbox/EVCC) geladen wurden
+    home_addr_counter = defaultdict(int)
+    for e in evcc:
+        home_addr_counter["Wallbox"] += 1
+    for day, pins in day_pins.items():
+        for p in pins:
+            if p.get("address") and p["address"] != "?":
+                home_addr_counter[p["address"]] += 1
+
+    # Adresse mit den meisten Treffern = Zuhause (anonymisiert)
+    home_addr = ""
+    if home_addr_counter:
+        home_addr = max(home_addr_counter.items(), key=lambda kv: kv[1])[0]
+
+    def anon(addr):
+        if not addr or addr == "?":
+            return "Unbekannt"
+        if addr == home_addr or addr == "Wallbox":
+            return "Zuhause"
+        return "Ladestopp"
+
+    # Deduplizierte Pins pro Tag (Adresse -> aggregiert)
+    day_pins_dedup = defaultdict(lambda: defaultdict(float))
+    day_pins_meta = {}
+    for day, pins in day_pins.items():
+        for p in pins:
+            a = anon(p.get("address"))
+            day_pins_dedup[day][a] += float(p.get("kwh") or 0)
+            day_pins_meta[(day, a)] = {"lat": p.get("lat"), "lng": p.get("lng")}
+
     per_day = []
     for day in days_sorted:
+        pins_agg = []
+        for a, kwh in day_pins_dedup.get(day, {}).items():
+            meta = day_pins_meta.get((day, a), {})
+            pins_agg.append({
+                "address": a,
+                "kwh": round(kwh, 2),
+                "lat": meta.get("lat"),
+                "lng": meta.get("lng"),
+            })
         per_day.append({
             "day": day,
             "km": day_km.get(day, 0),
@@ -1545,20 +1595,31 @@ def api_roadtrip():
             "consumed_kwh": round(day_consumed.get(day, 0), 2),
             "cost": round(day_cost.get(day, 0), 2),
             "stations": sorted(day_stations.get(day, [])),
-            "pins": day_pins.get(day, []),
+            "pins": pins_agg,
         })
     per_day.sort(key=lambda x: x["day"], reverse=True)
 
-    total_km = round(sum(day_km.values()), 1)
+    total_km = round(total_km_calc, 1)
     total_kwh = round(sum(day_kwh.values()), 2)
     total_cost = round(sum(day_cost.values()), 2)
     avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
     avg_cost_100 = round(total_cost / (total_km / 100.0), 2) if total_km > 0 else 0
 
+    # Stops: dedupliziert (eine Position pro Adresse)
+    stop_seen = {}
     stops = []
     for day, pins in day_pins.items():
         for p in pins:
-            stops.append({**p, "day": day})
+            key = (round(float(p.get("lat") or 0), 4), round(float(p.get("lng") or 0), 4))
+            if key not in stop_seen:
+                stop_seen[key] = True
+                stops.append({
+                    "address": anon(p.get("address")),
+                    "lat": p.get("lat"), "lng": p.get("lng"),
+                    "kwh": round(float(p.get("kwh") or 0), 2),
+                    "cost": round(float(p.get("cost") or 0), 2),
+                    "day": day,
+                })
 
     return jsonify({
         "per_day": per_day,
