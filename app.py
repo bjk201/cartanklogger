@@ -211,10 +211,11 @@ def _ensure_csrf():
 
 
 @app.after_request
-def _no_cache_api(resp):
-    """API-Antworten niemals cachen, damit ein Browser-F5 immer frische
-    Datenbank-Daten zeigt (kein 'alte Daten nach Speichern/Loeschen')."""
-    if request.path.startswith("/api/"):
+def _no_cache_all(resp):
+    """Keine Cache-Header fuer HTML + API, damit der Browser nach einem
+    Deploy/Update immer frische Seiten und Datenbank-Daten zeigt
+    (kein 'alte Daten' durch gecachte admin.html / API-Antworten)."""
+    if request.path.startswith("/api/") or request.path in ("/admin", "/"):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"

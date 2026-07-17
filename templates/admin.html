@@ -103,7 +103,8 @@
                             <option value="tax">Steuer</option><option value="other">Sonstiges</option></select></div>
                         <div class="col-3"><input class="form-control form-control-sm" id="ex_desc" placeholder="Beschreibung"></div>
                         <div class="col-3"><input class="form-control form-control-sm" id="ex_amt" type="number" step="0.01" placeholder="Betrag €"></div>
-                        <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addExtra">Eintragen</button></div>
+                        <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addExtra" type="button">Eintragen</button></div>
+                        <div id="extraMsg" class="small mt-2"></div>
                     </div>
                 </div>
             </div>
@@ -267,22 +268,57 @@ $("priceSave").onclick = async () => {
   loadPrices();
 };
 
+// Liste der Extra-Kosten laden + Loeschen-Buttons binden
 async function loadExtras() {
   const rows = await (await fetch("/api/extra-costs")).json();
   const lbl = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
-  $("tblExtra").querySelector("tbody").innerHTML = rows.map(r => `<tr data-id="${r.id}">
+  const tbody = $("tblExtra").querySelector("tbody");
+  tbody.innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${r.date}</td><td>${lbl[r.category]||r.category}</td><td>${r.description||""}</td>
-    <td>${fmtEUR(r.amount)}</td><td><button class="btn btn-sm btn-outline-danger delE">✕</button></td></tr>`).join("");
-  $("tblExtra").querySelectorAll(".delE").forEach(b => b.onclick = async () => {
+    <td>${fmtEUR(r.amount)}</td><td><button class="btn btn-sm btn-outline-danger delE" type="button">✕</button></td></tr>`).join("");
+  tbody.querySelectorAll(".delE").forEach(b => b.onclick = async () => {
     await csrfFetch("/api/extra-costs?id="+b.closest("tr").dataset.id,{method:"DELETE"});
     loadExtras();
   });
 }
-$("addExtra").onclick = async () => {
-  await csrfFetch("/api/extra-costs",{method:"POST", body:JSON.stringify({category:$("ex_cat").value, date:$("ex_date").value,
-      description:$("ex_desc").value, amount:parseFloat($("ex_amt").value)||0})});
-  loadExtras();
-};
+
+// Extra-Kosten hinzufuegen – per Event-Delegation (robust, unabhaengig
+// vom DOM-Zeitpunkt). Zeigt Fehler/Meldungen sichtbar an, leert das Formular.
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("#addExtra");
+  if (!btn) return;
+  e.preventDefault();
+  const msgEl = document.getElementById("extraMsg");
+  const clearMsg = () => { if (msgEl) msgEl.textContent = ""; };
+  clearMsg();
+  const category = $("ex_cat").value;
+  const date = $("ex_date").value;
+  const description = $("ex_desc").value;
+  const amount = parseFloat($("ex_amt").value) || 0;
+  if (!category || !date || !(amount > 0)) {
+    if (msgEl) { msgEl.textContent = "Bitte Kategorie, Datum und Betrag (>0) angeben."; msgEl.className = "text-danger small mt-2"; }
+    return;
+  }
+  try {
+    const res = await csrfFetch("/api/extra-costs", {
+      method: "POST",
+      body: JSON.stringify({ category, date, description, amount }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      if (msgEl) { msgEl.textContent = "Fehler: " + (data.error || res.statusText); msgEl.className = "text-danger small mt-2"; }
+      return;
+    }
+    // Formular leeren + Liste neu laden + Erfolgsmeldung
+    $("ex_date").value = "";
+    $("ex_desc").value = "";
+    $("ex_amt").value = "";
+    if (msgEl) { msgEl.textContent = "✅ Extra-Kosten gespeichert."; msgEl.className = "text-success small mt-2"; }
+    await loadExtras();
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = "Fehler: " + err.message; msgEl.className = "text-danger small mt-2"; }
+  }
+});
 
 function srcBadge(r) {
   if (r.cost_total > 0 && r.manual_price == 1) return '<span class="badge bg-success">manuell</span>';
