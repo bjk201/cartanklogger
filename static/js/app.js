@@ -7,21 +7,34 @@ const fmtKwh = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {mi
 const fmtPct = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {maximumFractionDigits:1}) + " %");
 
 async function loadAll() {
-  const stats = await (await fetch(`/api/stats?days=${currentDays}`)).json();
-  const sess = await (await fetch(`/api/sessions`)).json();
-  const merged = await (await fetch(`/api/merged`)).json();
-  const trip = await (await fetch(`/api/roadtrip`)).json();
-  const chartData = await (await fetch(`/api/charts`)).json();
+  // Jeder Fetch einzeln abgesichert: ein API-Fehler darf nicht die
+  // gesamte Anzeige leeren.
+  async function safeJson(url, fallback) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(url + " -> " + r.status);
+      return await r.json();
+    } catch (e) {
+      console.error("loadAll fetch fehlgeschlagen:", e);
+      return fallback;
+    }
+  }
+
+  const stats = await safeJson(`/api/stats?days=${currentDays}`, {totals:{}, home:{}, external:{}, extra:{}});
+  const sess  = await safeJson(`/api/sessions`, {home:[], external:[]});
+  const merged = await safeJson(`/api/merged`, []);
+  const trip  = await safeJson(`/api/roadtrip`, {per_day:[], stops:[]});
+  const chartData = await safeJson(`/api/charts`, {});
   __chartData = chartData;
   __statsData = stats;
-  renderSummary(stats);
-  renderCharts(stats);
-  renderHome(sess.home);
-  renderExt(sess.external);
-  renderMerged(merged, trip.per_day || [], stats.totals || {});
-  renderRoadtrip(trip);
-  renderStats(chartData);
-  renderExtra();
+  try { renderSummary(stats); } catch(e){ console.error("renderSummary", e); }
+  try { renderCharts(stats); } catch(e){ console.error("renderCharts", e); }
+  try { renderHome(sess.home); } catch(e){ console.error("renderHome", e); }
+  try { renderExt(sess.external); } catch(e){ console.error("renderExt", e); }
+  try { renderMerged(merged, trip.per_day || [], stats.totals || {}); } catch(e){ console.error("renderMerged", e); }
+  try { renderRoadtrip(trip); } catch(e){ console.error("renderRoadtrip", e); }
+  try { renderStats(chartData); } catch(e){ console.error("renderStats", e); }
+  try { renderExtra(); } catch(e){ console.error("renderExtra", e); }
 }
 
 function renderSummary(s) {

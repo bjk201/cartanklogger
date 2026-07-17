@@ -983,16 +983,36 @@ def api_sessions():
 # ---------------------------------------------------------------------------
 TM_MERGE_GAP_MIN = 60
 
+def _str(v):
+    """Sicher zu String konvertieren (datetime -> ISO, bytes -> utf-8, None -> '')."""
+    if v is None:
+        return ""
+    if isinstance(v, (datetime, date)):
+        return v.isoformat()
+    if isinstance(v, bytes):
+        try:
+            return v.decode("utf-8")
+        except Exception:
+            return str(v)
+    return str(v)
+
+
+def _day_of(v):
+    """Kalendertag (YYYY-MM-DD) aus einem Datum/String sicher extrahieren."""
+    s = _str(v)
+    return s[:10] if s else ""
+
+
 def _tm_grouped_sessions(rows):
     """external_sessions (TeslaMate) nach Adresse + Zeitlücke zu Sessions gruppieren."""
-    rows = sorted(rows, key=lambda r: (r.get("started_at") or ""))
+    rows = sorted(rows, key=lambda r: _day_of(r.get("started_at")))
     if not rows:
         return []
     groups, cur = [], [rows[0]]
     for r in rows[1:]:
         prev = cur[-1]
-        prev_end = prev.get("finished_at") or prev.get("started_at")
-        this_start = r.get("started_at")
+        prev_end = _str(prev.get("finished_at") or prev.get("started_at"))
+        this_start = _str(r.get("started_at"))
         try:
             gap = (datetime.fromisoformat(this_start) -
                    datetime.fromisoformat(prev_end)).total_seconds() / 60
@@ -1043,11 +1063,11 @@ def _build_merged(rows):
     # EVCC-Sitzung / demselben Starttag zuzuordnen.
     evcc_windows = []  # (start_dt, end_dt, day)
     for r in rows.get("home", []):
-        day = (r.get("created") or "")[:10]
+        day = _day_of(r.get("created"))
         days[day]["evcc"].append(r)
         try:
-            sdt = datetime.fromisoformat(r.get("created"))
-            edt = datetime.fromisoformat(r.get("finished")) if r.get("finished") else sdt
+            sdt = datetime.fromisoformat(_str(r.get("created")))
+            edt = datetime.fromisoformat(_str(r.get("finished"))) if r.get("finished") else sdt
             evcc_windows.append((sdt, edt, day))
         except Exception:
             pass
@@ -1056,14 +1076,15 @@ def _build_merged(rows):
     def _assign_day(charge_start_iso):
         """Ordnet eine TM-Ladung dem EVCC-Sitzungstag zu (Fenster enthaelt Start).
         Faellt zurueck auf den eigenen Kalendertag, wenn kein EVCC-Fenster passt."""
+        cs = _str(charge_start_iso)
         try:
-            cdt = datetime.fromisoformat(charge_start_iso)
+            cdt = datetime.fromisoformat(cs)
         except Exception:
-            return (charge_start_iso or "")[:10]
+            return _day_of(cs)
         for sdt, edt, day in evcc_windows:
             if sdt <= cdt <= edt:
                 return day
-        return (charge_start_iso or "")[:10]
+        return _day_of(cs)
 
     # TeslaMate: nach Zuhause vs. Extern trennen
     ext_rows, home_rows = [], []
@@ -1083,7 +1104,7 @@ def _build_merged(rows):
 
     # TM-Extern gruppieren (echte Fremdladungen, eigene Energie, nach Kalendertag)
     for g in _tm_grouped_sessions(ext_rows):
-        day = (g["start"] or "")[:10]
+        day = _day_of(g["start"])
         days[day]["tm_ext"].append(g)
 
     result = []
