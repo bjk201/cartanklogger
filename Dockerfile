@@ -25,6 +25,10 @@ RUN mkdir -p /app/data && chmod +x /app/entrypoint.sh
 ENV CONFIG_PATH=/app/config.yaml
 ENV DB_PATH=/app/data/cartanklogger.db
 ENV MOCK_MODE=false
+# Cache-Buster-Variable: wird beim Build gesetzt und aendert sich bei jedem
+# neuen Image -> Browser holt nach Deploy zwingend die neue app.js (kein Cache).
+ARG BUILD_TIME=unknown
+ENV APP_VERSION=${BUILD_TIME}
 EXPOSE 5000
 
 ENTRYPOINT ["/app/entrypoint.sh"]

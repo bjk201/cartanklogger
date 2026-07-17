@@ -18,4 +18,12 @@ if [ -f /app/config.yaml ]; then
   chmod 664 /app/config.yaml 2>/dev/null || true
 fi
 
+# Cache-Buster: APP_VERSION aus Build-Zeit, faellt zur Laufzeit auf die
+# aktuelle Startzeit zurueck. Aendert sich bei JEDEM neuen Container-Start
+# (Portainer "Update" / docker run) -> Browser holt zwingend neue app.js.
+if [ -z "$APP_VERSION" ] || [ "$APP_VERSION" = "unknown" ]; then
+  APP_VERSION="$(date +%s)"
+  export APP_VERSION
+fi
+
 exec python app.py

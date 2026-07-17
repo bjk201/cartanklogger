@@ -766,22 +766,31 @@ def all_sessions_with_distance():
     return result
 
 
-def build_stats(days=365):
+def build_stats(days=365, from_date=None, to_date=None):
     db = get_db()
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    if from_date and to_date:
+        # Eigener Zeitraum: from..to (inklusive)
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
 
-    home = db.execute(
-        "SELECT * FROM home_sessions WHERE created >= ? ORDER BY created ASC", (cutoff,)
-    ).fetchall()
-    ext_all = db.execute(
-        "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at ASC",
-        (cutoff,),
-    ).fetchall()
+    home_q = "SELECT * FROM home_sessions WHERE created >= ?"
+    ext_q = "SELECT * FROM external_sessions WHERE started_at >= ?"
+    extra_q = "SELECT * FROM extra_costs WHERE date >= ?"
+    params = [cutoff]
+    if end:
+        home_q += " AND created <= ?"
+        ext_q += " AND started_at <= ?"
+        extra_q += " AND date <= ?"
+        params = [cutoff, end]
+
+    home = db.execute(home_q + " ORDER BY created ASC", params).fetchall()
+    ext_all = db.execute(ext_q + " ORDER BY started_at ASC", params).fetchall()
     # Diese Ladungen dienen nur als Referenz für Ladeverluste und Zeitwerte; sie werden **nicht** für Energie oder Kosten addiert.
     ext = [r for r in ext_all if not _is_home_address(r["location_name"], r["address"])]
-    extras = db.execute(
-        "SELECT * FROM extra_costs WHERE date >= ? ORDER BY date DESC", (cutoff,)
-    ).fetchall()
+    extras = db.execute(extra_q + " ORDER BY date DESC", params).fetchall()
 
     home_kwh = sum(r["charged_kwh"] for r in home)
     home_grid_cost = 0.0
@@ -894,14 +903,10 @@ def build_stats(days=365):
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    # Cache-Buster: aendert sich bei jedem Deploy (app.js-mtime), damit
-    # der Browser nach einem Update die neue JS-Datei holt (kein altes Cache).
-    js_ver = "1"
-    try:
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "js", "app.js")
-        js_ver = str(int(os.path.getmtime(p)))
-    except Exception:
-        pass
+    # Cache-Buster: aendert sich bei jedem Build (APP_VERSION aus ENV, im
+    # Dockerfile/Build auf den Build-Timestamp gesetzt) -> Browser holt nach
+    # einem Deploy zwingend die neue app.js (kein veralteter JS-Cache).
+    js_ver = os.environ.get("APP_VERSION", "1")
     return render_template("index.html", mock=mock_mode(), js_version=js_ver)
 
 
@@ -970,7 +975,9 @@ def api_sync_all():
 @app.route("/api/stats")
 def api_stats():
     days = request.args.get("days", 365, type=int)
-    return jsonify(build_stats(days))
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    return jsonify(build_stats(days, from_date, to_date))
 
 
 @app.route("/api/sessions")
@@ -1455,6 +1462,7 @@ def api_roadtrip():
     day_cost = defaultdict(float)
     day_stations = defaultdict(set)
     day_pins = defaultdict(list)
+    day_consumed = defaultdict(float)  # vom Akku gezogene Energie (TeslaMate energy_used_kwh)
 
     # EVCC (Zuhause) Tage einsammeln
     for e in evcc:
@@ -1468,6 +1476,11 @@ def api_roadtrip():
         day = (t.get("started_at") or "")[:10]
         addr = t.get("address") or "?"
         day_stations[day].add(addr)
+        # Verbrauch = vom Akku gezogene Energie (energy_used_kwh), falls vorhanden
+        try:
+            day_consumed[day] += float(t.get("energy_used_kwh") or 0)
+        except Exception:
+            pass
         lat = t.get("latitude")
         lng = t.get("longitude")
         if lat is not None and lng is not None:
@@ -1506,6 +1519,7 @@ def api_roadtrip():
             "day": day,
             "km": day_km.get(day, 0),
             "kwh": round(day_kwh.get(day, 0), 2),
+            "consumed_kwh": round(day_consumed.get(day, 0), 2),
             "cost": round(day_cost.get(day, 0), 2),
             "stations": sorted(day_stations.get(day, [])),
             "pins": day_pins.get(day, []),

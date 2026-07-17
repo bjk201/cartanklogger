@@ -1,6 +1,27 @@
 // CarTankLogger Dashboard JS
 let currentDays = 365;
+let customFrom = null;   // YYYY-MM-DD oder null
+let customTo = null;
 let charts = {};
+
+function _statsUrl() {
+  if (customFrom && customTo) {
+    return `/api/stats?from=${encodeURIComponent(customFrom)}&to=${encodeURIComponent(customTo)}`;
+  }
+  return `/api/stats?days=${currentDays}`;
+}
+
+function updateRangeLabel() {
+  const el = document.getElementById("rangeLabel");
+  if (!el) return;
+  if (customFrom && customTo) {
+    el.textContent = `${customFrom} bis ${customTo}`;
+  } else if (currentDays >= 9999) {
+    el.textContent = "Alle Daten";
+  } else {
+    el.textContent = `Letzte ${currentDays} Tage`;
+  }
+}
 
 const fmtEUR = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {style:"currency", currency:"EUR"}));
 const fmtKwh = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {minimumFractionDigits:1, maximumFractionDigits:1}) + " kWh");
@@ -20,7 +41,7 @@ async function loadAll() {
     }
   }
 
-  const stats = await safeJson(`/api/stats?days=${currentDays}`, {totals:{}, home:{}, external:{}, extra:{}});
+  const stats = await safeJson(_statsUrl(), {totals:{}, home:{}, external:{}, extra:{}});
   const sess  = await safeJson(`/api/sessions`, {home:[], external:[]});
   const merged = await safeJson(`/api/merged`, []);
   const trip  = await safeJson(`/api/roadtrip`, {per_day:[], stops:[]});
@@ -561,28 +582,42 @@ function renderRoadtrip(data) {
   window.__tripStops = data.stops || [];
   if (window.__tripTabVisible && window.L) _drawTripMap();
 
-  // 3) Tagesbalken (km / kWh / €)
+  // 3) Tagesbalken (km / geladene kWh / verbrauchte kWh / €)
   const days = (data.per_day || []).slice().reverse(); // chronologisch
   const maxKm = Math.max(...days.map(d => d.km), 1);
   const maxKwh = Math.max(...days.map(d => d.kwh), 1);
+  const maxCons = Math.max(...days.map(d => d.consumed_kwh || 0), 1);
   const maxEur = Math.max(...days.map(d => d.cost), 1);
   document.getElementById("tripDays").innerHTML = days.map(d => `
     <div class="border rounded p-2">
       <div class="d-flex justify-content-between small fw-bold">
         <span>${d.day}</span>
-        <span class="text-muted">${d.km.toLocaleString("de-DE")} km · ${fmtKwh(d.kwh)} · ${fmtEUR(d.cost)}</span>
+        <span class="text-muted">${d.km.toLocaleString("de-DE")} km · gel. ${fmtKwh(d.kwh)} · verbr. ${fmtKwh(d.consumed_kwh)} · ${fmtEUR(d.cost)}</span>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-info" style="width:${(d.km/maxKm*100)}%"></div>
+        <div class="progress-bar bg-info" style="width:${(d.km/maxKm*100)}%" title="km"></div>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-success" style="width:${(d.kwh/maxKwh*100)}%"></div>
+        <div class="progress-bar bg-success" style="width:${(d.kwh/maxKwh*100)}%" title="geladene kWh"></div>
       </div>
       <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-warning" style="width:${(d.cost/maxEur*100)}%"></div>
+        <div class="progress-bar bg-danger" style="width:${(d.consumed_kwh||0)/maxCons*100}%" title="verbrauchte kWh"></div>
+      </div>
+      <div class="progress mt-1" style="height:8px">
+        <div class="progress-bar bg-warning" style="width:${(d.cost/maxEur*100)}%" title="€"></div>
       </div>
       <div class="small text-muted mt-1">${d.stations.map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join("")}</div>
     </div>`).join("");
+
+  // Legende für die Tagesbalken-Farben
+  const legend = document.getElementById("tripDaysLegend");
+  if (legend) {
+    legend.innerHTML = `
+      <span class="badge bg-info">&nbsp;</span> km (gefahren) &nbsp;
+      <span class="badge bg-success">&nbsp;</span> geladene kWh (Wallbox/TM) &nbsp;
+      <span class="badge bg-danger">&nbsp;</span> verbrauchte kWh (vom Akku) &nbsp;
+      <span class="badge bg-warning text-dark">&nbsp;</span> Kosten (€)`;
+  }
 
   // 4) Chart kWh vs € pro Tag (nur wenn Tab sichtbar, sonst 0px Fehler)
   const labels = days.map(d => d.day);
@@ -689,4 +724,43 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
     }
   });
 });
+
+// --- Zeitraum-Auswahl (90T / 1J / All / eigener Bereich) ---
+document.querySelectorAll('[data-days]').forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentDays = parseInt(btn.getAttribute("data-days"), 10);
+    customFrom = null;
+    customTo = null;
+    updateRangeLabel();
+    loadAll();
+  });
+});
+
+const btnRange = document.getElementById("btnRange");
+if (btnRange) {
+  btnRange.addEventListener("click", () => {
+    const from = document.getElementById("rangeFrom").value;
+    const to = document.getElementById("rangeTo").value;
+    if (!from || !to) {
+      alert("Bitte Von- und Bis-Datum wählen.");
+      return;
+    }
+    document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
+    customFrom = from;
+    customTo = to;
+    updateRangeLabel();
+    loadAll();
+  });
 }
+
+updateRangeLabel();
+}
+
+// Explizit global machen (Sicherheit gegen Scope-/Hoisting-Probleme im Browser)
+window._drawTripMap = _drawTripMap;
+window._initTripMapLazy = _initTripMapLazy;
+
+// Eindeutiger Build-Marker (zum Verifizieren, ob der Browser die neue app.js laedt)
+window.__APP_MARKER = "2026-07-17-final-r1";

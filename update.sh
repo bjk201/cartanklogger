@@ -38,10 +38,12 @@ git pull --ff-only
 echo "==> alter Container stoppen"
 docker rm -f "${APP_NAME}" 2>/dev/null || true
 
-echo "==> Image neu bauen (--no-cache => frischer Code)"
-docker build --no-cache -t "${IMAGE}" .
+echo "==> Image neu bauen (--no-cache => frischer Code; BUILD_TIME = Cache-Buster)"
+BUILD_TIME="$(date +%s)" docker build --no-cache --build-arg BUILD_TIME="${BUILD_TIME}" -t "${IMAGE}" .
 
 echo "==> Container starten"
+# APP_VERSION wird im Dockerfile aus BUILD_TIME als ENV gesetzt (Cache-Buster);
+# hier NICHT erneut -e APP_VERSION setzen, sonst ueberschreibt es mit leerem Wert.
 # shellcheck disable=SC2086
 docker run -d \
   --name "${APP_NAME}" \
