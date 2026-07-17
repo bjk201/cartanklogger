@@ -1,14 +1,3 @@
-app:
-  auto_sync_minutes: 0
-  currency: EUR
-  mock_mode: false
-  vehicle_name: M3
-  # Adressen (Substring, case-insensitiv), die als "Zuhause" gelten.
-  # TeslaMate trackt diese Ladungen ebenfalls (= dieselben wie EVCC),
-  # daher werden sie NICHT als extern gezaehlt und NICHT zur Energie addiert.
-  home_addresses:
-    - Dammstraße
-    - Garage
 evcc:
   api_token: ''
   host: 192.168.1.15
@@ -21,3 +10,12 @@ pricing_defaults:
 teslamate:
   api_token: ''
   url: http://192.168.1.21:8080/api/v1
+app:
+  auto_sync_minutes: 0
+  currency: EUR
+  mock_mode: false
+  vehicle_name: M3
+  # Adressen (Substring, case-insensitiv), die als "Zuhause" gelten.
+  # TeslaMate trackt diese Ladungen ebenfalls (= dieselben wie EVCC),
+  # daher werden sie NICHT als extern gezaehlt und NICHT zur Energie addiert.
+  home_addresses: []

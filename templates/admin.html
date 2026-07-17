@@ -6,6 +6,7 @@
     <title>CarTankLogger – Verwaltung</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="csrf-token" content="">
 </head>
 <body>
 <nav class="navbar navbar-dark bg-dark">
@@ -158,6 +159,24 @@
 const $ = (id) => document.getElementById(id);
 const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 
+// --- CSRF: Token laden + fetch-Helfer, der das Token mitsendet ---
+let _csrf = "";
+async function ensureCsrf() {
+  if (_csrf) return _csrf;
+  try { const d = await (await fetch("/api/csrf")).json(); _csrf = d.csrf_token; }
+  catch (e) { _csrf = document.querySelector('meta[name="csrf-token"]')?.content || ""; }
+  document.querySelector('meta[name="csrf-token"]').content = _csrf;
+  return _csrf;
+}
+async function csrfFetch(url, opts = {}) {
+  await ensureCsrf();
+  opts.headers = Object.assign({}, opts.headers, {
+    "Content-Type": "application/json",
+    "X-CSRFToken": _csrf,
+  });
+  return fetch(url, opts);
+}
+
 async function loadCfg() {
   const c = await (await fetch("/api/config")).json();
   $("evcc_host").value = c.evcc?.host||"";
@@ -181,7 +200,7 @@ $("saveCfg").onclick = async () => {
     app: { vehicle_name:$("vehicle_name").value, mock_mode:$("mock_mode").checked,
            home_addresses: $("home_addresses").value.split(",").map(s=>s.trim()).filter(s=>s) }
   };
-  const r = await fetch("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const r = await csrfFetch("/api/config", {method:"POST", body:JSON.stringify(body)});
   const j = await r.json();
   $("cfgMsg").textContent = j.ok ? "Gespeichert ✓" : "Fehler: "+(j.error||"");
   $("cfgMsg").className = "small mt-2 " + (j.ok?"text-success":"text-danger");
@@ -189,7 +208,7 @@ $("saveCfg").onclick = async () => {
 
 async function doSync(url, msg) {
   $("syncMsg").textContent = "…";
-  const r = await fetch(url, {method:"POST"});
+  const r = await csrfFetch(url, {method:"POST"});
   const j = await r.json();
   $("syncMsg").textContent = `${msg}: ${j.inserted??0} neu / ${j.fetched??0} geholt`;
   loadExtPrices();
@@ -198,23 +217,53 @@ async function doSync(url, msg) {
 $("syncAll").onclick = () => doSync("/api/sync/all","Sync alle");
 $("syncEvcc").onclick = () => doSync("/api/sync/evcc","EVCC");
 $("syncTm").onclick = () => doSync("/api/sync/teslamate","TeslaMate");
-$("seedBtn").onclick = async () => { await fetch("/api/seed",{method:"POST"}); $("syncMsg").textContent="Testdaten eingespielt"; loadAll(); };
+$("seedBtn").onclick = async () => { await csrfFetch("/api/seed",{method:"POST"}); $("syncMsg").textContent="Testdaten eingespielt"; loadAll(); };
 
 async function loadPrices() {
   const rows = await (await fetch("/api/price-periods")).json();
   const lbl = {grid:"Netz", feedin:"Einspeisung"};
   $("tblPrices").querySelector("tbody").innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${lbl[r.kind]||r.kind}</td><td>${r.valid_from}</td><td>${r.valid_to||"offen"}</td>
-    <td>${r.price_per_kwh}</td><td><button class="btn btn-sm btn-outline-danger delP">✕</button></td></tr>`).join("");
+    <td>${r.price_per_kwh}</td><td>
+      <button class="btn btn-sm btn-outline-secondary edP">✏️</button>
+      <button class="btn btn-sm btn-outline-danger delP">✕</button></td></tr>`).join("");
   $("tblPrices").querySelectorAll(".delP").forEach(b => b.onclick = async () => {
-    await fetch("/api/price-periods?id="+b.closest("tr").dataset.id,{method:"DELETE"});
+    await csrfFetch("/api/price-periods?id="+b.closest("tr").dataset.id,{method:"DELETE"});
     loadPrices();
   });
+  $("tblPrices").querySelectorAll(".edP").forEach(b => b.onclick = () => openPriceModal(b.closest("tr").dataset.id));
 }
 $("addPrice").onclick = async () => {
-  await fetch("/api/price-periods",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({kind:$("pp_kind").value, valid_from:$("pp_from").value,
+  await csrfFetch("/api/price-periods",{method:"POST", body:JSON.stringify({kind:$("pp_kind").value, valid_from:$("pp_from").value,
       valid_to:$("pp_to").value||null, price_per_kwh:parseFloat($("pp_price").value)||0})});
+  loadPrices();
+};
+
+function openPriceModal(id) {
+  fetch("/api/price-periods").then(r=>r.json()).then(rows => {
+    const r = rows.find(x => String(x.id) === String(id));
+    if (!r) return;
+    $("pp_id").value = r.id;
+    $("pp_kind_e").value = r.kind || "grid";
+    $("pp_from_e").value = (r.valid_from||"").slice(0,10);
+    $("pp_to_e").value = (r.valid_to||"").slice(0,10);
+    $("pp_price_e").value = r.price_per_kwh || 0;
+    $("pp_note_e").value = r.note || "";
+    new bootstrap.Modal(document.getElementById("priceModal")).show();
+  });
+}
+
+$("priceSave").onclick = async () => {
+  const id = $("pp_id").value;
+  const body = {
+    kind: $("pp_kind_e").value,
+    valid_from: $("pp_from_e").value || null,
+    valid_to: $("pp_to_e").value || null,
+    price_per_kwh: parseFloat($("pp_price_e").value) || 0,
+    note: $("pp_note_e").value || "",
+  };
+  await csrfFetch(`/api/price-periods/${id}`, {method:"PUT", body: JSON.stringify(body)});
+  bootstrap.Modal.getInstance(document.getElementById("priceModal")).hide();
   loadPrices();
 };
 
@@ -225,13 +274,12 @@ async function loadExtras() {
     <td>${r.date}</td><td>${lbl[r.category]||r.category}</td><td>${r.description||""}</td>
     <td>${fmtEUR(r.amount)}</td><td><button class="btn btn-sm btn-outline-danger delE">✕</button></td></tr>`).join("");
   $("tblExtra").querySelectorAll(".delE").forEach(b => b.onclick = async () => {
-    await fetch("/api/extra-costs?id="+b.closest("tr").dataset.id,{method:"DELETE"});
+    await csrfFetch("/api/extra-costs?id="+b.closest("tr").dataset.id,{method:"DELETE"});
     loadExtras();
   });
 }
 $("addExtra").onclick = async () => {
-  await fetch("/api/extra-costs",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({category:$("ex_cat").value, date:$("ex_date").value,
+  await csrfFetch("/api/extra-costs",{method:"POST", body:JSON.stringify({category:$("ex_cat").value, date:$("ex_date").value,
       description:$("ex_desc").value, amount:parseFloat($("ex_amt").value)||0})});
   loadExtras();
 };
@@ -276,7 +324,7 @@ $("extSave").onclick = async () => {
     energy_kwh: parseFloat($("ext_kwh").value) || 0,
     cost_total: parseFloat($("ext_cost").value) || 0,
   };
-  await fetch(`/api/external/${id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  await csrfFetch(`/api/external/${id}`, {method:"PUT", body: JSON.stringify(body)});
   bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
   loadExtPrices();
 };
@@ -284,13 +332,44 @@ $("extSave").onclick = async () => {
 $("extDelete").onclick = async () => {
   const id = $("ext_id").value;
   if (!confirm("Eintrag wirklich löschen?")) return;
-  await fetch(`/api/external/${id}`, {method:"DELETE"});
+  await csrfFetch(`/api/external/${id}`, {method:"DELETE"});
   bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
   loadExtPrices();
-}
+};
 
 async function loadAll(){ await loadPrices(); await loadExtras(); await loadExtPrices(); }
 loadCfg(); loadAll();
 </script>
+
+<!-- Preisperiode bearbeiten -->
+<div class="modal fade" id="priceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">Preisperiode bearbeiten</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="pp_id">
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label small">Art</label>
+            <select class="form-select form-select-sm" id="pp_kind_e">
+              <option value="grid">Netz</option><option value="feedin">Einspeisung</option></select></div>
+          <div class="col-6"><label class="form-label small">€/kWh</label>
+            <input class="form-control form-control-sm" type="number" step="0.001" id="pp_price_e"></div>
+          <div class="col-6"><label class="form-label small">ab</label>
+            <input class="form-control form-control-sm" type="date" id="pp_from_e"></div>
+          <div class="col-6"><label class="form-label small">bis (offen = leer)</label>
+            <input class="form-control form-control-sm" type="date" id="pp_to_e"></div>
+          <div class="col-12"><label class="form-label small">Notiz</label>
+            <input class="form-control form-control-sm" type="text" id="pp_note_e"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+        <button class="btn btn-primary btn-sm" id="priceSave">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

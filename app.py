@@ -83,6 +83,135 @@ def load_config():
 
 config = load_config()
 
+# --- Secret + CSRF -------------------------------------------------------
+# CSRF-Schutz fuer schreibende Requests (PUT/POST/DELETE). Der Secret_key ist
+# die HMAC-Basis fuer die Token. Persistent (env > config.yaml > DB-Pfad-Hash),
+# damit ein Container-Neustart offene Sessions nicht invalidiert.
+import hmac
+import hashlib
+import secrets
+
+def _resolve_secret_key():
+    env = os.environ.get("SECRET_KEY")
+    if env:
+        return env
+    cfg_secret = (config.get("app") or {}).get("secret_key")
+    if cfg_secret:
+        return str(cfg_secret)
+    # Stabiler Fallback: Hash ueber DB-Pfad (aendert sich nicht pro Restart).
+    return hashlib.sha256(DB_PATH.encode("utf-8")).hexdigest()
+
+app.secret_key = _resolve_secret_key()
+
+
+def csrf_token():
+    """Erzeugt/liest ein CSRF-Token aus der Flask-Session (HMAC ueber Secret)."""
+    sess = getattr(g, "csrf_token_value", None)
+    if sess is None:
+        sess = secrets.token_hex(32)
+        g.csrf_token_value = sess
+    return sess
+
+
+def csrf_protect():
+    """Prueft das CSRF-Token bei schreibenden Requests. Bricht mit 403 ab."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    # Token aus Header (X-CSRFToken) oder Form-Feld.
+    token = request.headers.get("X-CSRFToken")
+    if token is None and request.form:
+        token = request.form.get("csrf_token")
+    if not token:
+        return jsonify({"ok": False, "error": "CSRF-Token fehlt"}), 403
+    if not hmac.compare_digest(token, (g.csrf_token_value if hasattr(g, "csrf_token_value") else "")):
+        # Fallback: vergleiche mit frisch generiertem (Session-basiert).
+        expected = csrf_token()
+        if not hmac.compare_digest(token, expected):
+            return jsonify({"ok": False, "error": "CSRF-Token ungueltig"}), 403
+
+
+# Vor jedem Request sicherstellen, dass ein Token in der Session liegt,
+# und bei schreibenden Requests (POST/PUT/DELETE) das CSRF-Token pruefen.
+@app.before_request
+def _ensure_csrf():
+    if "csrf_token_value" not in g:
+        g.csrf_token_value = csrf_token()
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        err = csrf_protect()
+        if err is not None:
+            # csrf_protect liefert bereits eine Response (403) zurueck
+            return err
+
+
+# ---------------------------------------------------------------------------
+# Validierungs-Helfer (serverseitig, streng)
+# ---------------------------------------------------------------------------
+def _v_number(val, name, lo=None, hi=None, required=False):
+    """Validiert eine Zahl. Gibt (wert, fehler) zurueck."""
+    if val is None or val == "":
+        if required:
+            return None, f"{name} ist erforderlich"
+        return None, None
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return None, f"{name} muss eine Zahl sein"
+    if lo is not None and f < lo:
+        return None, f"{name} darf nicht kleiner als {lo} sein"
+    if hi is not None and f > hi:
+        return None, f"{name} darf nicht groesser als {hi} sein"
+    return f, None
+
+
+def _v_date(val, name, required=False):
+    """Validiert ISO-Datum/-zeit. Gibt (iso_string, fehler) zurueck."""
+    if val is None or val == "":
+        if required:
+            return None, f"{name} ist erforderlich"
+        return None, None
+    s = str(val).strip()
+    # Normalize: 'T' erlauben, 'Z' ignorieren
+    s2 = s.replace("Z", "+00:00")
+    parsed = None
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M",
+                "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(s[:19] if "T" in s or " " in s else s, fmt)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
+        try:
+            parsed = datetime.fromisoformat(s2)
+        except ValueError:
+            return None, f"{name} muss ein gueltiges Datum (YYYY-MM-DD[THH:MM:SS]) sein"
+    return parsed.isoformat(), None
+
+
+def _v_text(val, name, maxlen=200, required=False, choices=None):
+    if val is None:
+        if required:
+            return None, f"{name} ist erforderlich"
+        return None, None
+    s = str(val).strip()
+    if required and not s:
+        return None, f"{name} ist erforderlich"
+    if choices is not None and s not in choices:
+        return None, f"{name} muss einer von: {', '.join(choices)} sein"
+    if len(s) > maxlen:
+        return None, f"{name} darf max. {maxlen} Zeichen haben"
+    return s, None
+
+
+EXTRA_CATEGORIES = {"purchase", "service", "accessory", "insurance", "tax", "other"}
+PRICE_KINDS = {"grid", "feedin"}
+
+
+def _now_iso():
+    return datetime.now().isoformat()
+
+
+
 
 def mock_mode():
     return bool(config.get("app", {}).get("mock_mode", MOCK_MODE))
@@ -176,8 +305,40 @@ def init_db(db):
     cols = [r[1] for r in db.execute("PRAGMA table_info(external_sessions)")]
     if "energy_used_kwh" not in cols:
         db.execute("ALTER TABLE external_sessions ADD COLUMN energy_used_kwh REAL")
+    # --- Migration: Bearbeitbarkeit / Datenherkunft (Feature "Bearbeiten") ---
+    # Neue Spalten duerfen keine bestehenden Daten brechen (DEFAULT-Werte).
+    _migrate_columns(db, "home_sessions", {
+        "updated_at": "TEXT",
+        "source": "TEXT DEFAULT 'evcc'",
+        "manually_edited": "INTEGER DEFAULT 0",
+        "note": "TEXT",
+    })
+    _migrate_columns(db, "external_sessions", {
+        "updated_at": "TEXT",
+        "source": "TEXT DEFAULT 'teslamate'",
+        "manually_edited": "INTEGER DEFAULT 0",
+        "note": "TEXT",
+    })
+    _migrate_columns(db, "extra_costs", {
+        "updated_at": "TEXT",
+        "source": "TEXT DEFAULT 'manual'",
+        "manually_edited": "INTEGER DEFAULT 0",
+    })
+    _migrate_columns(db, "price_periods", {
+        "updated_at": "TEXT",
+        "source": "TEXT DEFAULT 'manual'",
+        "manually_edited": "INTEGER DEFAULT 0",
+    })
     db.commit()
     seed_price_periods(db)
+
+
+def _migrate_columns(db, table, columns):
+    """Ergaenzt fehlende Spalten (SQLite kennt kein ADD COLUMN IF NOT EXISTS)."""
+    existing = [r[1] for r in db.execute(f"PRAGMA table_info({table})")]
+    for name, typ in columns.items():
+        if name not in existing:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {typ}")
 
 
 def seed_price_periods(db):
@@ -540,7 +701,7 @@ def _mock_evcc_sessions():
             "id": 1000 + i,
             "created": created.isoformat() + "Z",
             "finished": (created + timedelta(hours=3)).isoformat() + "Z",
-            "loadpoint": "Wallbox Garage",
+            "loadpoint": "Wallbox",
             "vehicle": "Tesla Model 3",
             "odometer": 42000 + i * 320,
             "chargedEnergy": round(8 + (i % 5), 2),
@@ -613,9 +774,7 @@ def build_stats(days=365):
         "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at ASC",
         (cutoff,),
     ).fetchall()
-    # WICHTIG: TeslaMate-Ladungen an Zuhause-Adressen (Dammstraße/Garage) sind
-    # dieselben wie die EVCC-Ladungen (doppeltes Tracking). Sie duerfen NICHT
-    # als extern gezaehlt oder zur Energie/Distanz addiert werden.
+    # Diese Ladungen dienen nur als Referenz für Ladeverluste und Zeitwerte; sie werden **nicht** für Energie oder Kosten addiert.
     ext = [r for r in ext_all if not _is_home_address(r["location_name"], r["address"])]
     extras = db.execute(
         "SELECT * FROM extra_costs WHERE date >= ? ORDER BY date DESC", (cutoff,)
@@ -866,9 +1025,9 @@ def _tm_grouped_sessions(rows):
 
 def _build_merged(rows):
     """Eine Zeile PRO TAG. Grundsatz:
-    - Zuhause = EVCC (Wallbox Garage) IST fuehrend fuer kWh/Kosten/km.
-    - TeslaMate-Zuhause (Dammstraße/Garage) = DIESELBEN Ladungen wie EVCC,
-      werden NUR fuer added/used -> Ladeverluste genutzt, NIE zur Energie addiert.
+    - Zuhause = EVCC (Wallbox) IST fuehrend fuer kWh/Kosten/km.
+    - TeslaMate-Zuhause (Stadt irgendwo) = dieselben wie EVCC,
+      werden nur fuer added/used -> Ladeverluste genutzt, NIE zur Energie addiert.
     - Extern = nur TeslaMate-Ladungen an Fremd-Adressen (z.B. Supercharger Engen).
     Mehrere Ladestationen pro Tag bleiben in der Aufklapp-Liste sichtbar.
     """
@@ -962,7 +1121,7 @@ def _build_merged(rows):
         # Ladestationen des Tages (fuer "mehrere Stationen sichtbar")
         stations = []
         if v["evcc"]:
-            stations.append("Garage (EVCC)")
+            stations.append("Wallbox")
         for g in v["tm_home"]:
             a = g.get("address") or "Zuhause"
             if a not in stations:
@@ -1265,11 +1424,8 @@ def api_roadtrip():
     day_stations = defaultdict(set)
     day_pins = defaultdict(list)
 
-    for e in evcc:
-        day = (e.get("created") or "")[:10]
-        day_kwh[day] += float(e.get("charged_kwh") or 0)
-        day_cost[day] += float(e.get("total_cost") or 0)
-        day_stations[day].add("Garage (EVCC)")
+    # Ladestationen basierend auf Dummy-EVCC-Eintrag (nur zur Erkennung der Stationen für die UI)
+    day_stations[day].add("Wallbox")
 
     for t in tm:
         day = (t.get("started_at") or "")[:10]
@@ -1371,6 +1527,12 @@ def api_recompute():
     return jsonify({"ok": True})
 
 
+@app.route("/api/csrf", methods=["GET"])
+def api_csrf():
+    """Liefert das aktuelle CSRF-Token fuer das UI (X-CSRFToken-Header)."""
+    return jsonify({"csrf_token": csrf_token()})
+
+
 @app.route("/api/external/<int:sid>", methods=["PUT", "DELETE"])
 def api_external_detail(sid):
     db = get_db()
@@ -1379,33 +1541,207 @@ def api_external_detail(sid):
         db.commit()
         return jsonify({"ok": True})
 
-    d = request.get_json(force=True)
-    allowed = ("location_name", "address", "provider", "started_at", "finished_at",
-               "energy_kwh", "odometer_start", "cost_total")
-    fields = {k: d[k] for k in allowed if k in d}
-    if not fields:
-        return jsonify({"ok": False, "error": "keine Felder"}), 400
+    d = request.get_json(force=True, silent=True) or {}
+    err = csrf_protect()
+    if err:
+        return err
 
-    # Bei Kosten-/Energie-Aenderung €/kWh neu ableiten
-    if "cost_total" in fields or "energy_kwh" in fields:
-        cur = db.execute(
-            "SELECT energy_kwh, cost_total FROM external_sessions WHERE id = ?", (sid,)
-        ).fetchone()
-        if not cur:
-            return jsonify({"ok": False, "error": "not found"}), 404
+    # Erlaubte Felder (kein Mass-Assignment)
+    allowed = {
+        "location_name": lambda v: _v_text(v, "location_name", 200),
+        "address": lambda v: _v_text(v, "address", 200),
+        "provider": lambda v: _v_text(v, "provider", 120),
+        "started_at": lambda v: _v_date(v, "started_at"),
+        "finished_at": lambda v: _v_date(v, "finished_at"),
+        "energy_kwh": lambda v: _v_number(v, "energy_kwh", lo=0, hi=100000),
+        "odometer_start": lambda v: _v_number(v, "odometer_start", lo=0, hi=10000000),
+        "cost_total": lambda v: _v_number(v, "cost_total", lo=0, hi=100000),
+        "price_per_kwh": lambda v: _v_number(v, "price_per_kwh", lo=0, hi=1000),
+        "manual_price": lambda v: (1 if v else 0, None),
+        "note": lambda v: _v_text(v, "note", 500),
+    }
+    fields = {}
+    for k, fn in allowed.items():
+        if k in d:
+            val, e = fn(d[k])
+            if e:
+                return jsonify({"ok": False, "error": e}), 400
+            fields[k] = val
+
+    if not fields:
+        return jsonify({"ok": False, "error": "keine gueltigen Felder"}), 400
+
+    # Bei Kosten-/Energie-Aenderung €/kWh neu ableiten (sofern nicht explizit gesetzt)
+    cur = db.execute(
+        "SELECT energy_kwh, cost_total FROM external_sessions WHERE id = ?", (sid,)
+    ).fetchone()
+    if not cur:
+        return jsonify({"ok": False, "error": "nicht gefunden"}), 404
+
+    if "price_per_kwh" not in fields and ("cost_total" in fields or "energy_kwh" in fields):
         energy = float(fields.get("energy_kwh", cur["energy_kwh"]) or 0)
         cost = float(fields.get("cost_total", cur["cost_total"]) or 0)
         fields["price_per_kwh"] = round(cost / energy, 4) if energy > 0 else 0.0
 
     set_parts = [f"{k} = ?" for k in fields]
-    # Nur bei expliziter Kostenaenderung als manuell markieren
-    if "cost_total" in fields:
-        set_parts.append("manual_price = 1")
+    set_parts.append("manually_edited = 1")
+    set_parts.append("updated_at = ?")
     db.execute(
         f"UPDATE external_sessions SET {', '.join(set_parts)} WHERE id = ?",
-        list(fields.values()) + [sid],
+        list(fields.values()) + [_now_iso(), sid],
     )
     db.commit()
+    return jsonify({"ok": True, **fields})
+
+
+@app.route("/api/home-sessions/<int:sid>", methods=["PUT", "DELETE"])
+def api_home_detail(sid):
+    db = get_db()
+    if request.method == "DELETE":
+        db.execute("DELETE FROM home_sessions WHERE id = ?", (sid,))
+        db.commit()
+        return jsonify({"ok": True})
+
+    d = request.get_json(force=True, silent=True) or {}
+    err = csrf_protect()
+    if err:
+        return err
+
+    allowed = {
+        "odometer": lambda v: _v_number(v, "odometer", lo=0, hi=10000000),
+        "vehicle": lambda v: _v_text(v, "vehicle", 120),
+        "loadpoint": lambda v: _v_text(v, "loadpoint", 120),
+        "solar_percentage": lambda v: _v_number(v, "solar_percentage", lo=0, hi=100),
+        "created": lambda v: _v_date(v, "created"),
+        "finished": lambda v: _v_date(v, "finished"),
+        "note": lambda v: _v_text(v, "note", 500),
+    }
+    fields = {}
+    for k, fn in allowed.items():
+        if k in d:
+            val, e = fn(d[k])
+            if e:
+                return jsonify({"ok": False, "error": e}), 400
+            fields[k] = val
+
+    if not fields:
+        return jsonify({"ok": False, "error": "keine gueltigen Felder"}), 400
+
+    # Aktuellen Datensatz laden, um abhaengige Felder neu zu berechnen.
+    row = db.execute("SELECT * FROM home_sessions WHERE id = ?", (sid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "nicht gefunden"}), 404
+
+    # Row mit Aenderungen zusammenfuehren
+    merged = dict(row)
+    merged.update({k: v for k, v in fields.items() if v is not None})
+
+    # Abhaengige Kostenfelder neu berechnen (pv/grid/cost/price)
+    cost = compute_home_cost_row(merged)
+    set_parts = [f"{k} = ?" for k in fields]
+    set_parts += ["pv_kwh = ?", "grid_kwh = ?", "grid_cost = ?",
+                  "pv_cost = ?", "total_cost = ?", "price_per_kwh = ?",
+                  "manually_edited = 1", "updated_at = ?"]
+    params = list(fields.values()) + [
+        cost["pv_kwh"], cost["grid_kwh"], cost["grid_cost"],
+        cost["pv_cost"], cost["total_cost"], cost["price_per_kwh"],
+        _now_iso(), sid,
+    ]
+    db.execute(
+        f"UPDATE home_sessions SET {', '.join(set_parts)} WHERE id = ?", params
+    )
+    db.commit()
+    return jsonify({"ok": True, **fields, "recalc": cost})
+
+
+@app.route("/api/extra-costs/<int:eid>", methods=["PUT", "DELETE"])
+def api_extra_cost_detail(eid):
+    db = get_db()
+    if request.method == "DELETE":
+        db.execute("DELETE FROM extra_costs WHERE id = ?", (eid,))
+        db.commit()
+        return jsonify({"ok": True})
+
+    d = request.get_json(force=True, silent=True) or {}
+    err = csrf_protect()
+    if err:
+        return err
+
+    allowed = {
+        "category": lambda v: _v_text(v, "category", 30, choices=EXTRA_CATEGORIES, required=True),
+        "date": lambda v: _v_date(v, "date", required=True),
+        "description": lambda v: _v_text(v, "description", 200, required=True),
+        "amount": lambda v: _v_number(v, "amount", lo=0, hi=10000000, required=True),
+        "odometer": lambda v: _v_number(v, "odometer", lo=0, hi=10000000),
+        "note": lambda v: _v_text(v, "note", 500),
+    }
+    fields = {}
+    for k, fn in allowed.items():
+        if k in d:
+            val, e = fn(d[k])
+            if e:
+                return jsonify({"ok": False, "error": e}), 400
+            fields[k] = val
+        elif k == "category" and "category" not in d:
+            # Kategorie nur setzen, wenn uebergeben
+            pass
+
+    if not fields:
+        return jsonify({"ok": False, "error": "keine gueltigen Felder"}), 400
+
+    set_parts = [f"{k} = ?" for k in fields]
+    set_parts.append("manually_edited = 1")
+    set_parts.append("updated_at = ?")
+    db.execute(
+        f"UPDATE extra_costs SET {', '.join(set_parts)} WHERE id = ?",
+        list(fields.values()) + [_now_iso(), eid],
+    )
+    db.commit()
+    return jsonify({"ok": True, **fields})
+
+
+@app.route("/api/price-periods/<int:pid>", methods=["PUT", "DELETE"])
+def api_price_period_detail(pid):
+    db = get_db()
+    if request.method == "DELETE":
+        db.execute("DELETE FROM price_periods WHERE id = ?", (pid,))
+        db.commit()
+        recompute_all_home_costs()
+        return jsonify({"ok": True})
+
+    d = request.get_json(force=True, silent=True) or {}
+    err = csrf_protect()
+    if err:
+        return err
+
+    allowed = {
+        "kind": lambda v: _v_text(v, "kind", 20, choices=PRICE_KINDS, required=True),
+        "valid_from": lambda v: _v_date(v, "valid_from"),
+        "valid_to": lambda v: _v_date(v, "valid_to"),
+        "price_per_kwh": lambda v: _v_number(v, "price_per_kwh", lo=0, hi=1000, required=True),
+        "note": lambda v: _v_text(v, "note", 200),
+    }
+    fields = {}
+    for k, fn in allowed.items():
+        if k in d:
+            val, e = fn(d[k])
+            if e:
+                return jsonify({"ok": False, "error": e}), 400
+            fields[k] = val
+
+    if not fields:
+        return jsonify({"ok": False, "error": "keine gueltigen Felder"}), 400
+
+    set_parts = [f"{k} = ?" for k in fields]
+    set_parts.append("manually_edited = 1")
+    set_parts.append("updated_at = ?")
+    db.execute(
+        f"UPDATE price_periods SET {', '.join(set_parts)} WHERE id = ?",
+        list(fields.values()) + [_now_iso(), pid],
+    )
+    db.commit()
+    # Preisaenderung -> alle Home-Sessions neu bewerten
+    recompute_all_home_costs()
     return jsonify({"ok": True, **fields})
 
 

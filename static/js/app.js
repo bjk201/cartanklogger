@@ -81,7 +81,7 @@ function renderCharts(s) {
 
 function renderHome(rows) {
   const tb = document.querySelector("#tblHome tbody");
-  tb.innerHTML = rows.map(r => `<tr>
+  tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${r.created ? r.created.slice(0,10) : "–"}</td>
     <td>${r.loadpoint||""}</td><td>${r.vehicle||""}</td>
     <td>${fmtKwh(r.charged_kwh)}</td><td>${fmtPct(r.solar_percentage)}</td>
@@ -89,6 +89,7 @@ function renderHome(rows) {
     <td>${fmtEUR(r.grid_cost)}</td><td>${fmtEUR(r.pv_cost)}</td>
     <td>${fmtEUR(r.total_cost)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
+    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="home" data-id="${r.id}">✏️</button></td>
   </tr>`).join("");
 }
 
@@ -208,47 +209,212 @@ function renderExt(rows) {
     <td class="cost">${fmtEUR(r.cost_total)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer_start!=null?Number(r.odometer_start).toLocaleString("de-DE"):"–"}</td>
     <td>${srcBadge(r)}</td>
-    <td><button class="btn btn-sm btn-outline-primary editPrice">Preis</button></td>
+    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="external" data-id="${r.id}">✏️</button></td>
   </tr>`).join("");
-  tb.querySelectorAll(".editPrice").forEach(b => b.addEventListener("click", () => {
-    const id = b.closest("tr").dataset.id;
-    const cur = b.closest("tr").querySelector(".cost").textContent;
-    const val = prompt("Belasteten Preis (€) eingeben:", cur.replace(/[^0-9.,]/g,"").replace(",","."));
-    if (val == null) return;
-    fetch(`/api/external/${id}`, {method:"PUT", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({cost_total: parseFloat(val.replace(",","."))})})
-      .then(r=>r.json()).then(()=>loadAll());
-  }));
 }
+
 
 async function renderExtra() {
   const rows = await (await fetch(`/api/extra-costs`)).json();
   const tb = document.querySelector("#tblExtra tbody");
   const labels = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
-  tb.innerHTML = rows.map(r => `<tr>
+  tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${r.date||""}</td><td>${labels[r.category]||r.category}</td>
     <td>${r.description||""}</td><td>${fmtEUR(r.amount)}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
+    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="extra" data-id="${r.id}">✏️</button></td>
   </tr>`).join("");
 }
 
-document.querySelectorAll("[data-days]").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll("[data-days]").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active");
-  currentDays = parseInt(b.dataset.days);
-  document.getElementById("rangeLabel").textContent =
-    currentDays >= 9999 ? "Gesamter Zeitraum" : `Letzte ${currentDays} Tage`;
-  loadAll();
-}));
+// ---------------------------------------------------------------------------
+// Bearbeiten-Drawer (Offcanvas) + CSRF
+// ---------------------------------------------------------------------------
+const EDIT_SCHEMAS = {
+  home: {
+    title: "Zuhause-Ladung (EVCC) bearbeiten",
+    endpoint: id => `/api/home-sessions/${id}`,
+    fields: [
+      {key:"created", label:"Erstellt (Datum/Zeit)", type:"datetime-local", src:"created"},
+      {key:"finished", label:"Beendet (Datum/Zeit)", type:"datetime-local", src:"finished"},
+      {key:"odometer", label:"KM-Stand", type:"number", step:"0.1", src:"odometer"},
+      {key:"vehicle", label:"Fahrzeug", type:"text", src:"vehicle"},
+      {key:"loadpoint", label:"Ladepunkt", type:"text", src:"loadpoint"},
+      {key:"solar_percentage", label:"PV-Anteil (%)", type:"number", step:"0.1", src:"solar_percentage"},
+      {key:"note", label:"Notiz", type:"text", src:"note"},
+    ],
+  },
+  external: {
+    title: "Externe Ladung (TeslaMate) bearbeiten",
+    endpoint: id => `/api/external/${id}`,
+    fields: [
+      {key:"started_at", label:"Beginn (Datum/Zeit)", type:"datetime-local", src:"started_at"},
+      {key:"finished_at", label:"Ende (Datum/Zeit)", type:"datetime-local", src:"finished_at"},
+      {key:"address", label:"Adresse", type:"text", src:"address"},
+      {key:"provider", label:"Anbieter", type:"text", src:"provider"},
+      {key:"energy_kwh", label:"Energie (kWh)", type:"number", step:"0.01", src:"energy_kwh"},
+      {key:"odometer_start", label:"KM-Stand", type:"number", step:"0.1", src:"odometer_start"},
+      {key:"cost_total", label:"Kosten gesamt (€)", type:"number", step:"0.01", src:"cost_total"},
+      {key:"price_per_kwh", label:"€/kWh (optional)", type:"number", step:"0.0001", src:"price_per_kwh"},
+      {key:"manual_price", label:"Manueller Preis", type:"checkbox", src:"manual_price"},
+      {key:"note", label:"Notiz", type:"text", src:"note"},
+    ],
+  },
+  extra: {
+    title: "Extra-Kosten bearbeiten",
+    endpoint: id => `/api/extra-costs/${id}`,
+    fields: [
+      {key:"date", label:"Datum", type:"date", src:"date"},
+      {key:"category", label:"Kategorie", type:"select", options:["purchase","service","accessory","insurance","tax","other"], src:"category"},
+      {key:"description", label:"Beschreibung", type:"text", src:"description"},
+      {key:"amount", label:"Betrag (€)", type:"number", step:"0.01", src:"amount"},
+      {key:"odometer", label:"KM-Stand", type:"number", step:"0.1", src:"odometer"},
+      {key:"note", label:"Notiz", type:"text", src:"note"},
+    ],
+  },
+};
+
+function toLocalInput(iso) {
+  if (!iso) return "";
+  // ISO -> input[type=datetime-local] (YYYY-MM-DDTHH:MM)
+  return String(iso).slice(0, 16);
+}
+
+async function openEdit(type, id) {
+  const schema = EDIT_SCHEMAS[type];
+  if (!schema) return;
+  // Aktuellen Datensatz laden
+  let row = {};
+  if (type === "home") {
+    const all = await (await fetch(`/api/sessions`)).json();
+    row = (all.home || []).find(r => r.id == id) || {};
+  } else if (type === "external") {
+    const all = await (await fetch(`/api/sessions`)).json();
+    row = (all.external || []).find(r => r.id == id) || {};
+  } else if (type === "extra") {
+    const all = await (await fetch(`/api/extra-costs`)).json();
+    row = (all || []).find(r => r.id == id) || {};
+  }
+
+  document.getElementById("editDrawerTitle").textContent = schema.title;
+  document.getElementById("editId").value = id;
+  document.getElementById("editType").value = type;
+  const fieldsEl = document.getElementById("editFields");
+  fieldsEl.innerHTML = schema.fields.map(f => {
+    const val = row[f.src] ?? "";
+    let control;
+    if (f.type === "select") {
+      const opts = f.options.map(o => `<option value="${o}" ${o===val?"selected":""}>${o}</option>`).join("");
+      control = `<select class="form-select form-select-sm" id="f_${f.key}">${opts}</select>`;
+    } else if (f.type === "checkbox") {
+      control = `<input class="form-check-input" type="checkbox" id="f_${f.key}" ${val?"checked":""}>`;
+    } else if (f.type === "datetime-local") {
+      control = `<input class="form-control form-control-sm" type="datetime-local" id="f_${f.key}" value="${toLocalInput(val)}">`;
+    } else if (f.type === "date") {
+      control = `<input class="form-control form-control-sm" type="date" id="f_${f.key}" value="${String(val).slice(0,10)}">`;
+    } else {
+      control = `<input class="form-control form-control-sm" type="${f.type}" id="f_${f.key}" value="${val}" ${f.step?`step="${f.step}"`:""}>`;
+    }
+    return `<div class="mb-2"><label class="form-label small mb-1">${f.label}</label>${control}</div>`;
+  }).join("");
+
+  // Datenherkunft anzeigen
+  const meta = document.getElementById("editMeta");
+  const flags = [];
+  if (row.source) flags.push(`Quelle: ${row.source}`);
+  if (row.manually_edited) flags.push("manuell bearbeitet");
+  else flags.push("importiert");
+  if (row.updated_at) flags.push(`geändert am ${toLocalInput(row.updated_at).replace("T"," ")}`);
+  if (row.raw) flags.push("Original-Rohdaten erhalten");
+  meta.innerHTML = flags.join(" · ");
+
+  document.getElementById("editDrawerError").classList.add("d-none");
+  const drawer = bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("editDrawer"));
+  drawer.show();
+}
+
+function collectEditValues(type) {
+  const schema = EDIT_SCHEMAS[type];
+  const out = {};
+  for (const f of schema.fields) {
+    const el = document.getElementById(`f_${f.key}`);
+    if (!el) continue;
+    if (f.type === "checkbox") {
+      out[f.key] = el.checked ? 1 : 0;
+    } else if (f.type === "number") {
+      out[f.key] = el.value === "" ? null : parseFloat(el.value);
+    } else if (f.type === "datetime-local") {
+      out[f.key] = el.value ? el.value.replace("T", " ") + ":00" : null;
+    } else {
+      out[f.key] = el.value;
+    }
+  }
+  return out;
+}
+
+document.getElementById("editForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const type = document.getElementById("editType").value;
+  const id = document.getElementById("editId").value;
+  const schema = EDIT_SCHEMAS[type];
+  const payload = collectEditValues(type);
+  const errEl = document.getElementById("editDrawerError");
+  try {
+    const res = await fetch(schema.endpoint(id), {
+      method: "PUT",
+      headers: {"Content-Type":"application/json", "X-CSRFToken": getCsrfToken()},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      errEl.textContent = "Fehler: " + (data.error || res.statusText);
+      errEl.classList.remove("d-none");
+      return;
+    }
+    bootstrap.Offcanvas.getInstance(document.getElementById("editDrawer"))?.hide();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = "Fehler: " + err.message;
+    errEl.classList.remove("d-none");
+  }
+});
+
+// Event-Delegation für alle Edit-Buttons (Tabellen werden neu gerendert)
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".editBtn");
+  if (btn) {
+    openEdit(btn.dataset.type, btn.dataset.id);
+  }
+});
+
+// CSRF-Token aus Meta-Tag bzw. Backend holen
+let _csrfToken = null;
+async function ensureCsrf() {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const r = await fetch(`/api/csrf`);
+    const d = await r.json();
+    _csrfToken = d.csrf_token;
+  } catch (e) {
+    _csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  }
+  document.querySelector('meta[name="csrf-token"]').content = _csrfToken;
+  return _csrfToken;
+}
+function getCsrfToken() { return _csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || ""; }
+
 
 async function init() {
   const cfg = await (await fetch(`/api/config`)).json();
   if (cfg.app && cfg.app.mock_mode) {
     document.getElementById("mockBadge").style.display = "";
   }
+  await ensureCsrf();
   loadAll();
 }
 init();
+
+
+
 
 // --- Statistik-Ansicht (Road-Trip-App-Stil: 4 Graphen + KPIs) ---
 let statCharts = {};
