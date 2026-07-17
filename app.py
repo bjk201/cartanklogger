@@ -1167,6 +1167,9 @@ def api_debug_db():
     return jsonify(info)
 
 
+@app.route("/admin")
+def admin():
+    return render_template("admin.html", mock=mock_mode())
 
 
 # ---------------------------------------------------------------------------
