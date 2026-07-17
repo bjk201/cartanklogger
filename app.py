@@ -1095,6 +1095,20 @@ def _build_merged(rows):
     from collections import defaultdict
     days = defaultdict(lambda: {"evcc": [], "tm_home": [], "tm_ext": []})
 
+    def _parse_dt(v):
+        """ISO-String -> naive datetime (Zeitzone verwerfen; nur Kalendertag
+        wird verglichen, also egal). Verhindert 'offset-naive vs offset-aware'
+        Vergleichsfehler bei fromisoformat mit 'Z'."""
+        s = _str(v)
+        if not s:
+            return None
+        s = s.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(s)
+            return dt.replace(tzinfo=None)
+        except Exception:
+            return None
+
     # EVCC (immer Zuhause, fuehrend) -> nach STARTTAG buchen
     # Zusaetzlich Zeitfenster [created, finished] merken, um TM-Teilladungen
     # (die ueber Mitternacht in andere Kalendertage rutschen) derselben
@@ -1103,26 +1117,22 @@ def _build_merged(rows):
     for r in rows.get("home", []):
         day = _day_of(r.get("created"))
         days[day]["evcc"].append(r)
-        try:
-            sdt = datetime.fromisoformat(_str(r.get("created")))
-            edt = datetime.fromisoformat(_str(r.get("finished"))) if r.get("finished") else sdt
+        sdt = _parse_dt(r.get("created"))
+        edt = _parse_dt(r.get("finished")) or sdt
+        if sdt is not None:
             evcc_windows.append((sdt, edt, day))
-        except Exception:
-            pass
     evcc_windows.sort(key=lambda w: w[0])
 
     def _assign_day(charge_start_iso):
         """Ordnet eine TM-Ladung dem EVCC-Sitzungstag zu (Fenster enthaelt Start).
         Faellt zurueck auf den eigenen Kalendertag, wenn kein EVCC-Fenster passt."""
-        cs = _str(charge_start_iso)
-        try:
-            cdt = datetime.fromisoformat(cs)
-        except Exception:
-            return _day_of(cs)
+        cdt = _parse_dt(charge_start_iso)
+        if cdt is None:
+            return _day_of(_str(charge_start_iso))
         for sdt, edt, day in evcc_windows:
             if sdt <= cdt <= edt:
                 return day
-        return _day_of(cs)
+        return _day_of(_str(charge_start_iso))
 
     # TeslaMate: nach Zuhause vs. Extern trennen
     ext_rows, home_rows = [], []
