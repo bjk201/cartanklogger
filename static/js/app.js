@@ -123,7 +123,10 @@ function renderHome(rows) {
     <td>${fmtEUR(r.grid_cost)}</td><td>${fmtEUR(r.pv_cost)}</td>
     <td>${fmtEUR(r.total_cost)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
-    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="home" data-id="${r.id}">✏️</button></td>
+    <td>
+      <button class="btn btn-sm btn-outline-secondary editBtn" data-type="home" data-id="${r.id}">✏️</button>
+      <button class="btn btn-sm btn-outline-danger delBtn" data-type="home" data-id="${r.id}" title="Löschen">🗑️</button>
+    </td>
   </tr>`).join("");
 }
 
@@ -243,7 +246,10 @@ function renderExt(rows) {
     <td class="cost">${fmtEUR(r.cost_total)}</td><td>${r.price_per_kwh||""}</td>
     <td>${r.odometer_start!=null?Number(r.odometer_start).toLocaleString("de-DE"):"–"}</td>
     <td>${srcBadge(r)}</td>
-    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="external" data-id="${r.id}">✏️</button></td>
+    <td>
+      <button class="btn btn-sm btn-outline-secondary editBtn" data-type="external" data-id="${r.id}">✏️</button>
+      <button class="btn btn-sm btn-outline-danger delBtn" data-type="external" data-id="${r.id}" title="Löschen">🗑️</button>
+    </td>
   </tr>`).join("");
 }
 
@@ -256,7 +262,10 @@ async function renderExtra() {
     <td>${r.date||""}</td><td>${labels[r.category]||r.category}</td>
     <td>${r.description||""}</td><td>${fmtEUR(r.amount)}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
-    <td><button class="btn btn-sm btn-outline-secondary editBtn" data-type="extra" data-id="${r.id}">✏️</button></td>
+    <td>
+      <button class="btn btn-sm btn-outline-secondary editBtn" data-type="extra" data-id="${r.id}">✏️</button>
+      <button class="btn btn-sm btn-outline-danger delBtn" data-type="extra" data-id="${r.id}" title="Löschen">🗑️</button>
+    </td>
   </tr>`).join("");
 }
 
@@ -417,6 +426,31 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest(".editBtn");
   if (btn) {
     openEdit(btn.dataset.type, btn.dataset.id);
+  }
+  const del = e.target.closest(".delBtn");
+  if (del) {
+    const type = del.dataset.type;
+    const id = del.dataset.id;
+    const ep = type === "home" ? `/api/home-sessions/${id}`
+             : type === "external" ? `/api/external/${id}`
+             : `/api/extra-costs/${id}`;
+    if (!confirm("Wirklich löschen?")) return;
+    (async () => {
+      try {
+        const res = await fetch(ep, {
+          method: "DELETE",
+          headers: {"X-CSRFToken": getCsrfToken()},
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          alert("Löschen fehlgeschlagen: " + (data.error || res.statusText));
+          return;
+        }
+        await loadAll();
+      } catch (err) {
+        alert("Löschen fehlgeschlagen: " + err.message);
+      }
+    })();
   }
 });
 

@@ -210,6 +210,17 @@ def _ensure_csrf():
     _maybe_reload_config()
 
 
+@app.after_request
+def _no_cache_api(resp):
+    """API-Antworten niemals cachen, damit ein Browser-F5 immer frische
+    Datenbank-Daten zeigt (kein 'alte Daten nach Speichern/Loeschen')."""
+    if request.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
+
 # ---------------------------------------------------------------------------
 # Validierungs-Helfer (serverseitig, streng)
 # ---------------------------------------------------------------------------
