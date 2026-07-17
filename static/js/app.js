@@ -558,8 +558,7 @@ function kpiStat(label, value, sub) {
   </div>`;
 }
 
-// --- Roadtrip / Reise-Ansicht (iOS Roadtrip-App-Stil) ---
-let tripMap = null;
+// --- Roadtrip / Reise-Ansicht (Kacheln auf Hauptseite) ---
 let tripChart = null;
 
 function renderRoadtrip(data) {
@@ -575,78 +574,6 @@ function renderRoadtrip(data) {
     kpi("💡 Ø Kosten", fmtEUR(t.avg_cost_per_100km) + "/100km"),
     kpi("📆 Tage", t.n_days),
   ].join("");
-
-  // Karte erst bauen, wenn der Tab sichtbar ist (sonst Groesse 0 -> Fehler).
-  // Beim initialen Laden nichts tun; _drawTripMap() wird via shown.bs.tab
-  // getriggert, sobald der Reise-Tab geklickt wird.
-  window.__tripStops = data.stops || [];
-  // Karte liegt jetzt auf der Hauptseite -> direkt zeichnen (sobald Leaflet da)
-  maybeDrawTripMap();
-
-  // 3) Tagesbalken (km / geladene kWh / verbrauchte kWh / €) – KLARE Beschriftung
-  const days = (data.per_day || []).slice().reverse(); // chronologisch
-  const maxKm = Math.max(...days.map(d => d.km || 0), 1);
-  const maxKwh = Math.max(...days.map(d => d.kwh || 0), 1);
-  const maxCons = Math.max(...days.map(d => d.consumed_kwh || 0), 1);
-  const maxEur = Math.max(...days.map(d => d.cost || 0), 1);
-  document.getElementById("tripDays").innerHTML = days.map(d => `
-    <div class="border rounded p-2 mb-2">
-      <div class="d-flex justify-content-between small fw-bold">
-        <span>${d.day}</span>
-        <span class="text-muted">${d.km.toLocaleString("de-DE", {maximumFractionDigits:0})} km gefahren</span>
-      </div>
-      <div class="small text-muted mb-1">
-        Geladen: <b>${fmtKwh(d.kwh)}</b> · Verbraucht: <b>${fmtKwh(d.consumed_kwh)}</b> · Kosten: <b>${fmtEUR(d.cost)}</b>
-      </div>
-      <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-info" style="width:${Math.max(1,(d.km||0)/maxKm*100)}%" title="km gefahren"></div>
-      </div>
-      <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-success" style="width:${Math.max(1,(d.kwh||0)/maxKwh*100)}%" title="geladene kWh"></div>
-      </div>
-      <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-danger" style="width:${Math.max(1,(d.consumed_kwh||0)/maxCons*100)}%" title="verbrauchte kWh"></div>
-      </div>
-      <div class="progress mt-1" style="height:8px">
-        <div class="progress-bar bg-warning" style="width:${Math.max(1,(d.cost||0)/maxEur*100)}%" title="Kosten in €"></div>
-      </div>
-      <div class="small text-muted mt-1">${d.pins.map(p => `<span class="badge bg-secondary me-1">${p.address}: ${fmtKwh(p.kwh)}</span>`).join("")}</div>
-    </div>`).join("");
-
-  // 4) Legende für die Tagesbalken-Farben (mit Erklaerung)
-  const legend = document.getElementById("tripDaysLegend");
-  if (legend) {
-    legend.innerHTML = `
-      <div class="mb-1"><span class="badge bg-info">&nbsp;</span> <b>km gefahren</b> – Strecke an diesem Tag</div>
-      <div class="mb-1"><span class="badge bg-success">&nbsp;</span> <b>geladene kWh</b> – Energie, die du geladen hast (Wallbox/TeslaMate)</div>
-      <div class="mb-1"><span class="badge bg-danger">&nbsp;</span> <b>verbrauchte kWh</b> – Energie, die der Akku abgegeben hat (gegenüber geladen = Verlust)</div>
-      <div class="mb-1"><span class="badge bg-warning text-dark">&nbsp;</span> <b>Kosten</b> – Ausgaben an diesem Tag</div>
-      <div class="small text-muted mt-2">Je länger der Balken, desto höher der Wert im Vergleich zum höchsten Tag.</div>`;
-  }
-
-  // 5) Chart kWh vs € pro Tag (nur wenn Tab sichtbar, sonst 0px Fehler)
-  const labels = days.map(d => d.day);
-  const tripCtx = document.getElementById("chartTrip");
-  if (tripCtx && window.Chart && !(tripCtx.clientWidth === 0 && tripCtx.offsetParent === null)) {
-    if (tripChart) tripChart.destroy();
-    tripChart = new Chart(tripCtx, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "kWh", data: days.map(d => d.kwh), backgroundColor: "#198754", yAxisID: "y" },
-          { label: "€", data: days.map(d => d.cost), backgroundColor: "#ffc107", yAxisID: "y1" },
-        ],
-      },
-      options: {
-        responsive: true,
-        scales: {
-          y: { position: "left", title: { display: true, text: "kWh" } },
-          y1: { position: "right", title: { display: true, text: "€" }, grid: { drawOnChartArea: false } },
-        },
-      },
-    });
-  }
 }
 
 function kpi(label, value) {
@@ -658,48 +585,6 @@ function kpi(label, value) {
       </div>
     </div>
   </div>`;
-
-// Leaflet-Karte: erst zeichnen wenn Tab sichtbar (sonst Groesse 0)
-// Als window.* deklariert -> garantiert global verfuegbar (kein Scope-Problem).
-window._initTripMapLazy = function _initTripMapLazy() {
-  if (tripMap || !window.L) return;
-  tripMap = L.map("tripMap").setView([49.05, 9.25], 6);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap", maxZoom: 19
-  }).addTo(tripMap);
-  window.__tripTabVisible = false;
-};
-
-window._drawTripMap = function _drawTripMap() {
-  if (!window.L) return;
-  if (!tripMap) window._initTripMapLazy();
-  if (!tripMap) return;
-  // Karte liegt jetzt auf der Hauptseite (immer sichtbar) -> direkt zeichnen
-  tripMap.invalidateSize();
-  setTimeout(() => tripMap.invalidateSize(), 200);
-  setTimeout(() => tripMap.invalidateSize(), 500);
-  tripMap.eachLayer(l => { if (l instanceof L.Marker) tripMap.removeLayer(l); });
-  const stops = window.__tripStops || [];
-  if (stops.length) {
-    const bounds = [];
-    stops.forEach(s => {
-      const m = L.marker([s.lat, s.lng]).addTo(tripMap);
-      m.bindPopup(`<b>${s.address}</b><br>${s.day}<br>${fmtKwh(s.kwh)} · ${fmtEUR(s.cost)}`);
-      bounds.push([s.lat, s.lng]);
-    });
-    tripMap.fitBounds(bounds, { padding: [30, 30] });
-  }
-};
-
-// Karte auf der Hauptseite zeichnen, sobald Daten + Leaflet da sind
-function maybeDrawTripMap() {
-  if (window.L && (window.__tripStops || []).length) {
-    window._drawTripMap();
-  } else if (window.__tripStops && window.__tripStops.length) {
-    // Leaflet noch nicht geladen -> kurz warten
-    setTimeout(maybeDrawTripMap, 300);
-  }
-}
 
 // Tab-Wechsel: Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
 let __chartData = null;
