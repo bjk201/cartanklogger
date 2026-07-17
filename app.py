@@ -589,6 +589,35 @@ class TeslaMateClient:
             app.logger.warning(f"TeslaMate Abruf Fehler: {e}")
         return []
 
+    def get_status(self, car_id=None):
+        """Live-Status aus teslamateapi (GET /cars/:CarID/status).
+
+        Liefert u.a. MQTTDataPluggedIn (bool) und MQTTDataChargingState (string).
+        WICHTIG: Dieser Endpunkt ist LIVE (MQTT-Cache), NICHT historisch.
+        Er dient nur zur Anzeige ("gerade am Kabel") und NICHT zum Matching.
+        Das Home-Matching nutzt das EVCC-Zeitfenster (siehe services/matching).
+
+        Gibt Dict zurueck: {plugged_in, charging_state, car_id, ...} oder {} bei Fehler.
+        """
+        if car_id is None:
+            car_ids = self._cars() or [1]
+            car_id = car_ids[0] if car_ids else 1
+        try:
+            r = requests.get(f"{self.base}/cars/{car_id}/status", timeout=15)
+            if r.status_code != 200:
+                return {}
+            d = r.json().get("data", r.json())
+            return {
+                "car_id": car_id,
+                "plugged_in": bool(d.get("MQTTDataPluggedIn", False)),
+                "charging_state": (d.get("MQTTDataChargingState") or "").lower(),
+                "geofence": d.get("MQTTDataGeofence"),
+                "battery_level": d.get("MQTTDataBatteryLevel"),
+            }
+        except Exception as e:
+            app.logger.warning(f"TeslaMate /status Fehler: {e}")
+            return {}
+
     def update_charging_process_cost(self, charge_id, cost):
         """Schreibt die berechnete Home-Kosten zurueck in TeslaMate.
 
@@ -837,6 +866,47 @@ def _mock_teslamate_sessions():
             "cost": round(18 + i * 2, 2) if is_sc else 0.0,
             "duration_min": 55,
             "start_battery_level": 20,
+            "end_battery_level": 80,
+        })
+
+    # Zusaetzliche Home-Teilcharges (Geofence "Zuhause"), die zeitlich in die
+    # EVCC-Mock-Sessions fallen (gleiche base-Berechnung wie _mock_evcc_sessions).
+    # Simulation: 1 EVCC-Session -> 2 TeslaMate-Teilcharges (Kabel verbunden).
+    evcc_base = datetime.now() - timedelta(days=120)
+    for j in range(3):
+        evcc_created = evcc_base + timedelta(days=j * 8, hours=2)
+        # Teilcharge 1 (frueh)
+        out.append({
+            "charge_id": 600 + j * 2,
+            "start_date": (evcc_created + timedelta(minutes=5)).isoformat() + "Z",
+            "end_date": (evcc_created + timedelta(minutes=50)).isoformat() + "Z",
+            "odometer": 42000 + j * 320,
+            "charge_energy_added": round(4 + (j % 3), 1),
+            "charge_energy_used": round((4 + (j % 3)) * 0.97, 1),
+            "address": "Zuhause Garage",
+            "latitude": 48.12,
+            "longitude": 11.55,
+            "geofence": "Zuhause",
+            "cost": None,
+            "duration_min": 45,
+            "start_battery_level": 50,
+            "end_battery_level": 65,
+        })
+        # Teilcharge 2 (spaeter, gleiche Kabelphase)
+        out.append({
+            "charge_id": 601 + j * 2,
+            "start_date": (evcc_created + timedelta(minutes=55)).isoformat() + "Z",
+            "end_date": (evcc_created + timedelta(minutes=110)).isoformat() + "Z",
+            "odometer": 42000 + j * 320,
+            "charge_energy_added": round(4 + (j % 3), 1),
+            "charge_energy_used": round((4 + (j % 3)) * 0.97, 1),
+            "address": "Zuhause Garage",
+            "latitude": 48.12,
+            "longitude": 11.55,
+            "geofence": "Zuhause",
+            "cost": None,
+            "duration_min": 55,
+            "start_battery_level": 65,
             "end_battery_level": 80,
         })
     return out
@@ -1130,6 +1200,120 @@ def api_sessions():
         r["has_raw"] = bool(r.get("raw"))
         r.pop("raw", None)
     return jsonify({"home": home, "external": ext})
+
+
+@app.route("/api/charges")
+def api_charges():
+    """Vereinheitlichte Charge-Sicht (CableSession-Matching).
+
+    Liefert:
+      - matched_home : Liste von CableSessions (1 EVCC + n TeslaMate-Teilcharges)
+      - evcc_only    : EVCC-Sessions ohne TM-Gegenstück
+      - external     : externe Charges (teslamate_only)
+
+    EVCC ist führend für wall_kwh / Kosten; TeslaMate liefert battery_kwh
+    (Summe der Teilladungen) und charging_loss. Keine Doppelzählung.
+    """
+    db = get_db()
+    home_rows = [dict(r) for r in db.execute(
+        "SELECT * FROM home_sessions ORDER BY created ASC").fetchall()]
+    external_rows = [dict(r) for r in db.execute(
+        "SELECT * FROM external_sessions ORDER BY started_at ASC").fetchall()]
+    home_geofences = [a.strip().lower() for a in config.get("app", {}).get("home_addresses", []) if a and a.strip()]
+
+    from services.stats import build_cable_sessions_from_rows
+    cable_sessions, unmatched_evcc, external_unified = build_cable_sessions_from_rows(
+        home_rows, external_rows, home_geofences)
+
+    grid_default = float((config.get("pricing_defaults") or {}).get("grid_price_per_kwh", 0.32))
+    feedin_default = float((config.get("pricing_defaults") or {}).get("feedin_price_per_kwh", 0.08))
+
+    matched = []
+    for cable in cable_sessions:
+        # battery_kwh bereits Summe der TM-Teilcharges im CableSession
+        wall = cable.wall_kwh
+        pv_share = cable.pv_share_pct
+        pv_kwh, grid_kwh = (wall * pv_share / 100.0, max(0.0, wall - wall * pv_share / 100.0)) \
+            if pv_share else (0.0, wall)
+        cost = round(grid_kwh * grid_default + pv_kwh * feedin_default, 2)
+        matched.append({
+            "evcc_session_id": cable.evcc_session_id,
+            "teslamate_charge_ids": cable.teslamate_charge_ids,
+            "started_at": cable.started_at.isoformat() if cable.started_at else None,
+            "finished_at": cable.finished_at.isoformat() if cable.finished_at else None,
+            "provider": cable.provider,
+            "odometer_km": cable.odometer_km,
+            "wall_kwh": wall,
+            "battery_kwh": cable.battery_kwh,
+            "charging_loss_kwh": cable.charging_loss_kwh,
+            "pv_share_pct": round(pv_share, 1),
+            "pv_kwh": round(pv_kwh, 3),
+            "grid_kwh": round(grid_kwh, 3),
+            "total_cost": cost,
+            "cost_source": "evcc_calc",
+            "match_quality": "exact" if (cable.battery_kwh and abs(wall - cable.battery_kwh) <= 8.0) else "fuzzy",
+        })
+
+    evcc_only = [{
+        "evcc_session_id": ev.id,
+        "wall_kwh": ev.charged_energy_kwh,
+        "started_at": ev.created.isoformat() if ev.created else None,
+        "finished_at": ev.finished.isoformat() if ev.finished else None,
+        "provider": ev.loadpoint,
+        "odometer_km": ev.odometer,
+        "battery_kwh": None,
+        "charging_loss_kwh": None,
+        "cost_source": "none",
+    } for ev in unmatched_evcc]
+
+    external = [{
+        "teslamate_charge_ids": u.teslamate_charge_ids,
+        "started_at": u.started_at.isoformat() if u.started_at else None,
+        "finished_at": u.finished_at.isoformat() if u.finished_at else None,
+        "provider": u.provider,
+        "odometer_km": u.odometer_km,
+        "battery_kwh": u.battery_kwh,
+        "total_cost": u.total_cost,
+        "cost_source": u.cost_source,
+        "location_type": u.location_type,
+    } for u in external_unified]
+
+    return jsonify({
+        "matched_home": matched,
+        "evcc_only": evcc_only,
+        "external": external,
+        "summary": {
+            "matched_count": len(matched),
+            "evcc_only_count": len(evcc_only),
+            "external_count": len(external),
+            "note": "EVCC führend für wall_kwh/Kosten; TeslaMate ergänzt battery_kwh (Summe Teilladungen).",
+        },
+    })
+
+
+@app.route("/api/status/live")
+def api_status_live():
+    """Live-Status aus teslamateapi (PluggedIn/ChargingState).
+
+    WICHTIG: Dieser Endpunkt ist LIVE (MQTT-Cache), NICHT historisch.
+    Er dient nur zur Anzeige ('gerade am Kabel') und wird NICHT zum Matching
+    genutzt (das Home-Matching nutzt das EVCC-Zeitfenster)."""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    if not url:
+        return jsonify({"plugged_in": False, "charging_state": "", "available": False})
+    if mock_mode():
+        return jsonify({"plugged_in": True, "charging_state": "charging",
+                        "geofence": "Zuhause", "battery_level": 72, "available": True, "mock": True})
+    try:
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        status = client.get_status()
+        status["available"] = True
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({"plugged_in": False, "charging_state": "", "available": False, "error": str(e)})
+
+
 
 
 # ---------------------------------------------------------------------------

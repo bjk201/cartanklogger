@@ -8,6 +8,12 @@ Grundprinzipien:
   - Externe Kosten = TeslaMate cost oder manuelle Korrektur.
   - Ladeverluste = echtes (wall_kwh - battery_kwh), falls beide vorhanden.
   - Home wird NICHT doppelt gezählt (EVCC ist führend, TM-Home nur für Verlust).
+
+CableSession-Logik (Match-Einheit):
+  - 1 EVCC-Session = führende CableSession (Einstecken -> Ausstecken)
+  - n TeslaMate-Charges innerhalb desselben Kabel-Zeitfensters = Teilereignisse
+  - battery_kwh = Summe der TeslaMate charge_energy_added
+  - wall_kwh / Kosten = EVCC (führend)
 """
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -31,6 +37,92 @@ def _parse_dt(val):
             return datetime.fromisoformat(s)
         except Exception:
             return None
+
+
+def build_cable_sessions_from_rows(home_rows, external_rows, home_geofences,
+                                    start_tolerance_min=120, end_tolerance_min=120):
+    """Baut echte CableSessions aus DB-Rows (EVCC home_sessions + TM external_sessions).
+
+    Nutzt services.matching.match_evcc_to_teslamate, um 1 EVCC-Session mit
+    n TeslaMate-Teilcharges (innerhalb des Kabel-Zeitfensters) zu gruppieren.
+
+    Liefert (cable_sessions, unmatched_evcc, external_unified):
+      cable_sessions   : Liste von CableSession (EVCC + gruppierte TM)
+      unmatched_evcc   : EVCC-Sessions ohne TM-Gegenstück
+      external_unified : Liste von UnifiedCharge (teslamate_only) für externe Charges
+    """
+    from services.matching import (
+        TeslaMateCharge, EVCCSession, match_evcc_to_teslamate,
+        build_unified_home_charge, build_unified_external_charge,
+    )
+
+    ev_sessions = []
+    for r in home_rows:
+        created = _parse_dt(r.get("created"))
+        if created is None:
+            continue
+        ev_sessions.append(EVCCSession(
+            id=r.get("id"),
+            created=created,
+            finished=_parse_dt(r.get("finished")),
+            loadpoint=r.get("loadpoint"),
+            vehicle=r.get("vehicle"),
+            odometer=r.get("odometer"),
+            meter_start=r.get("meter_start"),
+            meter_stop=r.get("meter_stop"),
+            charged_energy_kwh=float(r.get("charged_kwh") or 0),
+            solar_percentage=r.get("solar_percentage"),
+        ))
+
+    tm_charges = []
+    for r in external_rows:
+        # Home-TM-Charges (Geofence "Zuhause") sind Kandidaten für das CableSession-
+        # Matching mit EVCC. Reine externe (nicht Home) werden separat als
+        # teslamate_only geführt.
+        if _is_home_external_row(r):
+            sd = _parse_dt(r.get("started_at"))
+            if sd is None:
+                continue
+            tm_charges.append(TeslaMateCharge(
+                id=r.get("teslamate_session_id") or r.get("id"),
+                start_date=sd,
+                end_date=_parse_dt(r.get("finished_at")),
+                charge_energy_added=float(r.get("energy_kwh") or 0),
+                charge_energy_used=float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0),
+                odometer=r.get("odometer_start"),
+                geofence_name=r.get("location_name"),
+                address_name=r.get("address"),
+                cost=r.get("cost_total"),
+                car_id=None,
+            ))
+
+    cable_sessions, unmatched_evcc, unmatched_tm = match_evcc_to_teslamate(
+        ev_sessions, tm_charges, home_geofences,
+        start_tolerance_min=start_tolerance_min, end_tolerance_min=end_tolerance_min)
+
+    # Externe Charges (nicht Home) -> teslamate_only
+    external_unified = []
+    for r in external_rows:
+        if not _is_home_external_row(r):
+            sd = _parse_dt(r.get("started_at"))
+            if sd is None:
+                continue
+            external_unified.append(build_unified_external_charge(TeslaMateCharge(
+                id=r.get("teslamate_session_id") or r.get("id"),
+                start_date=sd,
+                end_date=_parse_dt(r.get("finished_at")),
+                charge_energy_added=float(r.get("energy_kwh") or 0),
+                charge_energy_used=float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0),
+                odometer=r.get("odometer_start"),
+                geofence_name=r.get("location_name"),
+                address_name=r.get("address"),
+                cost=r.get("cost_total"),
+                car_id=None,
+            )))
+
+    return cable_sessions, unmatched_evcc, external_unified
+
+
 
 
 def compute_home_energy_split(wall_kwh, solar_percentage):

@@ -22,7 +22,7 @@ app:
   # TeslaMate trackt diese Ladungen ebenfalls (= dieselben wie EVCC),
   # daher werden sie NICHT als extern gezaehlt und NICHT zur Energie addiert.
   # Beispiel: [zuhause, garage, wallbox]
-  home_addresses: []
+  home_addresses: [zuhause, garage]
   # --- Datenschutz-Optionen (Default: maximal datensparsam) ---
   # Roh-Payloads (komplette API-Antworten) speichern? false = nur Felder, die
   # die App braucht. Empfohlen false (verhindert Speicherung von GPS/Adressen).
