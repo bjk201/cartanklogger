@@ -894,7 +894,15 @@ def build_stats(days=365):
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html", mock=mock_mode())
+    # Cache-Buster: aendert sich bei jedem Deploy (app.js-mtime), damit
+    # der Browser nach einem Update die neue JS-Datei holt (kein altes Cache).
+    js_ver = "1"
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "js", "app.js")
+        js_ver = str(int(os.path.getmtime(p)))
+    except Exception:
+        pass
+    return render_template("index.html", mock=mock_mode(), js_version=js_ver)
 
 
 @app.route("/admin")
