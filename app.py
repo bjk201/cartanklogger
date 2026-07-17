@@ -741,14 +741,37 @@ def sync_evcc():
 
 
 def _home_addresses():
-    """Liste der als 'Zuhause' geltenden Adress-Substrings (aus config)."""
-    return [a.strip().lower() for a in config.get("app", {}).get("home_addresses", []) if a and a.strip()]
+    """Liste der als 'Zuhause' geltenden Adress-Substrings (aus config).
+
+    Ergaenzt um feste Geofence-Namen, die TeslaMate typischerweise fuer die
+    Heim-Ladestation verwendet (case-insensitiv). So wird eine TM-Ladung an
+    einem Geofence 'Zuhause'/'Home'/'Garage'/'Wallbox' IMMER als Zuhause
+    erkannt – auch wenn in der Config keine home_addresses gepflegt sind.
+    """
+    base = [a.strip().lower() for a in config.get("app", {}).get("home_addresses", []) if a and a.strip()]
+    fixed = ["zuhause", "home", "garage", "wallbox", "zu hause"]
+    seen = set()
+    out = []
+    for h in base + fixed:
+        if h and h not in seen:
+            seen.add(h)
+            out.append(h)
+    return out
 
 
 def _is_home_address(geofence, address):
     """True, wenn eine TeslaMate-Ladung an einer Zuhause-Adresse stattfand.
     Diese Ladungen sind IDENTISCH mit den EVCC-Ladungen (doppeltes Tracking)
-    und duerfen NICHT als extern gezaehlt/addiert werden."""
+    und duerfen NICHT als extern gezaehlt/addiert werden.
+
+    Erkennung ueber:
+      - Geofence-Namen 'Zuhause'/'Home'/'Garage'/'Wallbox' (automatisch)
+      - home_addresses aus der Config (Substring-Match auf Geofence+Adresse)
+    """
+    geo = (geofence or "").strip().lower()
+    # Geofence-Namen direkt als Zuhause erkennen (unabhaengig von Config)
+    if geo in ("zuhause", "home", "garage", "wallbox", "zu hause"):
+        return True
     text = f"{geofence or ''} {address or ''}".lower()
     return any(h in text for h in _home_addresses())
 
@@ -817,6 +840,15 @@ def sync_teslamate():
                 """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?, energy_used_kwh=?
                    WHERE id=?""",
                 (round(cost_total, 2), round(ppk, 4), energy, energy_used, existing["id"]))
+        # Provider + Label IMMER neu ableiten (auch bei bestehenden Saetzen),
+        # damit Aenderungen an home_addresses / Geofence-Erkennung sofort
+        # alle historischen Ladungen korrekt als Zuhause markieren.
+        new_provider = _detect_provider(s.get("geofence"), s.get("address"))
+        new_label = _location_label(s.get("geofence"), s.get("address"))
+        if new_provider != existing.get("provider") or new_label != existing.get("address"):
+            db.execute(
+                """UPDATE external_sessions SET provider=?, address=? WHERE id=?""",
+                (new_provider, new_label, existing["id"]))
     db.commit()
     return {"inserted": inserted, "fetched": len(sessions)}
 
