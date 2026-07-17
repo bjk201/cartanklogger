@@ -1,20 +1,32 @@
+# CarTankLogger – Portainer-Stack (Quelle: Git Repository)
+#
+# So einrichten in Portainer:
+#   1) Stacks -> Add stack -> Repository (Git)
+#   2) Repository URL: https://github.com/bjk201/cartanklogger.git
+#   3) (optional) Authentication: dein GitHub-Token (Read-only reicht)
+#   4) Compose path: docker-compose.yml
+#   5) Deploy
+#   -> Bei jedem "Update" pulled Portainer den neuen Code, baut neu, recreatet.
+#
+# WICHTIG zur Datenhaltung:
+#   - /root/cartanklogger/data  ist deine BESTEHENDE Datenbank -> wird 1:1 gemountet
+#     (nichts wird ueberschrieben beim Recreate)
+#   - /root/cartanklogger/config.yaml  sind deine Verbindungseinstellungen
+#   - PASSE DIE PFAGE AN, falls dein Repo nicht unter /root/cartanklogger liegt!
+
 services:
   cartanklogger:
-    image: cartanklogger:latest   # wird via 'docker build -t cartanklogger:latest .' gebaut
-    container_name: cartanklogger
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cartanklogger:latest
     ports:
       - "13131:5000"
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./data:/app/data
+      - /root/cartanklogger/data:/app/data
+      - /root/cartanklogger/config.yaml:/app/config.yaml
     environment:
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=${MOCK_MODE:-false}
-    # EVCC läuft bei dir in einem eigenen LXC (eigene LAN-IP, NICHT Docker).
-    # Deshalb ist KEIN gemeinsames Docker-Netz ("home-net") nötig:
-    #   - gib in der Web-Oberfläche (Admin) einfach die LAN-IP deines EVCC
-    #     ein, z.B. http-Host: 192.168.1.x , Port 7070
-    #   - TeslaMate: falls als Docker-Container erreichbar, dessen Container-Name
-    #     oder LAN-IP eintragen (z.B. http://192.168.1.y:4000/api)
     restart: unless-stopped
