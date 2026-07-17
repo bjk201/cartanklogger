@@ -13,7 +13,7 @@ import json
 import sqlite3
 import requests
 from datetime import datetime, date, timedelta
-from flask import Flask, render_template, jsonify, request, g
+from flask import Flask, render_template, jsonify, request, g, session
 
 try:
     import yaml
@@ -105,12 +105,12 @@ app.secret_key = _resolve_secret_key()
 
 
 def csrf_token():
-    """Erzeugt/liest ein CSRF-Token aus der Flask-Session (HMAC ueber Secret)."""
-    sess = getattr(g, "csrf_token_value", None)
-    if sess is None:
-        sess = secrets.token_hex(32)
-        g.csrf_token_value = sess
-    return sess
+    """Liefert das CSRF-Token aus der Flask-Session (persistent pro Browser-Cookie)."""
+    token = session.get("csrf_token_value")
+    if not token:
+        token = secrets.token_hex(32)
+        session["csrf_token_value"] = token
+    return token
 
 
 def csrf_protect():
@@ -123,19 +123,17 @@ def csrf_protect():
         token = request.form.get("csrf_token")
     if not token:
         return jsonify({"ok": False, "error": "CSRF-Token fehlt"}), 403
-    if not hmac.compare_digest(token, (g.csrf_token_value if hasattr(g, "csrf_token_value") else "")):
-        # Fallback: vergleiche mit frisch generiertem (Session-basiert).
-        expected = csrf_token()
-        if not hmac.compare_digest(token, expected):
-            return jsonify({"ok": False, "error": "CSRF-Token ungueltig"}), 403
+    expected = csrf_token()
+    if not hmac.compare_digest(token, expected):
+        return jsonify({"ok": False, "error": "CSRF-Token ungueltig"}), 403
 
 
 # Vor jedem Request sicherstellen, dass ein Token in der Session liegt,
 # und bei schreibenden Requests (POST/PUT/DELETE) das CSRF-Token pruefen.
 @app.before_request
 def _ensure_csrf():
-    if "csrf_token_value" not in g:
-        g.csrf_token_value = csrf_token()
+    # Token in der Session bereitstellen (fuer GET /api/csrf und spaetere POSTs).
+    csrf_token()
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         err = csrf_protect()
         if err is not None:
@@ -713,25 +711,30 @@ def _mock_evcc_sessions():
 
 
 def _mock_teslamate_sessions():
+    """Liefert Beispiel-Sessions im Format der TeslaMate-REST-API
+    (teslamateapi /cars/<id>/charges), passend zu sync_teslamate()."""
     base = datetime.now() - timedelta(days=100)
     out = []
     for i in range(6):
         started = base + timedelta(days=i * 18, hours=5)
         is_sc = i % 2 == 0
+        addr = "Tesla Supercharger München" if is_sc else "A8 Tank & Rast"
+        energy = round(45 + (i % 3) * 10, 1)
         out.append({
-            "id": 500 + i,
-            "startDate": started.isoformat() + "Z",
-            "endDate": (started + timedelta(hours=1)).isoformat() + "Z",
+            "charge_id": 500 + i,
+            "start_date": started.isoformat() + "Z",
+            "end_date": (started + timedelta(hours=1)).isoformat() + "Z",
             "odometer": 42500 + i * 2900,
-            "chargeEnergyAdded": round(45 + (i % 3) * 10, 1),
-            "address": "A8 Tank & Rast" if not is_sc else "Tesla Supercharger München",
+            "charge_energy_added": energy,
+            "charge_energy_used": round(energy * 1.08, 1),
+            "address": addr,
             "latitude": 48.1 + i * 0.01,
             "longitude": 11.5 + i * 0.01,
             "geofence": "Supercharger München" if is_sc else "A8 Rastplatz",
             "cost": round(18 + i * 2, 2) if is_sc else 0.0,
-            "durationMin": 55,
-            "startBatteryLevel": 20,
-            "endBatteryLevel": 80,
+            "duration_min": 55,
+            "start_battery_level": 20,
+            "end_battery_level": 80,
         })
     return out
 
@@ -1424,9 +1427,14 @@ def api_roadtrip():
     day_stations = defaultdict(set)
     day_pins = defaultdict(list)
 
-    # Ladestationen basierend auf Dummy-EVCC-Eintrag (nur zur Erkennung der Stationen für die UI)
-    day_stations[day].add("Wallbox")
+    # EVCC (Zuhause) Tage einsammeln
+    for e in evcc:
+        day = (e.get("created") or "")[:10]
+        day_kwh[day] += float(e.get("charged_kwh") or 0)
+        day_cost[day] += float(e.get("total_cost") or 0)
+        day_stations[day].add("Wallbox")
 
+    # TeslaMate Ladestopps (extern + ggf. Zuhause) sammeln
     for t in tm:
         day = (t.get("started_at") or "")[:10]
         addr = t.get("address") or "?"
