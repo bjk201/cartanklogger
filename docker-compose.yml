@@ -1,31 +1,20 @@
-# Derzeit nur der minimale `docker-compose.yml`-Einstiegspunkt – keine Image-Referenzen für evcc/teslamate.
-# Verwenden Sie nur den CartankLogger-Container, der bereits die vollständige Bearbeitungs-/CSRF-Backend-Funktionalität enthält.
-# Verwenden Sie die `.env`-Datei für optionale Umgebungsvariablen wie MOCK_MODE, SECRET_KEY, TZ usw.
-
-version: "3.9"
-
 services:
   cartanklogger:
-    build: .
+    image: cartanklogger:latest   # wird via 'docker build -t cartanklogger:latest .' gebaut
     container_name: cartanklogger
     ports:
       - "13131:5000"
     volumes:
+      - ./config.yaml:/app/config.yaml
       - ./data:/app/data
     environment:
-      # App-Konfiguration – Werte werden aus .env bezogen, falls vorhanden
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=${MOCK_MODE:-false}
-      - TZ=${TZ:-Europe/Berlin}
-      - SECRET_KEY=${SECRET_KEY:-}
+    # EVCC läuft bei dir in einem eigenen LXC (eigene LAN-IP, NICHT Docker).
+    # Deshalb ist KEIN gemeinsames Docker-Netz ("home-net") nötig:
+    #   - gib in der Web-Oberfläche (Admin) einfach die LAN-IP deines EVCC
+    #     ein, z.B. http-Host: 192.168.1.x , Port 7070
+    #   - TeslaMate: falls als Docker-Container erreichbar, dessen Container-Name
+    #     oder LAN-IP eintragen (z.B. http://192.168.1.y:4000/api)
     restart: unless-stopped
-    networks:
-      - internal
-
-volumes:
-  cartanklogger_data:
-
-networks:
-  internal:
-    driver: bridge
