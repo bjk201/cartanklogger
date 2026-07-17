@@ -1,0 +1,39 @@
+# CarTankLogger – Beispiel-Konfiguration
+# Kopiere diese Datei zu config.yaml und passe die Werte an deine Umgebung an.
+# config.yaml ist in .gitignore und wird NICHT versioniert (enthält ggf. lokale IPs).
+
+evcc:
+  host: evcc            # Container-Name oder Hostname von EVCC im Docker-Netzwerk
+  port: 7070
+  password: ""          # EVCC Admin-Passwort (falls gesetzt)
+  api_token: ""         # Alternativ: EVCC API-Token
+  use_tls: false
+
+teslamate:
+  url: http://teslamate:4000/api   # TeslaMate GraphQL-API-Endpoint
+  api_token: ""        # TeslaMate API-Token (falls abgesichert)
+
+app:
+  mock_mode: false
+  auto_sync_minutes: 0  # 0 = aus; sonst Intervall in Minuten
+  currency: EUR
+  vehicle_name: Mein EV
+  # Adressen (Substring, case-insensitiv), die als "Zuhause" gelten.
+  # TeslaMate trackt diese Ladungen ebenfalls (= dieselben wie EVCC),
+  # daher werden sie NICHT als extern gezaehlt und NICHT zur Energie addiert.
+  # Beispiel: [zuhause, garage, wallbox]
+  home_addresses: []
+  # --- Datenschutz-Optionen (Default: maximal datensparsam) ---
+  # Roh-Payloads (komplette API-Antworten) speichern? false = nur Felder, die
+  # die App braucht. Empfohlen false (verhindert Speicherung von GPS/Adressen).
+  store_raw_payloads: false
+  # Exakte GPS-Koordinaten + echte Adressen speichern? false = nur Provider/
+  # Standorttyp (z.B. "Tesla Supercharger", "Oeffentliche Ladestation").
+  store_exact_locations: false
+  # Adress-Labels ueberhaupt speichern (anonymisiert)? true = Labels erlaubt,
+  # aber nie exakte Strasse/Hausnummer.
+  store_address_labels: true
+
+pricing_defaults:
+  grid_price_per_kwh: 0.32    # Netzbezugspreis (€/kWh)
+  feedin_price_per_kwh: 0.08  # Einspeiseverguetung (€/kWh)

@@ -1,18 +1,19 @@
-# CarTankLogger – Portainer-Stack (Quelle: Git Repository)
+# CarTankLogger – Docker Compose (Portainer-Stack via Git Repository)
 #
 # So einrichten in Portainer:
 #   1) Stacks -> Add stack -> Repository (Git)
 #   2) Repository URL: https://github.com/bjk201/cartanklogger.git
-#   3) (optional) Authentication: dein GitHub-Token (Read-only reicht)
+#   3) (optional) Authentication: GitHub-Token (Read-only reicht)
 #   4) Compose path: docker-compose.yml
 #   5) Deploy
 #   -> Bei jedem "Update" pulled Portainer den neuen Code, baut neu, recreatet.
 #
 # WICHTIG zur Datenhaltung:
-#   - /root/cartanklogger/data  ist deine BESTEHENDE Datenbank -> wird 1:1 gemountet
-#     (nichts wird ueberschrieben beim Recreate)
-#   - /root/cartanklogger/config.yaml  sind deine Verbindungseinstellungen
-#   - PASSE DIE PFAGE AN, falls dein Repo nicht unter /root/cartanklogger liegt!
+#   - ./data  ist deine PERSISTENTE Datenbank (SQLite) -> wird 1:1 gemountet.
+#     Beim Recreate wird nichts ueberschrieben.
+#   - ./config.yaml  sind deine Verbindungseinstellungen (siehe config.example.yaml).
+#     Lege sie lokal an; sie ist in .gitignore und verlaesst deinen Rechner nicht.
+#   - Passe die Pfade ggf. an dein Arbeitsverzeichnis an (relativ zum Compose-File).
 
 services:
   cartanklogger:
@@ -27,8 +28,8 @@ services:
     ports:
       - "13131:5000"
     volumes:
-      - /root/cartanklogger/data:/app/data
-      - /root/cartanklogger/config.yaml:/app/config.yaml
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml
     environment:
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/cartanklogger.db

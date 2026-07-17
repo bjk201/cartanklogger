@@ -62,6 +62,10 @@ def load_config():
             "auto_sync_minutes": 0,  # 0 = aus
             "currency": "EUR",
             "vehicle_name": "Mein EV",
+            # Datenschutz-Defaults: maximal datensparsam (public-repo-tauglich)
+            "store_raw_payloads": False,    # keine kompletten API-Payloads speichern
+            "store_exact_locations": False,  # keine GPS-Koordinaten / exakten Adressen
+            "store_address_labels": True,    # anonymisierte Labels erlaubt
         },
         "pricing_defaults": {
             "grid_price_per_kwh": 0.32,   # Netzbezugspreis (€/kWh)
@@ -83,6 +87,48 @@ def load_config():
             app.logger.warning(f"Konfig konnte nicht gelesen werden: {e}")
     cfg["app"]["mock_mode"] = MOCK_MODE if MOCK_MODE is not None else cfg["app"].get("mock_mode", False)
     return cfg
+
+
+# --- Datenschutz-Helfer (zentral, von Sync + API genutzt) -------------------
+def _privacy():
+    """Liefert die Datenschutz-Optionen aus der App-Config (Default: sparsam)."""
+    a = config.get("app", {})
+    return {
+        "store_raw_payloads": bool(a.get("store_raw_payloads", False)),
+        "store_exact_locations": bool(a.get("store_exact_locations", False)),
+        "store_address_labels": bool(a.get("store_address_labels", True)),
+    }
+
+
+def _location_label(geofence, address):
+    """Anonymisiertes Standort-Label fuer die API/Ausgabe.
+
+    - store_address_labels=False: immer nur Provider/Standorttyp
+      ("Zuhause" / "Tesla Supercharger" / "Oeffentliche Ladestation")
+    - store_address_labels=True: zusaetzlich Geofence/Label, aber NIE
+      die rohe Adresse mit Strasse/Hausnummer (sofern nicht als Zuhause erkannt).
+    Liefert KEINEN exakten Strassennamen zurueck.
+    """
+    priv = _privacy()
+    text = f"{geofence or ''} {address or ''}".strip()
+    if _is_home_address(geofence, address):
+        return "Zuhause"
+    if "supercharger" in text.lower():
+        return "Tesla Supercharger"
+    if not priv["store_address_labels"]:
+        return "Oeffentliche Ladestation"
+    # Geofence ist meist eine grobe Kategorie (z.B. "A8 Rastplatz") -> OK als Label
+    if geofence:
+        return str(geofence)
+    return "Oeffentliche Ladestation"
+
+
+def _store_raw():
+    return _privacy()["store_raw_payloads"]
+
+
+def _store_exact_location():
+    return _privacy()["store_exact_locations"]
 
 
 config = load_config()
@@ -493,7 +539,7 @@ class EVCCClient:
 # ---------------------------------------------------------------------------
 class TeslaMateClient:
     def __init__(self, url, token=""):
-        # Basis-URL der teslamateapi, z.B. http://192.168.1.x:8080/api/v1
+        # Basis-URL der teslamateapi, z.B. http://teslamate:4000/api/v1
         self.base = url.rstrip("/")
         if not self.base.endswith("/v1"):
             # falls nur ".../api" oder ".../api/" angegeben wurde
@@ -662,6 +708,12 @@ def sync_teslamate():
         existing = db.execute(
             "SELECT id, manual_price, cost_total FROM external_sessions WHERE teslamate_session_id=?",
             (sid,)).fetchone()
+        # Datenschutz: rohe Payload + exakte GPS-Koordinaten nur speichern, wenn erlaubt
+        raw_val = json.dumps(s, default=str) if _store_raw() else None
+        lat = s.get("latitude") if _store_exact_location() else None
+        lng = s.get("longitude") if _store_exact_location() else None
+        # Adress-Label: immer anonymisiert (nie rohe Strasse/Hausnummer in der API)
+        label = _location_label(s.get("geofence"), s.get("address"))
         if existing is None:
             cur = db.execute(
                 """INSERT OR IGNORE INTO external_sessions
@@ -672,10 +724,10 @@ def sync_teslamate():
                 (
                     sid, started.isoformat(),
                     finished.isoformat() if finished else None,
-                    s.get("geofence") or "", s.get("address") or "",
-                    s.get("latitude"), s.get("longitude"), provider,
+                    s.get("geofence") or "", label,
+                    lat, lng, provider,
                     energy, energy_used, s.get("odometer"),
-                    cost_total, round(ppk, 4), 0, now, json.dumps(s, default=str),
+                    cost_total, round(ppk, 4), 0, now, raw_val,
                 ),
             )
             inserted += cur.rowcount
@@ -722,7 +774,7 @@ def _mock_teslamate_sessions():
     for i in range(6):
         started = base + timedelta(days=i * 18, hours=5)
         is_sc = i % 2 == 0
-        addr = "Tesla Supercharger München" if is_sc else "A8 Tank & Rast"
+        addr = "Tesla Supercharger Beispielstadt" if is_sc else "A8 Tank & Rast"
         energy = round(45 + (i % 3) * 10, 1)
         out.append({
             "charge_id": 500 + i,
@@ -734,7 +786,7 @@ def _mock_teslamate_sessions():
             "address": addr,
             "latitude": 48.1 + i * 0.01,
             "longitude": 11.5 + i * 0.01,
-            "geofence": "Supercharger München" if is_sc else "A8 Rastplatz",
+            "geofence": "Supercharger Beispielstadt" if is_sc else "A8 Rastplatz",
             "cost": round(18 + i * 2, 2) if is_sc else 0.0,
             "duration_min": 55,
             "start_battery_level": 20,
@@ -791,7 +843,7 @@ def build_stats(days=365, from_date=None, to_date=None):
         params = [cutoff, end]
 
     home = db.execute(home_q + " ORDER BY created ASC", params).fetchall()
-    ext_all = db.execute(ext_q + " ORDER BY started_at ASC", params).fetchall()
+    ext_all = [dict(r) for r in db.execute(ext_q + " ORDER BY started_at ASC", params).fetchall()]
     # Diese Ladungen dienen nur als Referenz für Ladeverluste und Zeitwerte; sie werden **nicht** für Energie oder Kosten addiert.
     ext = [r for r in ext_all if not _is_home_address(r["location_name"], r["address"])]
     extras = db.execute(extra_q + " ORDER BY date DESC", params).fetchall()
@@ -855,11 +907,22 @@ def build_stats(days=365, from_date=None, to_date=None):
     # Verbrauch "von der Wand" (brutto): nur EVCC-kWh / gefahrene km.
     # WICHTIG: Externe kWh (Supercharger) NICHT einrechnen, da deren km nicht
     # voll in der odometer-Basis sind -> wuerde Verbrauch kuenstlich aufblaepen.
-    consumption_brutto = (home_kwh / total_dist * 100) if total_dist > 0 else 0
-    # Verbrauch "vom Akku" (netto): brutto abzgl. geschätzter Ladeverluste (~15%).
-    # Das entspricht der Tesla-Anzeige (misst nur Akku).
+    consumption_bruto = (home_kwh / total_dist * 100) if total_dist > 0 else 0
+    # Echter Ladeverlust (Wand zu Akku) aus den Daten: EVCC-Wand-kWh
+    # abzueglich TM-Akku-kWh der Zuhause-Ladungen (falls verfuegbar).
+    tm_home_added = sum(float(r.get("energy_kwh") or 0) for r in ext_all
+                        if _is_home_address(r.get("location_name"), r.get("address")))
+    home_loss = (home_kwh - tm_home_added) if (tm_home_added > 0 and home_kwh > tm_home_added) else 0.0
+    # Verbrauch "vom Akku" (netto): bevorzugt echte Wand-zu-Akku-Daten,
+    # sonst Schaetzung mit 15% Ladeverlust (klar als Schaetzung markiert).
     LOSS_FACTOR = 0.15
-    consumption_netto = consumption_brutto * (1 - LOSS_FACTOR) if consumption_brutto else 0
+    netto_is_estimate = True
+    if home_loss > 0 and consumption_bruto > 0:
+        real_netto = consumption_bruto * (1 - (home_loss / home_kwh if home_kwh > 0 else LOSS_FACTOR))
+        consumption_netto = real_netto if real_netto > 0 else consumption_bruto * (1 - LOSS_FACTOR)
+        netto_is_estimate = False
+    else:
+        consumption_netto = consumption_bruto * (1 - LOSS_FACTOR) if consumption_bruto else 0
 
     # Monatliche Aggregate
     monthly = {}
@@ -903,14 +966,21 @@ def build_stats(days=365, from_date=None, to_date=None):
         },
         "totals": {
             "kwh": round(total_kwh, 2),
+            "home_kwh": round(home_kwh, 2),
+            "ext_kwh": round(ext_kwh, 2),
+            "cost_home": round(home_cost, 2),
+            "cost_external": round(ext_cost, 2),
             "cost_home_and_external": round(home_cost + ext_cost, 2),
             "cost_extra": round(extra_total, 2),
+            "tco_without_extras": round(home_cost + ext_cost, 2),
+            "tco_with_extras": round(home_cost + ext_cost + extra_total, 2),
             "tco": round(tco, 2),
             "tco_per_100km": round(tco_per_100km, 2),
             "distance_km": round(_total_km_odo, 1),
             "cost_per_km": round(cost_per_km, 3),
-            "consumption_kwh_per_100km": round(consumption_brutto, 2),
+            "consumption_kwh_per_100km": round(consumption_bruto, 2),
             "consumption_net_kwh_per_100km": round(consumption_netto, 2),
+            "netto_is_estimate": netto_is_estimate,
         },
         "monthly": monthly_list,
     }
@@ -1025,7 +1095,18 @@ def api_sessions():
     for r in home:
         c = compute_home_cost_row(r)
         r.update(c)
+        # Datenschutz: keine Rohdaten/Payload im JSON
+        r["raw"] = None
+        r["has_raw"] = bool(r.get("raw"))
     ext = [dict(r) for r in db.execute("SELECT * FROM external_sessions ORDER BY started_at DESC")]
+    for r in ext:
+        # Datenschutz: rohe Adresse durch anonymisiertes Label ersetzen,
+        # GPS-Koordinaten entfernen, raw nur als Flag belassen.
+        r["address"] = _location_label(r.get("location_name"), r.get("address"))
+        r["latitude"] = None
+        r["longitude"] = None
+        r["has_raw"] = bool(r.get("raw"))
+        r.pop("raw", None)
     return jsonify({"home": home, "external": ext})
 
 
@@ -1334,8 +1415,8 @@ def api_charts():
         day_odo_end[day] = max(day_odo_end[day], o)
         is_dc = "supercharger" in (t.get("address") or "").lower()
         # TM-Ladungen zaehlen nur zum AC/DC-Anteil, wenn sie EXTERN sind
-        # (Supercharger=DC, andere Fremd=AC). TM-Zuhause (Dammstraße/Garage)
-        # ist dieselbe Ladung wie EVCC -> NICHT nochmal zaehlen (Doppelzaehlung).
+        # (Supercharger=DC, andere Fremd=AC). TM-Zuhause ist dieselbe Ladung
+        # wie EVCC -> NICHT nochmal zaehlen (Doppelzaehlung).
         if not _is_home_address(t.get("address"), t.get("address")):
             if is_dc:
                 day_dc_kwh[day] += kwh
@@ -1517,7 +1598,7 @@ def api_roadtrip():
         "FROM home_sessions ORDER BY created ASC")]
     tm = [dict(r) for r in db.execute(
         "SELECT started_at, finished_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, "
-        "latitude, longitude, address FROM external_sessions ORDER BY started_at ASC")]
+        "latitude, longitude, address, location_name FROM external_sessions ORDER BY started_at ASC")]
 
     from collections import defaultdict
     day_kwh = defaultdict(float)
@@ -1536,15 +1617,19 @@ def api_roadtrip():
     # TeslaMate Ladestopps (extern + ggf. Zuhause) sammeln
     for t in tm:
         day = (t.get("started_at") or "")[:10]
-        addr = t.get("address") or "?"
+        lat = t.get("latitude")
+        lng = t.get("longitude")
+        # Datenschutz: keine exakten GPS-Koordinaten in der API ausgeben.
+        # lat/lng nur dann mitliefern, wenn exakte Locations erlaubt sind.
+        if not _store_exact_location():
+            lat = lng = None
+        addr = _location_label(t.get("location_name"), t.get("address")) or "Ladestopp"
         day_stations[day].add(addr)
         # Verbrauch = vom Akku gezogene Energie (energy_used_kwh), falls vorhanden
         try:
             day_consumed[day] += float(t.get("energy_used_kwh") or 0)
         except Exception:
             pass
-        lat = t.get("latitude")
-        lng = t.get("longitude")
         if lat is not None and lng is not None:
             day_pins[day].append({
                 "lat": lat, "lng": lng, "address": addr,

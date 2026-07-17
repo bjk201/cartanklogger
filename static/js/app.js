@@ -190,7 +190,7 @@ function renderMerged(rows, perDay, totals) {
     }
     if (r.tm_home && r.tm_home.length) {
       for (const t of r.tm_home) {
-        detail += `<li class="text-muted">TeslaMate ${t.address || ""}: added ${fmtKwh(t.added)} / used ${fmtKwh(t.used)} → Verlust ${fmtKwh(t.used - t.added)} (${t.n_frags} Teil-Lad.)</li>`;
+        detail += `<li class="text-muted">TeslaMate ${t.label || t.address || ""}: added ${fmtKwh(t.added)} / used ${fmtKwh(t.used)} → Verlust ${fmtKwh(t.used - t.added)} (${t.n_frags} Teil-Lad.)</li>`;
       }
     }
     if (!(r.evcc && r.evcc.length) && !(r.tm_home && r.tm_home.length)) detail += "<li>–</li>";
@@ -198,7 +198,7 @@ function renderMerged(rows, perDay, totals) {
     detail += '<strong>🔌 Extern</strong><ul class="mb-0 ps-3">';
     if (r.tm_ext && r.tm_ext.length) {
       for (const t of r.tm_ext) {
-        detail += `<li>${t.address || "Extern"} ${t.start ? t.start.slice(11,16) : ""}–${t.end ? t.end.slice(11,16) : ""}: ${fmtKwh(t.added)} · ${fmtEUR(t.cost)} (${t.n_frags} Teil-Lad.)</li>`;
+        detail += `<li>${t.label || t.address || "Extern"} ${t.start ? t.start.slice(11,16) : ""}–${t.end ? t.end.slice(11,16) : ""}: ${fmtKwh(t.added)} · ${fmtEUR(t.cost)} (${t.n_frags} Teil-Lad.)</li>`;
       }
     } else {
       detail += "<li>–</li>";
@@ -206,7 +206,7 @@ function renderMerged(rows, perDay, totals) {
     detail += "</ul></div></div>";
 
     const stationBadges = (r.stations || []).map(s => {
-      const isExt = !/garage|dammstr/i.test(s);
+      const isExt = !/zuhause/i.test(s);
       return `<span class="badge ${isExt ? 'bg-warning text-dark' : 'bg-success'} me-1">${s}</span>`;
     }).join("");
 
@@ -358,7 +358,7 @@ async function openEdit(type, id) {
   if (row.manually_edited) flags.push("manuell bearbeitet");
   else flags.push("importiert");
   if (row.updated_at) flags.push(`geändert am ${toLocalInput(row.updated_at).replace("T"," ")}`);
-  if (row.raw) flags.push("Original-Rohdaten erhalten");
+  if (row.has_raw) flags.push("Original-Rohdaten erhalten");
   meta.innerHTML = flags.join(" · ");
 
   document.getElementById("editDrawerError").classList.add("d-none");
@@ -510,6 +510,17 @@ function renderStats(data) {
     kpiStat("💡 Ø Kosten", `${fmtEUR(k.avg_cost_100)}/100km`),
     kpiStat("🌱 CO₂", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
   ].join("");
+
+  // Home vs. External + TCO-Kacheln
+  const t = data.totals || {};
+  const tcoExtras = t.tco_with_extras ?? (t.cost_home_and_external + t.cost_extra);
+  const tcoNoExtras = t.tco_without_extras ?? t.cost_home_and_external;
+  document.getElementById("statsSecondary").insertAdjacentHTML("afterbegin", [
+    kpiStat("🏠 Zuhause geladen", `${t.home_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`, `${t.cost_home ? fmtEUR(t.cost_home) : "–"}`),
+    kpiStat("🔌 Extern geladen", `${t.ext_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`, `${t.cost_external ? fmtEUR(t.cost_external) : "–"}`),
+    kpiStat("🚗 TCO (ohne Extras)", fmtEUR(tcoNoExtras)),
+    kpiStat("📊 TCO (mit Extras)", fmtEUR(tcoExtras), `inkl. ${fmtEUR(t.cost_extra)} Nebenkosten`),
+  ].join(""));
 
   // 4 Graphen (Tageswerte)
   drawStatChart("chartCons", labels, s.map(d => d.consumption), "#198754", "kWh/100km", 1);

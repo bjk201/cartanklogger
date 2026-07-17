@@ -70,17 +70,19 @@ docker network connect home-net teslamate
 
 ### 4. Verbindung in config.yaml prüfen/anpassen
 
+Kopiere `config.example.yaml` zu `config.yaml` und passe die Werte an:
+
 ```yaml
 evcc:
-  host: evcc            # Container-Name von EVCC (auf home-net)
+  host: evcc            # Container-Name von EVCC im Docker-Netzwerk
   port: 7070
   password: ""          # EVCC Admin-Passwort
 teslamate:
   url: http://teslamate:4000/api   # GraphQL-Endpoint
 ```
 
-Falls dein EVCC-Container anders heißt, hier eintragen (oder später in der
-Web-UI unter *Verwaltung → Verbindung*).
+> Die Containernamen findest du mit `docker ps`. Sie müssen exakt zu den
+> Hostnamen in `config.yaml` passen (siehe oben).
 
 ### 5. Starten
 
@@ -92,17 +94,10 @@ docker compose up -d --build
 
 Die App lauscht im Container auf Port 5000, nach außen auf **13131**:
 
-```
-http://<LXC-IP>:13131
-```
-
-LXC-IP herausfinden:
-
 ```bash
-ip -4 addr show eth0   # bzw. die verwendete Schnittstelle
+http://<host>:13131
 ```
 
-Öffne diese URL im Browser deines Macs (oder jedem Gerät im Heimnetz).
 Erster Start → in der Web-UI *Verwaltung → Testdaten einspielen* (optional zum
 Ausprobieren) oder sofort *Daten abrufen → Alle synchronisieren*.
 
@@ -157,6 +152,23 @@ Beispiel-Sitzungen + Extra-Kosten.
 | `/api/extra-costs` | GET/POST/DELETE | Nebenkosten |
 | `/api/config` | GET/POST | Verbindungs-Einstellungen |
 | `/api/debug/evcc` | GET | rohes EVCC-Sample (Feld-Check) |
+
+## Datenschutz & Konfiguration
+
+`config.yaml` ist in `.gitignore` und wird **nicht** versioniert (kann lokale
+IPs/Tokens enthalten). Nutze `config.example.yaml` als Vorlage.
+
+Datenschutz-Optionen in `config.yaml` (Abschnitt `app`):
+
+| Option | Default | Wirkung |
+|--------|---------|---------|
+| `store_raw_payloads` | `false` | Speichert **keine** kompletten API-Antworten (Rohdaten) in der DB |
+| `store_exact_locations` | `false` | Speichert **keine** GPS-Koordinaten / exakten Adressen |
+| `store_address_labels` | `true` | Erlaubt anonymisierte Standort-Labels (z. B. „Tesla Supercharger") |
+
+Die App liefert in der API **niemals** `raw`, `latitude`, `longitude` oder
+exakte Adressen aus – nur anonymisierte Kategorien (Provider/Standorttyp).
+Das schützt die Privatsphäre, auch wenn das Dashboard im Browser offen ist.
 
 ## Technisches
 

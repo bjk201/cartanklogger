@@ -8,20 +8,24 @@ from datetime import datetime
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yaml")
 DB_PATH = os.environ.get("DB_PATH", "/app/data/cartanklogger.db")
 
-# Hilfsfunktion für einen stabilen Secret-Schlüssel (also Funktion innerhalb von db.py)
-def _resolve_secret_key(config):
+# Hilfsfunktion für einen stabilen Secret-Schlüssel (aus app.py importiert)
+def _resolve_secret_key(config=None):
     env = os.environ.get("SECRET_KEY")
     if env:
         return env
-    cfg_secret = (config.get("app") or {}).get("secret_key")
-    if cfg_secret:
-        return str(cfg_secret)
+    if config:
+        cfg_secret = (config.get("app") or {}).get("secret_key")
+        if cfg_secret:
+            return str(cfg_secret)
+    # Stabiler Fallback: Hash ueber DB-Pfad (aendert sich nicht pro Restart).
     return hashlib.sha256(DB_PATH.encode("utf-8")).hexdigest()
 
-# Importieren Sie die Config später in app.py (gestohlene Funktion)
-def load_config():
-    # Diese Funktion befindet sich jetzt in app.py -> wir müssen sie kopieren oder importieren
-    pass
+
+def load_config_stub():
+    """Minimaler Config-Fallback fuer db.py (ohne yaml-Abhaengigkeit).
+    Die vollstaendige Config kommt aus app.py; hier nur, falls db.py
+    eigenstaendig genutzt wird."""
+    return {"app": {}}
 
 # ----------------------------------------
 # Migrationen: DB_COLUMNS hinzufügen
