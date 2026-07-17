@@ -7,3 +7,8 @@ config.yaml
 *.db
 *.sqlite
 .env
+node_modules
+__pycache__
+*.pyc
+.git
+.venv

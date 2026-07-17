@@ -9,3 +9,7 @@ data/*.db
 sentry/.venv/
 .venv/
 data/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
