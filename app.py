@@ -34,6 +34,18 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 # ---------------------------------------------------------------------------
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yaml")
 DB_PATH = os.environ.get("DB_PATH", "/app/data/cartanklogger.db")
+# Sicherstellen, dass die DB IMMER unter dem gemounteten /app/data liegt.
+# Wenn DB_PATH ausserhalb von /app/data zeigt (nicht gemountet), landen die
+# Daten im ephemeralen Container-Layer und gehen beim Recreate verloren.
+# Daher: falls DB_PATH nicht unter /app/data liegt, verschieben wir sie dorthin.
+import os as _os
+if not DB_PATH.startswith("/app/data/"):
+    _fallback = "/app/data/cartanklogger.db"
+    if DB_PATH != _fallback:
+        app.logger.warning(
+            f"DB_PATH={DB_PATH} liegt NICHT unter /app/data (nicht gemountet). "
+            f"Daten wahren beim Recreate verloren! Nutze {_fallback}.")
+        DB_PATH = _fallback
 _env_mock = os.environ.get("MOCK_MODE")
 MOCK_MODE = _env_mock.lower() in ("1", "true", "yes") if _env_mock is not None else None
 
@@ -1115,9 +1127,35 @@ def api_version():
     })
 
 
-@app.route("/admin")
-def admin():
-    return render_template("admin.html", mock=mock_mode())
+@app.route("/api/debug/db")
+def api_debug_db():
+    """Diagnose: zeigt, welche Datenbank die App tatsaechlich nutzt.
+
+    Hilft, wenn 'alte Daten' angezeigt werden oder Loeschen nicht
+    persistiert – meistens weil DB_PATH auf eine andere Datei zeigt als
+    der gemountete ./data-Ordner.
+    """
+    import os as _os
+    info = {
+        "DB_PATH": DB_PATH,
+        "db_exists": _os.path.exists(DB_PATH),
+        "db_size_bytes": _os.path.getsize(DB_PATH) if _os.path.exists(DB_PATH) else 0,
+        "db_writable": (lambda p: _os.access(_os.path.dirname(p) or ".", _os.W_OK) if _os.path.dirname(p) else False)(DB_PATH),
+        "data_dir": _os.path.dirname(DB_PATH),
+        "data_dir_exists": _os.path.isdir(_os.path.dirname(DB_PATH) or "."),
+        "data_dir_writable": _os.access(_os.path.dirname(DB_PATH) or ".", _os.W_OK) if _os.path.dirname(DB_PATH) else False,
+    }
+    try:
+        db = get_db()
+        info["home_sessions"] = db.execute("SELECT COUNT(*) AS c FROM home_sessions").fetchone()["c"]
+        info["external_sessions"] = db.execute("SELECT COUNT(*) AS c FROM external_sessions").fetchone()["c"]
+        info["price_periods"] = db.execute("SELECT COUNT(*) AS c FROM price_periods").fetchone()["c"]
+        info["extra_costs"] = db.execute("SELECT COUNT(*) AS c FROM extra_costs").fetchone()["c"]
+    except Exception as e:
+        info["error"] = str(e)
+    return jsonify(info)
+
+
 
 
 # ---------------------------------------------------------------------------
