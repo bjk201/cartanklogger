@@ -1184,13 +1184,24 @@ def api_version():
     """Sichtbare Versionsinfo, damit der User sofort sieht, welche
     App-Version im Browser laeuft (Cache-Buster-Kontrolle)."""
     av = os.environ.get("APP_VERSION", "unknown")
+    commit = "n/a"
+    # 1) zur Build-Zeit geschriebene Datei (zuverlaessig, auch ohne .git im Image)
     try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BUILD_COMMIT")
+        if os.path.exists(p):
+            with open(p) as f:
+                commit = f.read().strip() or "n/a"
     except Exception:
-        commit = "n/a"
+        pass
+    # 2) Fallback: live aus git (falls .git im Container vorhanden)
+    if commit == "n/a":
+        try:
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL
+            ).decode().strip() or "n/a"
+        except Exception:
+            commit = "n/a"
     return jsonify({
         "app_version": av,
         "commit": commit,

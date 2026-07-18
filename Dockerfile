@@ -29,6 +29,9 @@ ENV MOCK_MODE=false
 # neuen Image -> Browser holt nach Deploy zwingend die neue app.js (kein Cache).
 ARG BUILD_TIME=unknown
 ENV APP_VERSION=${BUILD_TIME}
+
+# Commit-Hash waehrend des Builds einfangen (git ist im Build-Kontext vorhanden)
+RUN (git rev-parse --short HEAD 2>/dev/null || echo "n/a") > /app/BUILD_COMMIT || true
 EXPOSE 5000
 
 ENTRYPOINT ["/app/entrypoint.sh"]

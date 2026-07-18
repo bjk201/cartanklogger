@@ -165,10 +165,12 @@ const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",curr
 // --- CSRF: Token laden + fetch-Helfer, der das Token mitsendet ---
 let _csrf = "";
 async function ensureCsrf() {
-  if (_csrf) return _csrf;
+  // Token IMMER frisch aus /api/csrf holen (Session-Cookie wird mitgesendet).
+  // Ein gecachtes Token kann bei Session-Wechsel (z.B. nach Container-Restart)
+  // ungueltig sein -> alle POST/PUT/DELETE wuerden mit 403 fehlschlagen.
   try { const d = await (await fetch("/api/csrf")).json(); _csrf = d.csrf_token; }
   catch (e) { _csrf = document.querySelector('meta[name="csrf-token"]')?.content || ""; }
-  document.querySelector('meta[name="csrf-token"]').content = _csrf;
+  if (_csrf) document.querySelector('meta[name="csrf-token"]').content = _csrf;
   return _csrf;
 }
 async function csrfFetch(url, opts = {}) {
@@ -177,7 +179,15 @@ async function csrfFetch(url, opts = {}) {
     "Content-Type": "application/json",
     "X-CSRFToken": _csrf,
   });
-  return fetch(url, opts);
+  let res = await fetch(url, opts);
+  // Bei CSRF-403: einmalig Token erneuern und erneut versuchen
+  if (res.status === 403 && (await res.clone().json().catch(()=>({}))).error?.includes("CSRF")) {
+    _csrf = "";
+    await ensureCsrf();
+    opts.headers["X-CSRFToken"] = _csrf;
+    res = await fetch(url, opts);
+  }
+  return res;
 }
 
 async function loadCfg() {
@@ -403,8 +413,28 @@ $("extDelete").onclick = async () => {
   loadExtPrices();
 };
 
-async function loadAll(){ await loadPrices(); await loadExtras(); await loadExtPrices(); }
-loadCfg(); loadAll();
+async function loadAll(){
+  try { await loadPrices(); } catch(e){ console.error("loadPrices", e); }
+  try { await loadExtras(); } catch(e){ console.error("loadExtras", e); }
+  try { await loadExtPrices(); } catch(e){ console.error("loadExtPrices", e); }
+}
+
+// Beim Laden: Config + Tabellen fuellen. DOMContentLoaded abwarten, damit
+// die Elemente existieren. Retry, falls ein Fetch anfangs fehlschlaegt.
+async function initAdmin(){
+  try { await loadCfg(); } catch(e){ console.error("loadCfg", e); }
+  await loadAll();
+  // Sicherheits-Retry: falls beim ersten Mal noch nichts da war
+  setTimeout(async () => {
+    const t = $("tblPrices")?.querySelector("tbody");
+    if (t && t.children.length === 0) await loadAll();
+  }, 800);
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAdmin);
+} else {
+  initAdmin();
+}
 </script>
 
 <!-- Preisperiode bearbeiten -->
