@@ -2520,6 +2520,33 @@ def api_debug_evcc():
     return jsonify(data[:3] if isinstance(data, list) else data)
 
 
+@app.route("/api/debug/teslamate")
+def api_debug_teslamate():
+    """Rohe TeslaMate-Sessions (zeigt geofence/address, die TM wirklich liefert).
+    Damit der Nutzer sehen kann, warum eine Ladung als 'Oeffentliche Ladestation'
+    (Default) gelabelt wird statt als Zuhause."""
+    tm = config["teslamate"]
+    client = TeslaMateClient(tm["url"], tm.get("api_token", ""))
+    try:
+        sessions = client.get_charging_sessions()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+    # Nur die Felder zeigen, die fuer die Klassifizierung relevant sind
+    out = []
+    for s in sessions[:20]:
+        geo = s.get("geofence")
+        addr = s.get("address")
+        out.append({
+            "charge_id": s.get("charge_id"),
+            "geofence": geo,
+            "address": addr,
+            "erkannt_als": _detect_provider(geo, addr),
+            "label_wird": _location_label(geo, addr),
+            "ist_zuhause": _is_home_address(geo, addr),
+        })
+    return jsonify(out)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
