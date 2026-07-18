@@ -158,12 +158,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Script block steht ABSICHTLICH AM ENDE (nach allen Modals), damit alle
-     Elemente (#priceSave, #extSave, #extDelete ...) beim Ausfuehren existieren.
-     Vorher stand der Block vor den Modals -> $("priceSave") war null ->
-     Script brach ab -> Reset/Extra/Preis-Speichern funktionierten nicht. -->
-
-
+<!-- Script block: alle Admin-Handler. Die Initialisierung (initAdmin) wartet
+     auf DOMContentLoaded, damit alle Elemente (inkl. Modals) existieren.
+     Handler fuer Modal-Buttons (#priceSave/#extSave/#extDelete) nutzen
+     Event-Delegation, damit sie unabhaengig von der DOM-Reihenfolge greifen. -->
+<script>
+const $ = (id) => document.getElementById(id);
 const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 
 // --- CSRF: Token laden + fetch-Helfer, der das Token mitsendet ---

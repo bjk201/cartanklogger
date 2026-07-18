@@ -230,17 +230,28 @@ def _no_cache_all(resp):
     """Keine Cache-Header fuer HTML + API, damit der Browser nach einem
     Deploy/Update immer frische Seiten und Datenbank-Daten zeigt
     (kein 'alte Daten' durch gecachte admin.html / API-Antworten).
-    Ausserdem CORS-Header setzen, damit die App auch dann funktioniert,
-    wenn sie ueber eine andere Origin aufgerufen wird (z.B. localhost vs.
-    IP, Reverse-Proxy, Port-Unterschied) – sonst blockt der Browser die
-    API-Calls mit 'access control checks'."""
+    Ausserdem CORS-Header setzen: die einkommende Origin wird reflektiert
+    (statt fest auf '*'), zusammen mit Allow-Credentials. So funktioniert
+    die App egal, von wo sie geladen wird – Same-Origin, ueber eine andere
+    IP/localhost, einen Reverse-Proxy oder eingebettet in Home Assistant.
+    Ein festes '*' wuerde bei mitgesandtem Session-Cookie (credentials)
+    vom Browser blockt werden."""
     if request.path.startswith("/api/") or request.path in ("/admin", "/"):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
-        resp.headers["Access-Control-Allow-Origin"] = "*"
+        origin = request.headers.get("Origin")
+        if origin:
+            # Einkommende Origin erlauben (CORS erlaubt nur genaue Werte,
+            # kein '*' zusammen mit credentials).
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+        else:
+            # Same-Origin (kein Origin-Header): nichts tun, CORS greift nicht.
+            resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
+        resp.headers["Vary"] = "Origin"
     return resp
 
 
@@ -373,6 +384,7 @@ def init_db(db):
             energy_kwh        REAL,
             energy_used_kwh   REAL,
             odometer_start    REAL,
+            odometer_end      REAL,
             cost_total        REAL,
             price_per_kwh     REAL,
             manual_price      INTEGER DEFAULT 0,
@@ -406,6 +418,8 @@ def init_db(db):
     cols = [r[1] for r in db.execute("PRAGMA table_info(external_sessions)")]
     if "energy_used_kwh" not in cols:
         db.execute("ALTER TABLE external_sessions ADD COLUMN energy_used_kwh REAL")
+    if "odometer_end" not in cols:
+        db.execute("ALTER TABLE external_sessions ADD COLUMN odometer_end REAL")
     # --- Migration: Bearbeitbarkeit / Datenherkunft (Feature "Bearbeiten") ---
     # Neue Spalten duerfen keine bestehenden Daten brechen (DEFAULT-Werte).
     _migrate_columns(db, "home_sessions", {
@@ -870,14 +884,15 @@ def sync_teslamate():
                 """INSERT OR IGNORE INTO external_sessions
                    (teslamate_session_id, started_at, finished_at, location_name, address,
                     latitude, longitude, provider, energy_kwh, energy_used_kwh, odometer_start,
-                    cost_total, price_per_kwh, manual_price, imported_at, raw)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    odometer_end, cost_total, price_per_kwh, manual_price, imported_at, raw)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sid, started.isoformat(),
                     finished.isoformat() if finished else None,
                     s.get("geofence") or "", label,
                     lat, lng, provider,
                     energy, energy_used, s.get("odometer"),
+                    s.get("odometer"),
                     cost_total, round(ppk, 4), 0, now, raw_val,
                 ),
             )
@@ -2096,9 +2111,11 @@ def api_roadtrip():
 
     # km ueber odometer: Gesamt-km = letzter (neuester) Tachostand.
     # EVCC liefert 'odometer' = Tachostand in km (1:1 zum Auto-Tacho).
-    # Wir nehmen den zeitlich LETZTEN erfassten Wert (nicht blind das Maximum),
-    # damit ein einzelner Ausreisser (z.B. 99999 Testdaten) das Ergebnis nicht
-    # verfaelscht. Der letzte Wert = aktuellster Stand des Fahrzeugs.
+    # TeslaMate liefert pro Ladung 'odometer' (= Tachostand beim Laden) -> wir
+    # speichern es in 'odometer_start' UND 'odometer_end' (TM gibt nur einen
+    # Wert pro Charge). Fuer die Tages-Diff nutzen wir den hoeheren der beiden
+    # Werte (odometer_end, fallback odometer_start), damit ein Tag den besten
+    # verfuegbaren Endstand bekommt.
     odo_dated = []
     for e in evcc:
         try:
@@ -2107,7 +2124,8 @@ def api_roadtrip():
             pass
     for t in tm:
         try:
-            odo_dated.append(((t.get("started_at") or "")[:19], float(t.get("odometer_start") or 0)))
+            o = float(t.get("odometer_end") or t.get("odometer_start") or 0)
+            odo_dated.append(((t.get("started_at") or "")[:19], o))
         except Exception:
             pass
     odo_dated = [x for x in odo_dated if x[1] > 0]

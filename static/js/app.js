@@ -99,9 +99,13 @@ function renderCharts(s) {
     options: { plugins: { legend: { position: "bottom" } } }
   });
   // Monthly stacked
-  const m = s.monthly;
+  const m = s.monthly || [];
   if (charts.monthly) charts.monthly.destroy();
-  charts.monthly = new Chart(monEl, {
+  if (!m.length) {
+    // Kein Monats-Aggregat vorhanden -> Chart nicht zeichnen (kein Crash)
+    if (monEl) monEl.innerHTML = '<div class="text-muted small p-2">Keine Monatsdaten verfügbar</div>';
+  } else {
+    charts.monthly = new Chart(monEl, {
     type: "bar",
     data: { labels: m.map(d=>d.month),
       datasets: [
@@ -111,6 +115,7 @@ function renderCharts(s) {
       ]},
     options: { plugins:{legend:{position:"bottom"}}, scales:{ x:{stacked:true}, y:{stacked:true} } }
   });
+  }
 }
 
 function renderHome(rows) {
@@ -186,6 +191,7 @@ function renderMerged(rows, perDay, totals) {
     // Aufklapp-Detail: Zuhause (EVCC einzeln + TM-Zuhause) und Extern getrennt
     let detail = '<div class="row"><div class="col-md-6">';
     detail += '<strong>🏠 Zuhause</strong><ul class="mb-2 ps-3">';
+    const tmHomeKwh = (r.tm_home || []).reduce((a, t) => a + (t.added || 0), 0);
     if (r.evcc && r.evcc.length) {
       for (const e of r.evcc) {
         detail += `<li>EVCC ${e.created ? e.created.slice(11,16) : ""} · ${fmtKwh(e.charged_kwh)} · ${fmtEUR(e.total_cost)} · PV ${fmtPct(e.solar_percentage)}</li>`;
@@ -208,17 +214,28 @@ function renderMerged(rows, perDay, totals) {
     }
     detail += "</ul></div></div>";
 
-    const stationBadges = (r.stations || []).map(s => {
-      const isExt = !/zuhause/i.test(s);
-      return `<span class="badge ${isExt ? 'bg-warning text-dark' : 'bg-success'} me-1">${s}</span>`;
-    }).join("");
+    // Badges: Zuhause + Extern klar getrennt, nur wenn an dem Tag auch wirklich was da ist
+    const stationBadges = [];
+    if ((r.evcc && r.evcc.length) || (r.tm_home && r.tm_home.length)) {
+      stationBadges.push('<span class="badge bg-success me-1">🏠 Zuhause</span>');
+    }
+    if (r.tm_ext && r.tm_ext.length) {
+      const extNames = [...new Set((r.tm_ext || []).map(t => t.label || t.address || "Extern"))];
+      for (const n of extNames) {
+        stationBadges.push(`<span class="badge bg-warning text-dark me-1">🔌 ${n}</span>`);
+      }
+    }
+    const badgeHtml = stationBadges.join(" ") || '<span class="badge bg-secondary">–</span>';
+
+    // Zuhause-kWh fuer die Spalte: EVCC + TM-Zuhause (falls keine EVCC)
+    const homeKwhShown = (r.home_kwh || 0) + (r.tm_home && r.tm_home.length ? tmHomeKwh : 0);
 
     return `<tr>
       <td>${r.day || "–"}</td>
-      <td>${stationBadges}</td>
-      <td>${fmtKwh(r.home_kwh)}</td>
-      <td>${fmtEUR(r.home_cost)}</td>
-      <td>${r.home_kwh > 0 ? fmtPct(r.home_solar_pct) : "–"}</td>
+      <td>${badgeHtml}</td>
+      <td>${fmtKwh(homeKwhShown)}</td>
+      <td>${fmtEUR(r.home_cost || 0)}</td>
+      <td>${homeKwhShown > 0 ? fmtPct(r.home_solar_pct) : "–"}</td>
       <td>${r.home_loss ? fmtKwh(r.home_loss) : "–"}</td>
       <td>${r.ext_kwh > 0 ? fmtKwh(r.ext_kwh) : "–"}</td>
       <td>${r.ext_kwh > 0 ? fmtEUR(r.ext_cost) : "–"}</td>
@@ -255,10 +272,20 @@ function renderExt(rows) {
 
 
 async function renderExtra() {
-  const rows = await (await fetch(`/api/extra-costs`)).json();
   const tb = document.querySelector("#tblExtra tbody");
+  if (!tb) return;
+  let rows = [];
+  try {
+    const r = await fetch(`/api/extra-costs`);
+    if (!r.ok) throw new Error("extra-costs -> " + r.status);
+    rows = await r.json();
+  } catch (e) {
+    console.error("renderExtra fetch fehlgeschlagen:", e);
+    tb.innerHTML = '<tr><td colspan="6" class="text-danger small">Extra-Kosten konnten nicht geladen werden.</td></tr>';
+    return;
+  }
   const labels = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
-  tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
+  tb.innerHTML = (rows || []).map(r => `<tr data-id="${r.id}">
     <td>${r.date||""}</td><td>${labels[r.category]||r.category}</td>
     <td>${r.description||""}</td><td>${fmtEUR(r.amount)}</td>
     <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
