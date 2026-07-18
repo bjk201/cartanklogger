@@ -158,8 +158,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-const $ = (id) => document.getElementById(id);
+<!-- Script block steht ABSICHTLICH AM ENDE (nach allen Modals), damit alle
+     Elemente (#priceSave, #extSave, #extDelete ...) beim Ausfuehren existieren.
+     Vorher stand der Block vor den Modals -> $("priceSave") war null ->
+     Script brach ab -> Reset/Extra/Preis-Speichern funktionierten nicht. -->
+
+
 const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 
 // --- CSRF: Token laden + fetch-Helfer, der das Token mitsendet ---
@@ -269,7 +273,13 @@ function openPriceModal(id) {
   });
 }
 
-$("priceSave").onclick = async () => {
+// Preisperiode speichern – per Event-Delegation (robust, unabhaengig von
+// DOM-Reihenfolge; vorher $("priceSave").onclick = ... brach ab, weil das
+// Script vor dem priceModal im DOM stand -> null.onclick -> Script-Abbruch).
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("#priceSave");
+  if (!btn) return;
+  e.preventDefault();
   const id = $("pp_id").value;
   const body = {
     kind: $("pp_kind_e").value,
@@ -281,7 +291,7 @@ $("priceSave").onclick = async () => {
   await csrfFetch(`/api/price-periods/${id}`, {method:"PUT", body: JSON.stringify(body)});
   bootstrap.Modal.getInstance(document.getElementById("priceModal")).hide();
   loadPrices();
-};
+});
 
 // Liste der Extra-Kosten laden + Loeschen-Buttons binden
 async function loadExtras() {
@@ -391,27 +401,34 @@ function openExtModal(id) {
   });
 }
 
-$("extSave").onclick = async () => {
-  const id = $("ext_id").value;
-  const body = {
-    provider: $("ext_provider").value,
-    location_name: $("ext_location").value,
-    started_at: $("ext_date").value ? $("ext_date").value + "T12:00:00" : null,
-    energy_kwh: parseFloat($("ext_kwh").value) || 0,
-    cost_total: parseFloat($("ext_cost").value) || 0,
-  };
-  await csrfFetch(`/api/external/${id}`, {method:"PUT", body: JSON.stringify(body)});
-  bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
-  loadExtPrices();
-};
-
-$("extDelete").onclick = async () => {
-  const id = $("ext_id").value;
-  if (!confirm("Eintrag wirklich löschen?")) return;
-  await csrfFetch(`/api/external/${id}`, {method:"DELETE"});
-  bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
-  loadExtPrices();
-};
+// Externen Eintrag speichern/löschen – per Event-Delegation (robust).
+document.addEventListener("click", async (e) => {
+  const saveBtn = e.target.closest("#extSave");
+  if (saveBtn) {
+    e.preventDefault();
+    const id = $("ext_id").value;
+    const body = {
+      provider: $("ext_provider").value,
+      location_name: $("ext_location").value,
+      started_at: $("ext_date").value ? $("ext_date").value + "T12:00:00" : null,
+      energy_kwh: parseFloat($("ext_kwh").value) || 0,
+      cost_total: parseFloat($("ext_cost").value) || 0,
+    };
+    await csrfFetch(`/api/external/${id}`, {method:"PUT", body: JSON.stringify(body)});
+    bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
+    loadExtPrices();
+    return;
+  }
+  const delBtn = e.target.closest("#extDelete");
+  if (delBtn) {
+    e.preventDefault();
+    const id = $("ext_id").value;
+    if (!confirm("Eintrag wirklich löschen?")) return;
+    await csrfFetch(`/api/external/${id}`, {method:"DELETE"});
+    bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
+    loadExtPrices();
+  }
+});
 
 async function loadAll(){
   try { await loadPrices(); } catch(e){ console.error("loadPrices", e); }

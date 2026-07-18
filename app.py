@@ -229,11 +229,18 @@ def _ensure_csrf():
 def _no_cache_all(resp):
     """Keine Cache-Header fuer HTML + API, damit der Browser nach einem
     Deploy/Update immer frische Seiten und Datenbank-Daten zeigt
-    (kein 'alte Daten' durch gecachte admin.html / API-Antworten)."""
+    (kein 'alte Daten' durch gecachte admin.html / API-Antworten).
+    Ausserdem CORS-Header setzen, damit die App auch dann funktioniert,
+    wenn sie ueber eine andere Origin aufgerufen wird (z.B. localhost vs.
+    IP, Reverse-Proxy, Port-Unterschied) – sonst blockt der Browser die
+    API-Calls mit 'access control checks'."""
     if request.path.startswith("/api/") or request.path in ("/admin", "/"):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
     return resp
 
 
