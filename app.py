@@ -88,9 +88,24 @@ def load_config():
         },
     }
     cfg = defaults
-    if os.path.exists(CONFIG_PATH) and yaml:
+    # CONFIG_PATH kann sein:
+    #   - eine Datei            (/app/config.yaml)
+    #   - ein Verzeichnis        (/app/config)  -> Datei liegt in .../config.yaml
+    # Docker erzeugt bei fehlender Quelldatei aus einem Datei-Mount aber ein
+    # gleichnamiges VERZEICHNIS -> "/app/config.yaml" ist dann ein Ordner.
+    # Wir probieren alle plausiblen Orte, damit die gespeicherten IPs nach
+    # einem F5 (Neuladen der Config) WIRKLICH wieder gelesen werden.
+    candidates = []
+    if os.path.isdir(CONFIG_PATH):
+        candidates.append(os.path.join(CONFIG_PATH, "config.yaml"))
+    else:
+        candidates.append(CONFIG_PATH)            # /app/config.yaml (Datei)
+        candidates.append(os.path.join(os.path.dirname(CONFIG_PATH), "config", "config.yaml"))  # /app/config/config.yaml
+        candidates.append(os.path.join(os.path.dirname(CONFIG_PATH), "config.yaml"))            # /app/config.yaml (im parent)
+    cfg_path = next((c for c in candidates if os.path.isfile(c)), None)
+    if cfg_path and yaml:
         try:
-            with open(CONFIG_PATH, "r") as f:
+            with open(cfg_path, "r") as f:
                 loaded = yaml.safe_load(f) or {}
             # tiefen-merge (nur eine Ebene)
             for k, v in loaded.items():
@@ -1196,13 +1211,19 @@ def api_config():
         if "pricing_defaults" in d and isinstance(d["pricing_defaults"], dict):
             config.setdefault("pricing_defaults", {})
             config["pricing_defaults"].update(d["pricing_defaults"])
-        # YAML persistieren – mit Fallback, falls CONFIG_PATH ein Verzeichnis ist
-        # (z.B. alter Datei-Mount, bei dem Docker ein Verzeichnis erzeugt hat).
+        # YAML persistieren. CONFIG_PATH kann eine Datei (/app/config.yaml)
+        # oder ein Verzeichnis (/app/config) sein. Im Verzeichnis-Fall (oder
+        # wenn Docker aus einem Datei-Mount ein gleichnamiges Verzeichnis
+        # erzeugt hat) wird die Datei konsistent in CONFIG_PATH/config.yaml
+        # geschrieben – exakt wie load_config() sie liest.
         target = CONFIG_PATH
         try:
             if os.path.isdir(target):
-                # CONFIG_PATH zeigt auf ein Verzeichnis -> Datei darin ablegen
+                # CONFIG_PATH ist ein Verzeichnis -> Datei darin ablegen
                 target = os.path.join(target, "config.yaml")
+            elif os.path.isdir(os.path.dirname(target)) and os.path.basename(target) == "config.yaml" and os.path.exists(target) and os.path.isdir(target):
+                # Edge-Case: sollte nicht eintreten, aber konsistent halten
+                pass
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "w") as f:
                 yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
