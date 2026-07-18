@@ -54,8 +54,10 @@ async function loadAll() {
   const merged = await safeJson(`/api/merged?${rp}`, []);
   const trip  = await safeJson(`/api/roadtrip?${rp}`, {per_day:[], stops:[]});
   const chartData = await safeJson(`/api/charts?${rp}`, {});
+  const statData = await safeJson(`/api/statistics?${rp}`, {});
   __chartData = chartData;
   __statsData = stats;
+  __statData = statData;
   try { renderSummary(stats); } catch(e){ console.error("renderSummary", e); }
   try { renderCharts(stats); } catch(e){ console.error("renderCharts", e); }
   try { renderHome(sess.home); } catch(e){ console.error("renderHome", e); }
@@ -63,6 +65,7 @@ async function loadAll() {
   try { renderMerged(merged, trip.per_day || [], stats.totals || {}); } catch(e){ console.error("renderMerged", e); }
   try { renderRoadtrip(trip); } catch(e){ console.error("renderRoadtrip", e); }
   try { renderStats(chartData); } catch(e){ console.error("renderStats", e); }
+  try { renderStatistics(statData); } catch(e){ console.error("renderStatistics", e); }
   try { renderExtra(); } catch(e){ console.error("renderExtra", e); }
 }
 
@@ -665,6 +668,95 @@ function renderStats(data) {
   ].join("");
 }
 
+function renderStatistics(d) {
+  if (!d) return;
+  const months = d.monthly || [];
+  const labels = months.map(m => m.month);
+  // Monatsvergleich Kosten (gestapelt: home/ext/extra)
+  if (window.Chart) {
+    const mc = document.getElementById("statMonthlyCost");
+    if (mc) {
+      if (window.__statMc) window.__statMc.destroy();
+      window.__statMc = new Chart(mc, { type:"bar", data:{ labels, datasets:[
+        {label:"Zuhause", data: months.map(m=>m.home_cost), backgroundColor:"#198754"},
+        {label:"Extern", data: months.map(m=>m.ext_cost), backgroundColor:"#0d6efd"},
+        {label:"Extra", data: months.map(m=>m.extra), backgroundColor:"#ffc107"},
+      ]}, options:{ responsive:true, scales:{x:{stacked:true}, y:{stacked:true, ticks:{callback:v=>v+" €"}}} } });
+    }
+    const mk = document.getElementById("statMonthlyKwh");
+    if (mk) {
+      if (window.__statMk) window.__statMk.destroy();
+      window.__statMk = new Chart(mk, { type:"bar", data:{ labels, datasets:[
+        {label:"Zuhause kWh", data: months.map(m=>m.home_kwh), backgroundColor:"#198754"},
+        {label:"Extern kWh", data: months.map(m=>m.ext_kwh), backgroundColor:"#0d6efd"},
+      ]}, options:{ responsive:true, scales:{x:{stacked:true}, y:{stacked:true, ticks:{callback:v=>v+" kWh"}}} } });
+    }
+    // Home vs Extern Donut (Kosten)
+    const he = d.home_vs_extern || {};
+    const heC = document.getElementById("statHomeExt");
+    if (heC) {
+      if (window.__statHe) window.__statHe.destroy();
+      window.__statHe = new Chart(heC, { type:"doughnut", data:{ labels:["Zuhause","Extern"],
+        datasets:[{ data:[he.home_cost||0, he.ext_cost||0], backgroundColor:["#198754","#0d6efd"] }] },
+        options:{ responsive:true, plugins:{ legend:{position:"bottom"} } } });
+    }
+    // AC vs DC Donut
+    const ac = d.ac_dc || {};
+    const acC = document.getElementById("statAcDc");
+    if (acC) {
+      if (window.__statAc) window.__statAc.destroy();
+      window.__statAc = new Chart(acC, { type:"doughnut", data:{ labels:["AC (Wallbox)","DC (Schnell)"],
+        datasets:[{ data:[ac.ac_kwh||0, ac.dc_kwh||0], backgroundColor:["#6f42c1","#fd7e14"] }] },
+        options:{ responsive:true, plugins:{ legend:{position:"bottom"} } } });
+    }
+    // Kosten nach Standorttyp (Balken)
+    const bl = d.by_location || [];
+    const blC = document.getElementById("statByLocation");
+    if (blC) {
+      if (window.__statBl) window.__statBl.destroy();
+      window.__statBl = new Chart(blC, { type:"bar", data:{
+        labels: bl.map(b=>b.type), datasets:[{ label:"kWh", data: bl.map(b=>b.kwh),
+        backgroundColor:["#198754","#0d6efd","#ffc107","#6f42c1","#dc3545"].slice(0,bl.length) }] },
+        options:{ responsive:true, plugins:{ legend:{display:false} }, scales:{ y:{ticks:{callback:v=>v+" kWh"}} } } });
+    }
+  }
+  // Ø pro Ladevorgang Kacheln
+  const apc = d.avg_per_charge || {};
+  const el = document.getElementById("statAvgCards");
+  if (el) {
+    el.innerHTML = [
+      kpiStat("🔌 Ladungen gesamt", `${apc.n_charges||0}`, "im Zeitraum"),
+      kpiStat("⚡ Ø kWh/Ladung", `${(apc.avg_kwh||0).toLocaleString("de-DE",{minimumFractionDigits:1})} kWh`, "Zuhause (EVCC)"),
+      kpiStat("💶 Ø Kosten/Ladung", fmtEUR(apc.avg_cost), "Zuhause (EVCC)"),
+      kpiStat("⏱️ Ø Dauer/Ladung", `${(apc.avg_duration_h||0).toLocaleString("de-DE",{minimumFractionDigits:1})} h`, "alle Quellen"),
+      kpiStat("🚀 Extern Ø kWh", `${(apc.ext_avg_kwh||0).toLocaleString("de-DE",{minimumFractionDigits:1})} kWh`, "Supercharger etc."),
+      kpiStat("💸 Extern Ø Kosten", fmtEUR(apc.ext_avg_cost), "Supercharger etc."),
+    ].join("");
+  }
+  // Heatmap als HTML-Grid (Wochentag x Stunde)
+  const heat = d.heatmap || [];
+  const hm = document.getElementById("statHeatmap");
+  if (hm && heat.length === 7) {
+    const maxV = Math.max(1, ...heat.flat());
+    const days = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+    let html = '<div class="small mb-1">Zellenfarbe = Anzahl Ladevorgänge zu dieser Uhrzeit (dunkler = mehr)</div>';
+    html += '<div style="overflow-x:auto"><table class="table table-sm" style="font-size:.7rem">';
+    html += "<thead><tr><th></th>" + Array.from({length:24}, (_,h)=>`<th class="text-center">${h}</th>`).join("") + "</tr></thead><tbody>";
+    for (let i=0;i<7;i++) {
+      html += `<tr><td class="text-end fw-bold">${days[i]}</td>`;
+      for (let h=0;h<24;h++) {
+        const v = heat[i][h];
+        const a = v / maxV;
+        const bg = v === 0 ? "#f1f3f5" : `rgba(13,110,253,${0.15 + a*0.85})`;
+        html += `<td class="text-center p-0" style="background:${bg};width:3.5%">${v||""}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table></div>";
+    hm.innerHTML = html;
+  }
+}
+
 function kpiStat(label, value, sub) {
   return `<div class="col-6 col-md-4 col-lg-2">
     <div class="card h-100 text-center shadow-sm">
@@ -712,7 +804,7 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
   tab.addEventListener("shown.bs.tab", (e) => {
     const target = e.target.getAttribute("data-bs-target");
     if (target === "#tabStats") {
-      if (__chartData) setTimeout(() => renderStats(__chartData), 30);
+      if (__chartData) setTimeout(() => { renderStats(__chartData); renderStatistics(__statData); }, 30);
     } else if (target === "#tabHome") {
       if (__statsData) setTimeout(() => renderCharts(__statsData), 30);
     }

@@ -2091,6 +2091,125 @@ def api_charts():
     })
 
 
+@app.route("/api/statistics")
+def api_statistics():
+    """Daten fuer das Statistik-Tab (Etappe B): Monatsvergleiche,
+    Standorttyp-Verteilung, Oeffentlichkeits-Kennzahlen je Ladevorgang,
+    AC/DC-Anteil, Home-vs-Extern-Kosten, Ladezeiten-Heatmap.
+    Respektiert den Zeitraum (days/from/to)."""
+    from collections import defaultdict
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+    db = get_db()
+    home_q = "SELECT created, finished, charged_kwh, total_cost FROM home_sessions WHERE created >= ?"
+    ext_q = ("SELECT started_at, finished_at, energy_kwh, energy_used_kwh, cost_total, "
+             "address, location_name FROM external_sessions WHERE started_at >= ?")
+    params = [cutoff]
+    if end:
+        home_q += " AND created <= ?"
+        ext_q += " AND started_at <= ?"
+        params = [cutoff, end]
+    home = [dict(r) for r in db.execute(home_q + " ORDER BY created ASC", params).fetchall()]
+    ext = [dict(r) for r in db.execute(ext_q + " ORDER BY started_at ASC", params).fetchall()]
+
+    # --- Monatsvergleich (Kosten + Energie) aus build_stats.monthly ---
+    stats = build_stats(days, from_date, to_date)
+    monthly = stats.get("monthly", [])
+
+    # --- Standorttyp-Verteilung (nur echte Externe, TM) ---
+    # Zuhause = EVCC (Wallbox). Externe nach Adress-Typ gruppieren.
+    loc_map = defaultdict(lambda: {"kwh": 0.0, "cost": 0.0, "sessions": 0, "added": 0.0})
+    for r in ext:
+        addr = (r.get("location_name") or r.get("address") or "").lower()
+        if _is_home_address(r.get("location_name"), r.get("address")):
+            typ = "Zuhause"
+        elif "supercharger" in addr:
+            typ = "Supercharger"
+        elif any(w in addr for w in ("arbeit", "office", "firma", "work")):
+            typ = "Arbeit"
+        else:
+            typ = "Sonstige"
+        loc_map[typ]["kwh"] += float(r.get("energy_kwh") or 0)
+        loc_map[typ]["cost"] += float(r.get("cost_total") or 0)
+        loc_map[typ]["added"] += float(r.get("energy_kwh") or 0)
+        loc_map[typ]["sessions"] += 1
+    by_location = [{"type": k, **v} for k, v in sorted(loc_map.items(), key=lambda kv: -kv[1]["kwh"])]
+
+    # --- Durchschnitt je Ladevorgang (kWh, Kosten, Dauer) ---
+    def _dur_h(a, b):
+        try:
+            da = datetime.fromisoformat(str(a).replace("Z", "")[:19])
+            db_ = datetime.fromisoformat(str(b).replace("Z", "")[:19])
+            return max(0.0, (db_ - da).total_seconds() / 3600.0)
+        except Exception:
+            return None
+    home_durs = [_dur_h(r.get("created"), r.get("finished")) for r in home]
+    home_durs = [d for d in home_durs if d is not None]
+    ext_durs = [_dur_h(r.get("started_at"), r.get("finished_at")) for r in ext]
+    ext_durs = [d for d in ext_durs if d is not None]
+    all_durs = home_durs + ext_durs
+    n_home = len(home)
+    n_ext = len(ext)
+    n_all = n_home + n_ext
+    avg_per_charge = {
+        "n_charges": n_all,
+        "avg_kwh": round(sum(float(r.get("charged_kwh") or 0) for r in home) / n_home, 2) if n_home else 0,
+        "avg_cost": round(sum(float(r.get("total_cost") or 0) for r in home) / n_home, 2) if n_home else 0,
+        "avg_duration_h": round(sum(all_durs) / len(all_durs), 2) if all_durs else 0,
+        "ext_avg_kwh": round(sum(float(r.get("energy_kwh") or 0) for r in ext) / n_ext, 2) if n_ext else 0,
+        "ext_avg_cost": round(sum(float(r.get("cost_total") or 0) for r in ext) / n_ext, 2) if n_ext else 0,
+    }
+
+    # --- AC/DC-Anteil (aus api_charts-KPIs) ---
+    charts = api_charts().get_json().get("kpis", {})
+    ac_dc = {
+        "ac_kwh": charts.get("ac_kwh", 0),
+        "dc_kwh": charts.get("dc_kwh", 0),
+        "ac_share_pct": charts.get("ac_share_pct", 0),
+        "dc_share_pct": charts.get("dc_share_pct", 0),
+    }
+
+    # --- Home vs. Extern Kostenverteilung ---
+    t = stats.get("totals", {})
+    home_vs_extern = {
+        "home_cost": t.get("cost_home", 0),
+        "ext_cost": t.get("cost_external", 0),
+        "home_kwh": t.get("home_kwh", 0),
+        "ext_kwh": t.get("ext_kwh", 0),
+    }
+
+    # --- Ladezeiten-Heatmap: Wochentag (0=Mo) x Stunde (0-23) ---
+    heat = [[0] * 24 for _ in range(7)]
+    for r in home:
+        try:
+            dt = datetime.fromisoformat(str(r.get("created")).replace("Z", "")[:19])
+            heat[dt.weekday()][dt.hour] += 1
+        except Exception:
+            pass
+    for r in ext:
+        try:
+            dt = datetime.fromisoformat(str(r.get("started_at")).replace("Z", "")[:19])
+            heat[dt.weekday()][dt.hour] += 1
+        except Exception:
+            pass
+
+    return jsonify({
+        "monthly": monthly,
+        "by_location": by_location,
+        "avg_per_charge": avg_per_charge,
+        "ac_dc": ac_dc,
+        "home_vs_extern": home_vs_extern,
+        "heatmap": heat,
+    })
+
+
 @app.route("/api/roadtrip")
 def api_roadtrip():
     """Roadtrip-/Reise-Ansicht (iOS Roadtrip-App-Stil): Tageswerte km/kWh/€/Station + Kennzahlen + Ladestopps (lat/lng)."""

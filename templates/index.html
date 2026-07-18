@@ -139,9 +139,50 @@
             <p class="text-muted small mb-2">Eine Zeile pro Tag. <strong>Zuhause</strong> = EVCC-Wallbox (führend). TeslaMate-Ladungen an Zuhause-Adresse(n) werden nicht doppelt gezählt. <strong>Extern</strong> = nur Fremdladungen (z.&nbsp;B. Supercharger).</p>
         </div>
         <div class="tab-pane fade" id="tabStats">
-            <!-- Gesamt-KPI-Kacheln -->
-            <div class="row g-2 mb-3" id="statsKpis"></div>
-            <!-- 4 Graphen im Road-Trip-Stil -->
+            <!-- Monatsvergleich: Kosten + Energie -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📅 Monatsvergleich: Kosten</div>
+                        <div class="card-body"><canvas id="statMonthlyCost" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📅 Monatsvergleich: Energie</div>
+                        <div class="card-body"><canvas id="statMonthlyKwh" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Home vs Extern Donut + AC/DC Donut -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🏠 Zuhause vs. Extern (Kosten)</div>
+                        <div class="card-body"><canvas id="statHomeExt" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ AC vs. DC (Energie)</div>
+                        <div class="card-body"><canvas id="statAcDc" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📍 Kosten nach Standorttyp</div>
+                        <div class="card-body"><canvas id="statByLocation" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Ø pro Ladevorgang Kacheln -->
+            <div class="row g-2 mb-3" id="statAvgCards"></div>
+            <!-- Ladezeiten-Heatmap -->
+            <div class="card mb-3">
+                <div class="card-header py-2">🔥 Ladezeiten (Wochentag × Uhrzeit)</div>
+                <div class="card-body" id="statHeatmap"></div>
+            </div>
+            <!-- Bestehende Tiefen-Charts (Verbrauch/Preis/Kosten/km/Intervall) -->
             <div class="row g-3">
                 <div class="col-lg-6">
                     <div class="card h-100">
