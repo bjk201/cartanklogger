@@ -227,8 +227,13 @@ function renderMerged(rows, perDay, totals) {
     }
     const badgeHtml = stationBadges.join(" ") || '<span class="badge bg-secondary">–</span>';
 
-    // Zuhause-kWh fuer die Spalte: EVCC + TM-Zuhause (falls keine EVCC)
-    const homeKwhShown = (r.home_kwh || 0) + (r.tm_home && r.tm_home.length ? tmHomeKwh : 0);
+    // Zuhause-kWh fuer die Spalte: EVCC fuehrend (Wallbox misst exakt, was
+    // aus der Wand ging). TM-Zuhause ist DIESELBE Ladung wie EVCC (nur aus
+    // zweiter Quelle erfasst) -> NICHT dazuzaehlen (Doppelzaehlung!). Nur wenn
+    // an dem Tag UEBERHAUPT kein EVCC da ist, TM added als Fallback zeigen.
+    const evKwh = r.home_kwh || 0;
+    const homeKwhShown = evKwh > 0 ? evKwh
+                         : (r.tm_home && r.tm_home.length ? tmHomeKwh : 0);
 
     return `<tr>
       <td>${r.day || "–"}</td>
