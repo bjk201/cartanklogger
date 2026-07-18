@@ -875,17 +875,19 @@ def sync_teslamate():
                 ),
             )
             inserted += cur.rowcount
-        elif existing["manual_price"] == 0 and cost_total > 0:
-            # Auto-Eintrag: Kosten aus TeslaMate uebernehmen, falls gepflegt
-            db.execute(
-                """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?, energy_used_kwh=?
-                WHERE id=?""",
-                (round(cost_total, 2), round(ppk, 4), energy, energy_used, existing["id"]))
-            # Provider + Label IMMER neu ableiten (auch bei bestehenden Saetzen),
-            # damit Aenderungen an home_addresses / Geofence-Erkennung sofort
-            # alle historischen Ladungen korrekt als Zuhause markieren.
+        elif existing["manual_price"] == 0:
+            # Auto-Eintrag: Provider + Label IMMER neu ableiten (bei jedem Sync),
+            # damit Aenderungen an home_addresses / TM-Geofence ("Zuhause") sofort
+            # ALLE historischen Ladungen korrekt als Zuhause markieren - auch wenn
+            # cost_total == 0 (Heimladungen haben in TM meist keine Kosten erfasst,
+            # die alte Bedingung 'cost_total > 0' hat die Umetikettierung blockiert).
             new_provider = _detect_provider(s.get("geofence"), s.get("address"))
             new_label = _location_label(s.get("geofence"), s.get("address"))
+            if cost_total > 0:
+                db.execute(
+                    """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?, energy_used_kwh=?
+                    WHERE id=?""",
+                    (round(cost_total, 2), round(ppk, 4), energy, energy_used, existing["id"]))
             if new_provider != existing.get("provider") or new_label != existing.get("address"):
                 db.execute(
                     """UPDATE external_sessions SET provider=?, address=? WHERE id=?""",
