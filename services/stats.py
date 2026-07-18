@@ -163,8 +163,29 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
 
     home = [dict(r) for r in home_rows if in_range(r.get("created"))]
     ext_all = [dict(r) for r in external_rows if in_range(r.get("started_at"))]
-    # TM-Home (doppeltes Tracking) nur für Referenz/Ladeverlust, NICHT für Energie
-    ext = [r for r in ext_all if not _is_home_external_row(r)]
+    # TM-Home (doppeltes Tracking) nur für Referenz/Ladeverlust, NICHT für Energie.
+    # Erkennung über EVCC-Wallbox-Zeitfenster (nicht über Geofence-String, da TM
+    # Heim-Ladungen oft falsch als "Oeffentliche Ladestation" labelt).
+    def _pd(v):
+        s = str(v or "").replace("Z", "").replace("+00:00", "")
+        try:
+            return datetime.fromisoformat(s[:19])
+        except Exception:
+            return None
+    evcc_windows = []
+    for r in home:
+        sdt = _pd(r.get("created"))
+        edt = _pd(r.get("finished")) or sdt
+        if sdt is not None:
+            evcc_windows.append((sdt, edt))
+    def _tm_is_home(r):
+        cdt = _pd(r.get("started_at"))
+        if cdt is not None:
+            for sdt, edt in evcc_windows:
+                if sdt <= cdt <= edt:
+                    return True
+        return _is_home_external_row(r)
+    ext = [r for r in ext_all if not _tm_is_home(r)]
     extras = [dict(r) for r in extra_rows if in_range(r.get("date"))]
 
     # --- Gesamt-km = letzter (neuester) Tachostand ---

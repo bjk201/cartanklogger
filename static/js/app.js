@@ -472,14 +472,39 @@ function getCsrfToken() { return _csrfToken || document.querySelector('meta[name
 
 
 async function init() {
-  const cfg = await (await fetch(`/api/config`)).json();
-  if (cfg.app && cfg.app.mock_mode) {
-    document.getElementById("mockBadge").style.display = "";
+  try {
+    const cfg = await (await fetch(`/api/config`)).json();
+    if (cfg.app && cfg.app.mock_mode) {
+      const badge = document.getElementById("mockBadge");
+      if (badge) badge.style.display = "";
+    }
+  } catch (e) {
+    console.error("init config laden fehlgeschlagen:", e);
   }
   await ensureCsrf();
-  loadAll();
+  // Mehrfacher Versuch: beim F5 kann ein Fetch zeitweise fehlschlagen
+  // (Cache/Config-Race). Nicht sofort mit leerem Fallback aufgeben.
+  let attempt = 0;
+  async function tryLoad() {
+    attempt++;
+    await loadAll();
+  }
+  await tryLoad();
+  // Falls beim ersten Laden noch nichts da war (leere Fallbacks),
+  // kurz danach erneut versuchen.
+  setTimeout(async () => {
+    const t = document.getElementById("summaryCards");
+    if (t && t.children.length === 0) {
+      await tryLoad();
+    }
+  }, 800);
 }
-init();
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
 
 
 

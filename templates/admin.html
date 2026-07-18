@@ -220,7 +220,10 @@ async function doSync(url, msg) {
 $("syncAll").onclick = () => doSync("/api/sync/all","Sync alle");
 $("syncEvcc").onclick = () => doSync("/api/sync/evcc","EVCC");
 $("syncTm").onclick = () => doSync("/api/sync/teslamate","TeslaMate");
-$("seedBtn").onclick = async () => { await csrfFetch("/api/seed",{method:"POST"}); $("syncMsg").textContent="Testdaten eingespielt"; loadAll(); };
+// seedBtn entfernt: spielte Testdaten (Beispiel-Extrakosten) ein, die dann
+// fälschlich in der Extra-Kosten-Liste erschienen. Reiner Entwickler-Helfer,
+// im Produktivbetrieb unerwünscht.
+if ($("seedBtn")) { $("seedBtn").style.display = "none"; }
 
 async function loadPrices() {
   const rows = await (await fetch("/api/price-periods")).json();

@@ -1050,8 +1050,29 @@ def build_stats(days=365, from_date=None, to_date=None):
 
     # Rückgewinnung der Felder für die Tages-Series (von der UI genutzt)
     home = [dict(r) for r in home_rows]
-    ext = [dict(r) for r in external_rows
-           if not _is_home_external_row(dict(r))]
+    # Externe = TM-Ladungen OHNE passendes EVCC-Wallbox-Fenster (Zeitfenster-Matching).
+    # TM-Heim-Ladungen (falsch als "Oeffentliche Ladestation" gelabelt) liegen im
+    # EVCC-Fenster -> gehoeren zu Zuhause, duerfen NICHT als extern gezaehlt werden.
+    evcc_windows = []
+    def _pd(v):
+        s = str(v or "").replace("Z", "").replace("+00:00", "")
+        try:
+            return datetime.fromisoformat(s[:19])
+        except Exception:
+            return None
+    for r in home_rows:
+        sdt = _pd(r.get("created"))
+        edt = _pd(r.get("finished")) or sdt
+        if sdt is not None:
+            evcc_windows.append((sdt, edt))
+    def _tm_is_home(r):
+        cdt = _pd(r.get("started_at"))
+        if cdt is not None:
+            for sdt, edt in evcc_windows:
+                if sdt <= cdt <= edt:
+                    return True
+        return _is_home_external_row(dict(r))
+    ext = [dict(r) for r in external_rows if not _tm_is_home(dict(r))]
     # Tages-Aggregation für Chart-Series
     from collections import defaultdict
     day_map = defaultdict(lambda: {"home_kwh": 0.0, "ext_kwh": 0.0, "cost": 0.0, "km": 0.0})
@@ -1094,12 +1115,31 @@ def build_stats(days=365, from_date=None, to_date=None):
 
     # KPIs für UI (aus totals + home/external)
     t = stats["totals"]
+    # Echte PV/Grid-Werte aus den Home-Sessions aggregieren (nicht 0 setzen!)
+    _hb_grid_kwh = 0.0
+    _hb_pv_kwh = 0.0
+    _hb_grid_cost = 0.0
+    _hb_pv_cost = 0.0
+    _hb_solar_sum = 0.0
+    for r in home:
+        c = compute_home_cost_row(r)
+        _hb_grid_kwh += c["grid_kwh"]
+        _hb_pv_kwh += c["pv_kwh"]
+        _hb_grid_cost += c["grid_cost"]
+        _hb_pv_cost += c["pv_cost"]
+        _hb_solar_sum += float(r.get("solar_percentage") or 0)
+    _hb_pv_share = (_hb_pv_kwh / _hb_grid_kwh * 100) if _hb_grid_kwh > 0 else 0
+    _hb_solar_pct_avg = (_hb_solar_sum / len(home)) if home else 0
+    _hb_kwh_total = _hb_grid_kwh + _hb_pv_kwh
     home_block = {
         "count": len(home), "kwh": t["home_kwh"],
-        "grid_kwh": 0, "pv_kwh": 0,
-        "grid_cost": 0, "pv_cost": 0,
-        "cost": t["cost_home"],
-        "pv_share_pct": 0,
+        "grid_kwh": round(_hb_grid_kwh, 2),
+        "pv_kwh": round(_hb_pv_kwh, 2),
+        "grid_cost": round(_hb_grid_cost, 2),
+        "pv_cost": round(_hb_pv_cost, 2),
+        "cost": round(_hb_grid_cost + _hb_pv_cost, 2),
+        # PV-Anteil als Prozent der GELADENEN kWh (nicht grid-bezogen!)
+        "pv_share_pct": round((_hb_pv_kwh / _hb_kwh_total * 100) if _hb_kwh_total > 0 else _hb_solar_pct_avg, 1),
     }
     external_block = {
         "count": len(ext), "kwh": t["ext_kwh"], "cost": t["cost_external"],
@@ -1610,10 +1650,26 @@ def _build_merged(rows):
                 return day
         return _day_of(_str(charge_start_iso))
 
-    # TeslaMate: nach Zuhause vs. Extern trennen
-    ext_rows, home_rows = [], []
+    # TeslaMate: Zuhause vs. Extern trennen.
+    # WICHTIG: Nicht ueber den Geofence-String (TM liefert bei Heim-Ladungen
+    # oft falsche Labels wie "Oeffentliche Ladestation"). Stattdessen wird jede
+    # TM-Ladung via Zeitfenster-Matching EVCC zugeordnet: liegt sie im Fenster
+    # einer EVCC-Wallbox-Sitzung -> Zuhause (doppeltes Tracking, NICHT extern).
+    # Nur TM-Ladungen OHNE passendes EVCC-Fenster sind echte Externe.
+    home_rows, ext_rows = [], []
     for r in rows.get("external", []):
-        if _is_home_address(r.get("location_name"), r.get("address")):
+        start_iso = r.get("started_at")
+        assigned = False
+        cdt = _parse_dt(start_iso)
+        if cdt is not None:
+            for sdt, edt, _day in evcc_windows:
+                if sdt <= cdt <= edt:
+                    assigned = True
+                    break
+        if assigned:
+            home_rows.append(r)
+        elif _is_home_address(r.get("location_name"), r.get("address")):
+            # Fallback: kein EVCC-Fenster, aber eindeutig als Zuhause gelabelt
             home_rows.append(r)
         else:
             ext_rows.append(r)
