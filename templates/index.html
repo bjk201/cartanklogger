@@ -6,37 +6,72 @@
     <title>CarTankLogger – Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="csrf-token" content="">
     <style>
-      /* Aufklapp-Detailzeile in der Zusammenfassungstabelle: erst bei Klick sichtbar */
+      /* Aufklapp-Detailzeile in der Zusammenfassungstabelle */
       tr.collapse-row > td { padding: 0 !important; }
       tr.collapse-row .collapse:not(.show) { display: none; }
+      /* Sticky Header: bleibt beim Scrollen oben sichtbar (Titel + Tabs) */
+      .app-header {
+        position: sticky; top: 0; z-index: 1030;
+        background: #212529;
+        box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      }
+      .app-header .nav-tabs { border-bottom: none; }
+      .app-header .nav-tabs .nav-link {
+        color: #adb5bd; border: none; border-bottom: 3px solid transparent;
+        border-radius: 0; padding: .5rem .75rem;
+      }
+      .app-header .nav-tabs .nav-link:hover { color: #fff; }
+      .app-header .nav-tabs .nav-link.active {
+        color: #fff; background: transparent; border-bottom-color: #0d6efd;
+      }
+      /* KPI-Kachel: fette Zahl, sofort lesbar */
+      .kpi-card .kpi-label { font-size: .72rem; letter-spacing: .02em; }
+      .kpi-card .kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.15; }
+      .kpi-card .kpi-sub { font-size: .7rem; opacity: .8; }
+      .kpi-card .kpi-icon { font-size: 1.1rem; }
+      @media (max-width: 576px) {
+        .kpi-card .kpi-value { font-size: 1.2rem; }
+      }
     </style>
-    <meta name="csrf-token" content="">
 </head>
 <body>
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
-        <div>
-            <a class="btn btn-outline-light btn-sm me-2" href="/admin">Verwaltung</a>
-            <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
-        </div>
+
+<!-- STICKY HEADER: Titel + Verwaltung + Tabs -->
+<header class="app-header text-light">
+  <div class="container-fluid px-3">
+    <div class="d-flex align-items-center justify-content-between py-2">
+      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
+        <a class="btn btn-outline-light btn-sm" href="/admin">Verwaltung</a>
+      </div>
     </div>
-</nav>
+    <!-- Tabs im Header -->
+    <ul class="nav nav-tabs" id="dataTabs" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Übersicht</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
+    </ul>
+  </div>
+</header>
 
 <div class="container-fluid px-3 py-3">
-    <div class="row mb-3">
-        <div class="col-md-8">
-            <h4 class="mb-0">Vollkosten-Auswertung</h4>
+    <!-- Zeitraum-Auswahl -->
+    <div class="row mb-3 align-items-center">
+        <div class="col-md-6">
             <small class="text-muted" id="rangeLabel">Letzte 365 Tage</small>
         </div>
-        <div class="col-md-4 text-md-end">
+        <div class="col-md-6 text-md-end">
             <div class="btn-group btn-group-sm mb-2" role="group">
                 <button class="btn btn-outline-secondary" data-days="90">90 T</button>
                 <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
                 <button class="btn btn-outline-secondary" data-days="9999">All</button>
             </div>
-            <div class="mb-2">
+            <div class="mb-2 d-inline-block ms-md-2">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text">Von</span>
                     <input type="date" id="rangeFrom" class="form-control form-control-sm">
@@ -48,57 +83,49 @@
         </div>
     </div>
 
-    <!-- Summary cards -->
+    <!-- HAUPTSEITE: 8 Entscheidungs-KPIs (Punkt 4) -->
     <div class="row g-2 mb-3" id="summaryCards"></div>
 
-    <!-- Charts -->
+    <!-- Großer Trendgraph: Kosten pro Monat -->
     <div class="row g-2 mb-3">
-        <div class="col-lg-4">
+        <div class="col-12">
             <div class="card h-100">
-                <div class="card-header py-2">Energie nach Quelle</div>
-                <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
-            </div>
-        </div>
-        <div class="col-lg-8">
-            <div class="card h-100">
-                <div class="card-header py-2">Monatliche Kosten (Zuhause / Extern / Extra)</div>
-                <div class="card-body"><canvas id="chartMonthly" height="220"></canvas></div>
+                <div class="card-header py-2">📈 Kosten pro Monat (Zuhause / Extern / Extra)</div>
+                <div class="card-body"><canvas id="chartMonthly" height="240"></canvas></div>
             </div>
         </div>
     </div>
 
-    <!-- Tabs -->
-    <ul class="nav nav-tabs" id="dataTabs" role="tablist">
-        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Zusammenfassung</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
-    </ul>
+    <!-- Letzte Ladevorgänge + Energie nach Quelle -->
+    <div class="row g-2 mb-3">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
+                            <thead><tr>
+                                <th>Datum</th><th>Stationen</th>
+                                <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
+                                <th>Extern kWh</th><th>Extern €</th>
+                                <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header py-2">⚡ Energie nach Quelle</div>
+                <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs-Inhalt (Zusammenfassung/Statistik/Home/Ext/Extra) -->
     <div class="tab-content">
-        <div class="tab-pane fade" id="tabHome">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="tblHome">
-                    <thead><tr>
-                        <th>Datum</th><th>Ladepunkt</th><th>Fzg</th><th>kWh</th><th>PV%</th>
-                        <th>Grid kWh</th><th>PV kWh</th><th>Grid €</th><th>PV €</th>
-                        <th>Gesamt €</th><th>€/kWh</th><th>KM-Stand</th><th>Aktion</th>
-                    </tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-        <div class="tab-pane fade" id="tabExt">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="tblExt">
-                    <thead><tr>
-                        <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
-                        <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
-                    </tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
         <div class="tab-pane fade show active" id="tabMerged">
             <!-- KPI-Übersicht (wichtigste Infos auf einen Blick) -->
             <div class="row g-2 mb-3" id="mergedKpis"></div>
@@ -109,18 +136,7 @@
                 <div class="card-header py-2">📊 Pro Tag: gefahrene km &amp; geladene kWh</div>
                 <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
             </div>
-            <p class="text-muted small mb-2">Eine Zeile pro Tag. <strong>Zuhause</strong> = EVCC-Wallbox (führend). TeslaMate-Ladungen an Adresse(n) werden nicht doppelt gezählt. <strong>Extern</strong> = nur Fremdladungen (z.&nbsp;B. Supercharger).</p>
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="tblMerged">
-                    <thead><tr>
-                        <th>Datum</th><th>Stationen</th>
-                        <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
-                        <th>Extern kWh</th><th>Extern €</th>
-                        <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
-                    </tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+            <p class="text-muted small mb-2">Eine Zeile pro Tag. <strong>Zuhause</strong> = EVCC-Wallbox (führend). TeslaMate-Ladungen an Zuhause-Adresse(n) werden nicht doppelt gezählt. <strong>Extern</strong> = nur Fremdladungen (z.&nbsp;B. Supercharger).</p>
         </div>
         <div class="tab-pane fade" id="tabStats">
             <!-- Gesamt-KPI-Kacheln -->
@@ -175,6 +191,29 @@
             </div>
             <!-- Sekundaer-KPIs + Kategorie-Karten -->
             <div class="row g-2 mt-2" id="statsSecondary"></div>
+        </div>
+        <div class="tab-pane fade" id="tabHome">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="tblHome">
+                    <thead><tr>
+                        <th>Datum</th><th>Ladepunkt</th><th>Fzg</th><th>kWh</th><th>PV%</th>
+                        <th>Grid kWh</th><th>PV kWh</th><th>Grid €</th><th>PV €</th>
+                        <th>Gesamt €</th><th>€/kWh</th><th>KM-Stand</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="tabExt">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="tblExt">
+                    <thead><tr>
+                        <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
+                        <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div class="tab-pane fade" id="tabExtra">
             <div class="table-responsive">

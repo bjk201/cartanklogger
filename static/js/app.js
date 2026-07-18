@@ -27,9 +27,17 @@ const fmtEUR = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {st
 const fmtKwh = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {minimumFractionDigits:1, maximumFractionDigits:1}) + " kWh");
 const fmtPct = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {maximumFractionDigits:1}) + " %");
 
+function _rangeParams() {
+  if (customFrom && customTo) {
+    return `from=${encodeURIComponent(customFrom)}&to=${encodeURIComponent(customTo)}`;
+  }
+  return `days=${currentDays}`;
+}
+
 async function loadAll() {
   // Jeder Fetch einzeln abgesichert: ein API-Fehler darf nicht die
   // gesamte Anzeige leeren.
+  const rp = _rangeParams();
   async function safeJson(url, fallback) {
     try {
       const r = await fetch(url);
@@ -41,11 +49,11 @@ async function loadAll() {
     }
   }
 
-  const stats = await safeJson(_statsUrl(), {totals:{}, home:{}, external:{}, extra:{}});
-  const sess  = await safeJson(`/api/sessions`, {home:[], external:[]});
-  const merged = await safeJson(`/api/merged`, []);
-  const trip  = await safeJson(`/api/roadtrip`, {per_day:[], stops:[]});
-  const chartData = await safeJson(`/api/charts`, {});
+  const stats = await safeJson(`/api/stats?${rp}`, {totals:{}, home:{}, external:{}, extra:{}});
+  const sess  = await safeJson(`/api/sessions?${rp}`, {home:[], external:[]});
+  const merged = await safeJson(`/api/merged?${rp}`, []);
+  const trip  = await safeJson(`/api/roadtrip?${rp}`, {per_day:[], stops:[]});
+  const chartData = await safeJson(`/api/charts?${rp}`, {});
   __chartData = chartData;
   __statsData = stats;
   try { renderSummary(stats); } catch(e){ console.error("renderSummary", e); }
@@ -59,25 +67,34 @@ async function loadAll() {
 }
 
 function renderSummary(s) {
-  const t = s.totals, h = s.home, e = s.external, x = s.extra;
+  const t = s.totals || {}, h = s.home || {}, e = s.external || {}, x = s.extra || {};
+  const monthly = s.monthly || [];
+  // Kosten diesen Monat = letzter (aktuellster) Monat in der Monatsliste
+  const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
+  const costThisMonth = curMonth ? (curMonth.home_cost + curMonth.ext_cost + curMonth.extra) : 0;
+
+  // Zuhause vs. Extern: Anteil an geladener Energie
+  const homeKwh = t.home_kwh || 0;
+  const extKwh = t.ext_kwh || 0;
+  const homeShare = (homeKwh + extKwh) > 0 ? Math.round(homeKwh / (homeKwh + extKwh) * 100) : 0;
+
   const cards = [
-    {t:"Zuhause Energie", v:fmtKwh(h.kwh), s:`${fmtKwh(h.grid_kwh)} Netz · ${fmtKwh(h.pv_kwh)} PV`, c:"primary"},
-    {t:"Zuhause Kosten", v:fmtEUR(h.cost), s:`${fmtEUR(h.grid_cost)} Netz · ${fmtEUR(h.pv_cost)} PV`, c:"success"},
-    {t:"Extern Energie", v:fmtKwh(e.kwh), s:`${e.count} Sitzungen · ${fmtPct(e.share_pct)} der Energie`, c:"info"},
-    {t:"Extern Kosten", v:fmtEUR(e.cost), s:`${fmtEUR(e.cost_per_kwh)}/kWh Ø`, c:"info"},
-    {t:"Extra-Kosten", v:fmtEUR(x.total), s:`${x.count} Einträge`, c:"warning"},
-    {t:"Gesamt (TCO)", v:fmtEUR(t.tco), s:"Laden + Extra", c:"dark"},
-    {t:"Kosten / km", v:fmtEUR(t.cost_per_km)+" /km", s:`${Number(t.distance_km).toLocaleString("de-DE")} km gefahren`, c:"secondary"},
-    {t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:`von der Wand · Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)}`, c:"secondary"},
-    {t:"PV-Anteil", v:fmtPct(h.pv_share_pct), s:"Solar am Zuhause-Laden", c:"success"},
+    {icon:"💶", t:"Kosten diesen Monat", v:fmtEUR(costThisMonth), s:curMonth ? curMonth.month : "–", c:"success"},
+    {icon:"⚡", t:"Geladene Energie", v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:"primary"},
+    {icon:"🛣️", t:"Gefahrene km", v:Number(t.distance_km||0).toLocaleString("de-DE")+" km", s:"Tacho-Stand (max)", c:"secondary"},
+    {icon:"💡", t:"Kosten / 100 km", v:fmtEUR(t.tco_per_100km)+" /100km", s:`TCO ${fmtEUR(t.tco)}`, c:"warning"},
+    {icon:"🔋", t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:`Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)} (geschätzt)`, c:"info"},
+    {icon:"☀️", t:"PV-Anteil", v:fmtPct(h.pv_share_pct), s:`${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(homeKwh)}`, c:"success"},
+    {icon:"🏠", t:"Zuhause vs. Extern", v:`${homeShare} % Zuhause`, s:`${fmtKwh(homeKwh)} zu Hause · ${fmtKwh(extKwh)} extern`, c:"primary"},
+    {icon:"🔌", t:"Ladeverluste", v:fmtKwh(t.home_loss_kwh), s:"Wallbox → Akku (Differenz)", c:"dark"},
   ];
   document.getElementById("summaryCards").innerHTML = cards.map(c => `
-    <div class="col-6 col-md-3 col-lg-2">
-      <div class="card text-white bg-${c.c} h-100">
+    <div class="col-6 col-md-4 col-lg-3">
+      <div class="card kpi-card text-white bg-${c.c} h-100">
         <div class="card-body py-2">
-          <div class="small opacity-75">${c.t}</div>
-          <div class="fs-6 fw-bold">${c.v}</div>
-          <div class="small opacity-75">${c.s}</div>
+          <div class="kpi-label opacity-75"><span class="kpi-icon">${c.icon}</span> ${c.t}</div>
+          <div class="kpi-value">${c.v}</div>
+          <div class="kpi-sub">${c.s}</div>
         </div>
       </div>
     </div>`).join("");

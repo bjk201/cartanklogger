@@ -1431,8 +1431,24 @@ def api_stats():
 
 @app.route("/api/sessions")
 def api_sessions():
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    # Zeitraum-Filter (wie /api/stats) -> Home/Ext-Tabs respektieren die
+    # Zeitraum-Auswahl, nicht nur die Summary-Kacheln.
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+        home_q = "SELECT * FROM home_sessions WHERE created >= ? AND created <= ? ORDER BY created DESC"
+        ext_q = "SELECT * FROM external_sessions WHERE started_at >= ? AND started_at <= ? ORDER BY started_at DESC"
+        params = [cutoff, end]
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        home_q = "SELECT * FROM home_sessions WHERE created >= ? ORDER BY created DESC"
+        ext_q = "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at DESC"
+        params = [cutoff]
     db = get_db()
-    home = [dict(r) for r in db.execute("SELECT * FROM home_sessions ORDER BY created DESC")]
+    home = [dict(r) for r in db.execute(home_q, params).fetchall()]
     # Kosten immer frisch aus den (ggf. geänderten) Preisperioden berechnen
     for r in home:
         c = compute_home_cost_row(r)
@@ -1440,7 +1456,7 @@ def api_sessions():
         # Datenschutz: keine Rohdaten/Payload im JSON
         r["raw"] = None
         r["has_raw"] = bool(r.get("raw"))
-    ext = [dict(r) for r in db.execute("SELECT * FROM external_sessions ORDER BY started_at DESC")]
+    ext = [dict(r) for r in db.execute(ext_q, params).fetchall()]
     for r in ext:
         # Datenschutz: rohe Adresse durch anonymisiertes Label ersetzen,
         # GPS-Koordinaten entfernen, raw nur als Flag belassen.
@@ -1799,6 +1815,8 @@ def _build_merged(rows):
 
 @app.route("/api/merged")
 def api_merged():
+    # api_sessions() liest den Zeitraum selbst aus request.args (gleicher
+    # Request-Kontext), daher hier kein expliziter Durchreich-Parameter nötig.
     sess = api_sessions().get_json()
     return jsonify(_build_merged(sess))
 
@@ -1809,10 +1827,24 @@ def api_charts():
     1) Verbrauch kWh/100km  2) €/kWh  3) €/100km  4) kumulierte km
     Plus Sekundaer-KPIs: geladene kWh, Reichweite, Ladeverluste, AC/DC, CO2.
     """
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
     db = get_db()
-    evcc = [dict(r) for r in db.execute(
-        "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, "
-        "solar_percentage, loadpoint, raw FROM home_sessions ORDER BY created ASC")]
+    evcc_q = "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, solar_percentage, loadpoint, raw FROM home_sessions WHERE created >= ?"
+    tm_q = "SELECT started_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, latitude, longitude, address, raw FROM external_sessions WHERE started_at >= ?"
+    params = [cutoff]
+    if end:
+        evcc_q += " AND created <= ?"
+        tm_q += " AND started_at <= ?"
+        params = [cutoff, end]
+    evcc = [dict(r) for r in db.execute(evcc_q + " ORDER BY created ASC", params).fetchall()]
     # Gesamt-km = LETZTER (neuester) Tachostand ueber alle Sessions (= Tacho km, 1:1 zum Auto-Tacho).
     # EVCC 'odometer' ist der absolute Tachostand in km. Wir nehmen den zeitlich
     # letzten Wert (nicht blind max), damit ein Ausreisser das Ergebnis nicht verfaelscht.
@@ -1835,9 +1867,7 @@ def api_charts():
             return float(j.get("co2PerKWh") or 0)
         except Exception:
             return 0.0
-    tm = [dict(r) for r in db.execute(
-        "SELECT started_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, "
-        "latitude, longitude, address, raw FROM external_sessions ORDER BY started_at ASC")]
+    tm = [dict(r) for r in db.execute(tm_q + " ORDER BY started_at ASC", params).fetchall()]
 
     def _tm_range_end(raw):
         """Reichweite (ideal) aus TeslaMate raw-JSON holen."""
@@ -2064,13 +2094,25 @@ def api_charts():
 @app.route("/api/roadtrip")
 def api_roadtrip():
     """Roadtrip-/Reise-Ansicht (iOS Roadtrip-App-Stil): Tageswerte km/kWh/€/Station + Kennzahlen + Ladestopps (lat/lng)."""
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
     db = get_db()
-    evcc = [dict(r) for r in db.execute(
-        "SELECT created, finished, charged_kwh, total_cost, odometer, solar_percentage, loadpoint "
-        "FROM home_sessions ORDER BY created ASC")]
-    tm = [dict(r) for r in db.execute(
-        "SELECT started_at, finished_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, "
-        "latitude, longitude, address, location_name FROM external_sessions ORDER BY started_at ASC")]
+    evcc_q = "SELECT created, finished, charged_kwh, total_cost, odometer, solar_percentage, loadpoint FROM home_sessions WHERE created >= ?"
+    tm_q = "SELECT started_at, finished_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, latitude, longitude, address, location_name FROM external_sessions WHERE started_at >= ?"
+    params = [cutoff]
+    if end:
+        evcc_q += " AND created <= ?"
+        tm_q += " AND started_at <= ?"
+        params = [cutoff, end]
+    evcc = [dict(r) for r in db.execute(evcc_q + " ORDER BY created ASC", params).fetchall()]
+    tm = [dict(r) for r in db.execute(tm_q + " ORDER BY started_at ASC", params).fetchall()]
 
     from collections import defaultdict
     day_kwh = defaultdict(float)
