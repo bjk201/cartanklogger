@@ -835,6 +835,8 @@ def sync_teslamate():
         existing = db.execute(
             "SELECT id, manual_price, cost_total FROM external_sessions WHERE teslamate_session_id=?",
             (sid,)).fetchone()
+        # sqlite3.Row hat kein .get(); in dict wandeln für einheitlichen Zugriff
+        existing = dict(existing) if existing is not None else None
         # Datenschutz: rohe Payload + exakte GPS-Koordinaten nur speichern, wenn erlaubt
         raw_val = json.dumps(s, default=str) if _store_raw() else None
         lat = s.get("latitude") if _store_exact_location() else None
@@ -862,17 +864,17 @@ def sync_teslamate():
             # Auto-Eintrag: Kosten aus TeslaMate uebernehmen, falls gepflegt
             db.execute(
                 """UPDATE external_sessions SET cost_total=?, price_per_kwh=?, energy_kwh=?, energy_used_kwh=?
-                   WHERE id=?""",
+                WHERE id=?""",
                 (round(cost_total, 2), round(ppk, 4), energy, energy_used, existing["id"]))
-        # Provider + Label IMMER neu ableiten (auch bei bestehenden Saetzen),
-        # damit Aenderungen an home_addresses / Geofence-Erkennung sofort
-        # alle historischen Ladungen korrekt als Zuhause markieren.
-        new_provider = _detect_provider(s.get("geofence"), s.get("address"))
-        new_label = _location_label(s.get("geofence"), s.get("address"))
-        if new_provider != existing.get("provider") or new_label != existing.get("address"):
-            db.execute(
-                """UPDATE external_sessions SET provider=?, address=? WHERE id=?""",
-                (new_provider, new_label, existing["id"]))
+            # Provider + Label IMMER neu ableiten (auch bei bestehenden Saetzen),
+            # damit Aenderungen an home_addresses / Geofence-Erkennung sofort
+            # alle historischen Ladungen korrekt als Zuhause markieren.
+            new_provider = _detect_provider(s.get("geofence"), s.get("address"))
+            new_label = _location_label(s.get("geofence"), s.get("address"))
+            if new_provider != existing.get("provider") or new_label != existing.get("address"):
+                db.execute(
+                    """UPDATE external_sessions SET provider=?, address=? WHERE id=?""",
+                    (new_provider, new_label, existing["id"]))
     db.commit()
     return {"inserted": inserted, "fetched": len(sessions)}
 
@@ -1284,18 +1286,36 @@ def api_sync_backfill_teslamate():
     teslamate_session_id. Die Kosten werden aus PV-/Grid-Split + Preisperioden
     neu berechnet (Opportunitaetskosten via Einspeiseverguetung)."""
     db = get_db()
-    # Home-Sessions mit TeslaMate-Referenz (gematchte Home-Ladungen)
-    rows = [dict(r) for r in db.execute(
-        "SELECT teslamate_session_id, created, charged_kwh, solar_percentage "
-        "FROM home_sessions WHERE teslamate_session_id IS NOT NULL AND charged_kwh > 0"
-    ).fetchall()]
+    home_rows = [dict(r) for r in db.execute(
+        "SELECT * FROM home_sessions ORDER BY created ASC").fetchall()]
+    external_rows = [dict(r) for r in db.execute(
+        "SELECT * FROM external_sessions ORDER BY started_at ASC").fetchall()]
+    home_geofences = [a.strip().lower() for a in config.get("app", {}).get("home_addresses", []) if a and a.strip()]
+    from services.stats import build_cable_sessions_from_rows
+    cable_sessions, _unmatched_evcc, _external_unified = build_cable_sessions_from_rows(
+        home_rows, external_rows, home_geofences)
+
+    grid_default = float((config.get("pricing_defaults") or {}).get("grid_price_per_kwh", 0.32))
+    feedin_default = float((config.get("pricing_defaults") or {}).get("feedin_price_per_kwh", 0.08))
+
+    rows = []
+    for cable in cable_sessions:
+        if not cable.teslamate_charge_ids:
+            continue
+        wall = cable.wall_kwh
+        pv_share = cable.pv_share_pct
+        pv_kwh, grid_kwh = (wall * pv_share / 100.0, max(0.0, wall - wall * pv_share / 100.0)) \
+            if pv_share else (0.0, wall)
+        cost = round(grid_kwh * grid_default + pv_kwh * feedin_default, 2)
+        rows.append({
+            "teslamate_charge_ids": cable.teslamate_charge_ids,
+            "cost": cost,
+        })
     if not rows:
         return jsonify({"ok": True, "updated": 0, "errors": [],
                         "note": "Keine gematchten Home-Ladungen mit TM-Referenz gefunden."})
     tm_cfg = config["teslamate"]
     client = TeslaMateClient(tm_cfg["url"], tm_cfg.get("api_token", ""))
-    grid_default = float((config.get("pricing_defaults") or {}).get("grid_price_per_kwh", 0.32))
-    feedin_default = float((config.get("pricing_defaults") or {}).get("feedin_price_per_kwh", 0.08))
     try:
         from services.stats import backfill_teslamate_costs
         updated, errors = backfill_teslamate_costs(
