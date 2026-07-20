@@ -2825,7 +2825,7 @@ def api_export_roadtrip_csv():
             d,
             f"{odo:.1f}" if odo else "",
             f"{kwh:.3f}" if kwh else "",
-            "kWh",
+            "kW.h",
             f"{unit:.4f}" if unit else "",
             f"{total:.2f}" if total else "",
             str(full),
