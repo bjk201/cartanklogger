@@ -23,9 +23,25 @@ function updateRangeLabel() {
   }
 }
 
-const fmtEUR = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {style:"currency", currency:"EUR"}));
-const fmtKwh = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {minimumFractionDigits:1, maximumFractionDigits:1}) + " kWh");
-const fmtPct = (v) => (v == null ? "–" : Number(v).toLocaleString("de-DE", {maximumFractionDigits:1}) + " %");
+const fmtEUR = (v) => (v == null || v === "" || isNaN(Number(v)) ? "–" : Number(v).toLocaleString("de-DE", {style:"currency", currency:"EUR"}));
+const fmtKwh = (v) => (v == null || v === "" || isNaN(Number(v)) ? "–" : Number(v).toLocaleString("de-DE", {minimumFractionDigits:1, maximumFractionDigits:1}) + " kWh");
+const fmtPct = (v) => (v == null || v === "" || isNaN(Number(v)) ? "–" : Number(v).toLocaleString("de-DE", {maximumFractionDigits:1}) + " %");
+// Deutsche Datumsanzeige TT.MM.JJJJ (Punkt 13). Akzeptiert ISO-Strings,
+// Date-Objekte oder schon formatierte Werte.
+function fmtDateDE(v) {
+  if (v == null || v === "") return "–";
+  let s = String(v).trim();
+  // Zeitanteil abschneiden (2026-07-02T00:00:00 -> 2026-07-02)
+  if (s.includes("T")) s = s.split("T")[0];
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+  return s; // schon anders formatiert -> unveraendert
+}
+// Zahl sicher auf n Nachkommastellen runden (auch bei String-Eingabe).
+function num(v, n = 2) {
+  const x = Number(v);
+  return isNaN(x) ? "–" : x.toLocaleString("de-DE", {minimumFractionDigits:n, maximumFractionDigits:n});
+}
 
 function _rangeParams() {
   if (customFrom && customTo) {
@@ -166,7 +182,7 @@ function drawSourceChart() {
 function renderHome(rows) {
   const tb = document.querySelector("#tblHome tbody");
   tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
-    <td>${r.created ? r.created.slice(0,10) : "–"}</td>
+    <td>${fmtDateDE(r.created) || "–"}</td>
     <td>${r.loadpoint||""}</td><td>${r.vehicle||""}</td>
     <td>${fmtKwh(r.charged_kwh)}</td><td>${fmtPct(r.solar_percentage)}</td>
     <td>${fmtKwh(r.grid_kwh)}</td><td>${fmtKwh(r.pv_kwh)}</td>
@@ -299,7 +315,7 @@ function renderMergedPage() {
                          : (r.tm_home && r.tm_home.length ? tmHomeKwh : 0);
 
     return `<tr>
-      <td>${r.day || "–"}</td>
+      <td>${fmtDateDE(r.day) || "–"}</td>
       <td>${badgeHtml}</td>
       <td>${fmtKwh(homeKwhShown)}</td>
       <td>${fmtEUR(r.home_cost || 0)}</td>
@@ -333,7 +349,7 @@ function renderExt(rows) {
     return '<span class="badge bg-warning text-dark">fehlt</span>';
   };
   tb.innerHTML = rows.map(r => `<tr data-id="${r.id}">
-    <td>${r.started_at ? r.started_at.slice(0,10) : "–"}</td>
+    <td>${fmtDateDE(r.started_at) || "–"}</td>
     <td>${r.location_name||r.address||""}</td><td>${r.provider||""}</td>
     <td>${fmtKwh(r.energy_kwh)}</td>
     <td class="cost">${fmtEUR(r.cost_total)}</td><td>${r.price_per_kwh||""}</td>
@@ -366,7 +382,7 @@ async function renderExtra() {
               : (r.odometer_derived != null ? r.odometer_derived : null);
     const odoTxt = odo != null ? Number(odo).toLocaleString("de-DE") + (r.odometer == null || r.odometer === "" ? " *" : "") : "–";
     return `<tr data-id="${r.id}">
-    <td>${r.date||""}</td><td>${labels[r.category]||r.category}</td>
+    <td>${fmtDateDE(r.date)||""}</td><td>${labels[r.category]||r.category}</td>
     <td>${r.description||""}</td><td>${fmtEUR(r.amount)}</td>
     <td>${odoTxt}</td>
     <td>
@@ -734,14 +750,18 @@ function buildChartTypeButtons() {
     box.querySelectorAll(".chart-type-btn").forEach(b => {
       b.addEventListener("click", () => {
         _setChartType(id, b.dataset.type);
-        buildChartTypeButtons();
+        // Aktiven Button direkt markieren (nicht buildChartTypeButtons erneut
+        // aufrufen -> das wuerde wegen dataset.built sofort zurueckkehren und
+        // den active-State nicht aktualisieren, sodass "Linie" haengen bliebe).
+        box.querySelectorAll(".chart-type-btn").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
         if (window.__renderStatsAgain) window.__renderStatsAgain();
       });
     });
     const sb = box.querySelector(".chart-smooth-btn");
     if (sb) sb.addEventListener("click", () => {
       _setSmooth(id, !_getSmooth(id));
-      buildChartTypeButtons();
+      sb.classList.toggle("active");
       if (window.__renderStatsAgain) window.__renderStatsAgain();
     });
   });
@@ -758,7 +778,7 @@ function renderStats(data) {
     kpiStat("⚡ Geladen", `${k.charged_total_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("💶 Ausgaben", fmtEUR(k.total_cost)),
     kpiStat("🛣️ Gefahren", `${k.total_km?.toLocaleString("de-DE")} km`),
-    kpiStat("🔋 Ø Verbrauch", `${k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh/100km`),
+    kpiStat("🔋 Ø Verbrauch", `${k.avg_consumption != null ? num(k.avg_consumption, 2) + " kWh/100km" : "–"}`),
     kpiStat("💡 Ø Kosten", `${fmtEUR(k.avg_cost_100)}/100km`),
     kpiStat("🌱 CO₂", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
   ].join("");
@@ -788,7 +808,7 @@ function renderStats(data) {
   document.getElementById("kpiSocCons").textContent = dayMean != null ? dayMean.toLocaleString("de-DE", {minimumFractionDigits:1}) : "–";
 
   // Haupt-KPIs ueber Graphen
-  document.getElementById("kpiCons").textContent = k.avg_consumption?.toLocaleString("de-DE", {minimumFractionDigits:1}) || "–";
+  document.getElementById("kpiCons").textContent = k.avg_consumption != null ? num(k.avg_consumption, 2) + " kWh/100km" : "–";
   document.getElementById("kpiPrice").textContent = k.avg_price_kwh?.toLocaleString("de-DE", {minimumFractionDigits:3}) || "–";
   document.getElementById("kpiCost100").textContent = fmtEUR(k.avg_cost_100);
   document.getElementById("kpiKm").textContent = k.total_km?.toLocaleString("de-DE") || "–";
@@ -804,7 +824,7 @@ function renderStats(data) {
     kpiStat("🌱 CO₂ Ø", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
     kpiStat("💡 AC Kosten", `${fmtEUR(k.ac_cost_per_100km)}/100km`),
     kpiStat("💡 DC Kosten", `${fmtEUR(k.dc_cost_per_100km)}/100km`),
-    kpiStat("📊 Plausibilität", `${pl.lower}–${pl.upper}`, `Mittelwert ${pl.mean} ± 2σ kWh/100km (Ausreißer ausgeblendet)`),
+    kpiStat("📊 Plausibilität", `${pl.lower}–${pl.upper}`, `Mittelwert ${pl.mean} ± 2σ kWh/100km. Bedeutet: 95% deiner berechneten Verbrauchswerte liegen zwischen ${pl.lower} und ${pl.upper} kWh/100km. Werte außerhalb (Ausreißer, z.B. durch Tacho-Sprünge) werden für den Mittelwert ausgeblendet.`),
   ];
   // Reichweite nur anzeigen, wenn ein sinnvoller Wert vorliegt (kein 0 km)
   if (k.last_range && k.last_range > 0) {
@@ -1198,7 +1218,7 @@ function renderDrivesTable() {
   if (!tb) return;
   if (!_driveList.length) { tb.innerHTML = `<tr><td colspan="8" class="text-muted text-center">Keine Fahrten. Erst „Fahrten sync", dann „Fahrten laden".</td></tr>`; return; }
   tb.innerHTML = _driveList.map(d => {
-    const dt = d.start_date ? d.start_date.slice(0,16).replace("T"," ") : "";
+    const dt = d.start_date ? fmtDateDE(d.start_date) : "–";
     const soc = (d.soc_start != null && d.soc_end != null) ? `${d.soc_start}→${d.soc_end}%` : "–";
     return `<tr>
       <td><input type="checkbox" class="drive-cb" data-id="${d.id}" ${_driveSel.has(d.id)?"checked":""}></td>

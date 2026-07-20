@@ -83,63 +83,63 @@
 
 <div class="container-fluid px-3 py-3">
 
-    <!-- HAUPTSEITE: 8 Entscheidungs-KPIs (Punkt 4) -->
-    <div class="row g-2 mb-3" id="summaryCards"></div>
+    <!-- Tabs-Inhalt (Zusammenfassung/Statistik/Home/Ext/Extra) -->
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="tabMerged">
+            <!-- HAUPTSEITE: 8 Entscheidungs-KPIs (nur auf Übersicht) -->
+            <div class="row g-2 mb-3" id="summaryCards"></div>
 
-    <!-- Großer Trendgraph: Kosten pro Monat -->
-    <div class="row g-2 mb-3">
-        <div class="col-12">
-            <div class="card h-100">
-                <div class="card-header py-2">📈 Kosten pro Monat (Zuhause / Extern / Extra)</div>
-                <div class="card-body"><canvas id="chartMonthly" height="240"></canvas></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Letzte Ladevorgänge + Filter/Pagination -->
-    <div class="row g-2 mb-3">
-        <div class="col-12">
-            <div class="card h-100">
-                <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <span>🔌 Letzte Ladevorgänge</span>
-                    <div class="d-flex align-items-center gap-2">
-                        <label class="small mb-0">Anzeigen:</label>
-                        <select class="form-select form-select-sm" id="mergedLimit" style="width:auto">
-                            <option value="10" selected>10</option>
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                            <option value="all">Alle</option>
-                        </select>
+            <!-- Großer Trendgraph: Kosten pro Monat (nur auf Übersicht) -->
+            <div class="row g-2 mb-3">
+                <div class="col-12">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📈 Kosten pro Monat (Zuhause / Extern / Extra)</div>
+                        <div class="card-body"><canvas id="chartMonthly" height="240"></canvas></div>
                     </div>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height:420px;overflow:auto">
-                        <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
-                            <thead><tr>
-                                <th>Datum</th><th>Stationen</th>
-                                <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
-                                <th>Extern kWh</th><th>Extern €</th>
-                                <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
-                            </tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center p-2" id="mergedPager">
-                        <span class="small text-muted" id="mergedPagerInfo"></span>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-secondary" id="mergedPrev" disabled>‹ Zurück</button>
-                            <button class="btn btn-outline-secondary" id="mergedNext" disabled>Weiter ›</button>
+            </div>
+
+            <!-- Letzte Ladevorgänge + Filter/Pagination (nur auf Übersicht) -->
+            <div class="row g-2 mb-3">
+                <div class="col-12">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span>🔌 Letzte Ladevorgänge</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="small mb-0">Anzeigen:</label>
+                                <select class="form-select form-select-sm" id="mergedLimit" style="width:auto">
+                                    <option value="10" selected>10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="all">Alle</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                                <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
+                                    <thead><tr>
+                                        <th>Datum</th><th>Stationen</th>
+                                        <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
+                                        <th>Extern kWh</th><th>Extern €</th>
+                                        <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
+                                    </tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2" id="mergedPager">
+                                <span class="small text-muted" id="mergedPagerInfo"></span>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary" id="mergedPrev" disabled>‹ Zurück</button>
+                                    <button class="btn btn-outline-secondary" id="mergedNext" disabled>Weiter ›</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Tabs-Inhalt (Zusammenfassung/Statistik/Home/Ext/Extra) -->
-    <div class="tab-content">
-        <div class="tab-pane fade show active" id="tabMerged">
             <!-- KPI-Übersicht (wichtigste Infos auf einen Blick) -->
             <div class="row g-2 mb-3" id="mergedKpis"></div>
             <!-- Reise-Kacheln (ohne Gesamt-km, da diese auf dem Tacho = max odometer basiert) -->
