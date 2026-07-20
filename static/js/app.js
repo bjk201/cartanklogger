@@ -111,6 +111,9 @@ function renderCharts(s) {
   const h = s.home, e = s.external, x = s.extra;
   const srcEl = document.getElementById("chartSource");
   const monEl = document.getElementById("chartMonthly");
+  // Source-Daten global merken, damit drawSourceChart() sie auch im
+  // Statistik-Tab zeichnen kann (chartSource liegt jetzt dort).
+  window.__sourceData = { grid: h.grid_kwh || 0, pv: h.pv_kwh || 0, ext: e.kwh || 0 };
   if (!srcEl || !monEl || !window.Chart) return;
   if (srcEl.clientWidth === 0 && srcEl.offsetParent === null) return; // Tab verborgen
   // Source donut
@@ -140,6 +143,24 @@ function renderCharts(s) {
     options: { plugins:{legend:{position:"bottom"}}, scales:{ x:{stacked:true}, y:{stacked:true} } }
   });
   }
+}
+
+// Energie nach Quelle (Donut) – unabhaengig vom Tab zeichnen
+function drawSourceChart() {
+  const sd = window.__sourceData;
+  const srcEl = document.getElementById("chartSource");
+  if (!srcEl || !window.Chart || !sd) return;
+  if (srcEl.clientWidth === 0 && srcEl.offsetParent === null) {
+    requestAnimationFrame(drawSourceChart);
+    return;
+  }
+  if (charts.source) charts.source.destroy();
+  charts.source = new Chart(srcEl, {
+    type: "doughnut",
+    data: { labels: ["Zuhause Netz", "Zuhause PV", "Extern"],
+      datasets: [{ data: [sd.grid, sd.pv, sd.ext], backgroundColor: ["#0d6efd","#198754","#0dcaf0"] }]},
+    options: { plugins: { legend: { position: "bottom" } } }
+  });
 }
 
 function renderHome(rows) {
@@ -209,9 +230,27 @@ function renderMerged(rows, perDay, totals) {
     }
   }
 
-  // --- Tabelle ---
+  // --- Tabelle (paginiert) ---
+  window.__mergedRows = rows;
+  window.__mergedPage = 0;
+  renderMergedPage();
+}
+
+// Pagination für "Letzte Ladevorgänge"
+function renderMergedPage() {
+  const rows = window.__mergedRows || [];
+  const limitSel = document.getElementById("mergedLimit");
+  const limit = limitSel && limitSel.value === "all" ? rows.length : (limitSel ? parseInt(limitSel.value, 10) : 10);
+  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
+  if (window.__mergedPage >= totalPages) window.__mergedPage = totalPages - 1;
+  if (window.__mergedPage < 0) window.__mergedPage = 0;
+  const page = window.__mergedPage;
+  const start = page * limit;
+  const slice = rows.slice(start, start + limit);
   const tb = document.querySelector("#tblMerged tbody");
-  tb.innerHTML = rows.map((r, i) => {
+  if (!tb) return;
+  tb.innerHTML = slice.map((r, i) => {
+    const absIdx = start + i;
     // Aufklapp-Detail: Zuhause (EVCC einzeln + TM-Zuhause) und Extern getrennt
     let detail = '<div class="row"><div class="col-md-6">';
     detail += '<strong>🏠 Zuhause</strong><ul class="mb-2 ps-3">';
@@ -270,12 +309,20 @@ function renderMerged(rows, perDay, totals) {
       <td>${r.ext_kwh > 0 ? fmtEUR(r.ext_cost) : "–"}</td>
       <td><strong>${fmtKwh(r.total_kwh)}</strong></td>
       <td><strong>${fmtEUR(r.total_cost)}</strong></td>
-      <td><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#m${i}">▾</button></td>
+      <td><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#m${absIdx}">▾</button></td>
     </tr>
     <tr class="collapse-row"><td colspan="11" class="p-0">
-      <div class="collapse" id="m${i}"><div class="p-2 bg-light">${detail}</div></div>
+      <div class="collapse" id="m${absIdx}"><div class="p-2 bg-light">${detail}</div></div>
     </td></tr>`;
   }).join("");
+
+  // Pager-Info + Buttons
+  const info = document.getElementById("mergedPagerInfo");
+  const prev = document.getElementById("mergedPrev");
+  const next = document.getElementById("mergedNext");
+  if (info) info.textContent = `Seite ${page + 1} / ${totalPages} · ${rows.length} Einträge`;
+  if (prev) { prev.disabled = page <= 0; prev.onclick = () => { window.__mergedPage--; renderMergedPage(); }; }
+  if (next) { next.disabled = page >= totalPages - 1; next.onclick = () => { window.__mergedPage++; renderMergedPage(); }; }
 }
 
 function renderExt(rows) {
@@ -314,15 +361,20 @@ async function renderExtra() {
     return;
   }
   const labels = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
-  tb.innerHTML = (rows || []).map(r => `<tr data-id="${r.id}">
+  tb.innerHTML = (rows || []).map(r => {
+    const odo = r.odometer != null && r.odometer !== "" ? r.odometer
+              : (r.odometer_derived != null ? r.odometer_derived : null);
+    const odoTxt = odo != null ? Number(odo).toLocaleString("de-DE") + (r.odometer == null || r.odometer === "" ? " *" : "") : "–";
+    return `<tr data-id="${r.id}">
     <td>${r.date||""}</td><td>${labels[r.category]||r.category}</td>
     <td>${r.description||""}</td><td>${fmtEUR(r.amount)}</td>
-    <td>${r.odometer!=null?Number(r.odometer).toLocaleString("de-DE"):"–"}</td>
+    <td>${odoTxt}</td>
     <td>
       <button class="btn btn-sm btn-outline-secondary editBtn" data-type="extra" data-id="${r.id}">✏️</button>
       <button class="btn btn-sm btn-outline-danger delBtn" data-type="extra" data-id="${r.id}" title="Löschen">🗑️</button>
     </td>
-  </tr>`).join("");
+  </tr>`;
+  }).join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -574,42 +626,127 @@ function avg(arr) {
 }
 
 // Einzelwerte-Linie + Flaeche + gestrichelte Durchschnittslinie
-function drawStatChart(canvasId, labels, values, color, unit, dec) {
+// ---------------------------------------------------------------------------
+// Universelles Statistik-Diagramm mit frei waehlbarem Typ
+// (Balken / Linie / Kreis) und optionalem gleitendem Mittelwert.
+// Der gewaehlte Typ + Mittelwert-Toggle werden pro Canvas im localStorage
+// gespeichert, damit die Auswahl beim Reload erhalten bleibt.
+// ---------------------------------------------------------------------------
+function _chartPrefKey(id) { return "ct_chart_" + id; }
+function _getChartType(id) {
+  try { return localStorage.getItem(_chartPrefKey(id)) || "line"; } catch (e) { return "line"; }
+}
+function _setChartType(id, t) {
+  try { localStorage.setItem(_chartPrefKey(id), t); } catch (e) {}
+}
+function _getSmooth(id) {
+  try { return localStorage.getItem(_chartPrefKey(id) + "_smooth") === "1"; } catch (e) { return false; }
+}
+function _setSmooth(id, on) {
+  try { localStorage.setItem(_chartPrefKey(id) + "_smooth", on ? "1" : "0"); } catch (e) {}
+}
+
+// Gleitender Mittelwert (Fenster = windowSize, default 7)
+function movingAverage(values, windowSize) {
+  const out = [];
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] == null) { out.push(null); continue; }
+    let sum = 0, n = 0;
+    for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
+      if (values[j] != null) { sum += values[j]; n++; }
+    }
+    out.push(n ? sum / n : null);
+  }
+  return out;
+}
+
+function drawStatChart(canvasId, labels, values, color, unit, dec, opts) {
+  opts = opts || {};
   if (statCharts[canvasId]) statCharts[canvasId].destroy();
   const ctx = document.getElementById(canvasId);
   if (!ctx || !window.Chart) return;
-  // Canvas nicht sichtbar (Tab verborgen / Fade-In) -> 0px Breite -> Chart.js
-  // zeichnet nicht. Dann warten (requestAnimationFrame), bis sichtbar, statt
-  // komplett zu ueberspringen (sonst bleibt der Graph beim Tab-Wechsel leer).
   if (ctx.clientWidth === 0 && ctx.offsetParent === null) {
-    requestAnimationFrame(() => drawStatChart(canvasId, labels, values, color, unit, dec));
+    requestAnimationFrame(() => drawStatChart(canvasId, labels, values, color, unit, dec, opts));
     return;
   }
-  const mean = avg(values);
-  const meanLine = values.map(() => mean);
+  const type = _getChartType(canvasId);
+  const smooth = _getSmooth(canvasId);
+  const clean = values.map(v => (v == null ? null : v));
+  const ds = [];
+
+  if (type === "doughnut") {
+    // Bei Kreis: nur Summen je Kategorie (eine Spalte je Label)
+    const sums = labels.map((_, i) => clean[i] == null ? 0 : clean[i]);
+    statCharts[canvasId] = new Chart(ctx, {
+      type: "doughnut",
+      data: { labels, datasets: [{ data: sums, backgroundColor: labels.map((_, i) => colorShade(color, i)) }] },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+    });
+    return;
+  }
+
+  ds.push({
+    label: unit, data: clean,
+    borderColor: color, backgroundColor: color + "33",
+    fill: type === "line", tension: 0.3, pointRadius: 2, spanGaps: true,
+    type: type,
+  });
+  if (smooth) {
+    const mv = movingAverage(clean, opts.smoothWindow || 7);
+    ds.push({
+      label: "Ø gleitend", data: mv,
+      borderColor: "#ffc107", borderWidth: 2, borderDash: [5, 3],
+      pointRadius: 0, fill: false, spanGaps: true, type: "line",
+    });
+  }
+  const isBar = type === "bar";
   statCharts[canvasId] = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: unit, data: values,
-          borderColor: color, backgroundColor: color + "22",
-          fill: true, tension: 0.3, pointRadius: 2, spanGaps: true,
-        },
-        {
-          label: "Ø", data: meanLine,
-          borderColor: "#fff", borderDash: [6, 4], borderWidth: 1.5,
-          pointRadius: 0, fill: false,
-        },
-      ],
-    },
+    type: type,
+    data: { labels, datasets: ds },
     options: {
-      responsive: true, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: false, ticks: { callback: v => v?.toLocaleString("de-DE") } } },
+      responsive: true,
+      plugins: { legend: { display: smooth } },
+      scales: isBar || type === "line" ? {
+        y: { beginAtZero: false, ticks: { callback: v => v?.toLocaleString("de-DE") } },
+      } : {},
     },
   });
 }
+
+// Helfer: Farbvarianten fuer Doughnut-Slices
+function colorShade(base, i) {
+  const pal = ["#0d6efd", "#198754", "#ffc107", "#6f42c1", "#dc3545", "#0dcaf0", "#fd7e14", "#20c997"];
+  return pal[i % pal.length];
+}
+
+// Typ-Auswahl-Buttons pro Chart generieren
+function buildChartTypeButtons() {
+  document.querySelectorAll(".chart-type-btns").forEach(box => {
+    const id = box.dataset.chart;
+    if (box.dataset.built) return;
+    box.dataset.built = "1";
+    const types = [["bar", "▤ Balken"], ["line", "〰 Linie"], ["doughnut", "◓ Kreis"]];
+    const cur = _getChartType(id);
+    box.innerHTML = types.map(([t, lbl]) =>
+      `<button class="btn btn-xs btn-outline-secondary py-0 px-1 me-1 chart-type-btn ${cur === t ? "active" : ""}" data-type="${t}" style="font-size:.62rem">${lbl}</button>`
+    ).join("") +
+      `<button class="btn btn-xs btn-outline-secondary py-0 px-1 chart-smooth-btn ${_getSmooth(id) ? "active" : ""}" style="font-size:.62rem" title="Gleitender Mittelwert">∿ MW</button>`;
+    box.querySelectorAll(".chart-type-btn").forEach(b => {
+      b.addEventListener("click", () => {
+        _setChartType(id, b.dataset.type);
+        buildChartTypeButtons();
+        if (window.__renderStatsAgain) window.__renderStatsAgain();
+      });
+    });
+    const sb = box.querySelector(".chart-smooth-btn");
+    if (sb) sb.addEventListener("click", () => {
+      _setSmooth(id, !_getSmooth(id));
+      buildChartTypeButtons();
+      if (window.__renderStatsAgain) window.__renderStatsAgain();
+    });
+  });
+}
+
 
 function renderStats(data) {
   const s = data.series || [];
@@ -659,17 +796,32 @@ function renderStats(data) {
   // Sekundaer-KPIs + Kategorie-Karten
   const dcPct = k.dc_share_pct ?? 0;
   const pl = data.plausibility || {};
-  document.getElementById("statsSecondary").innerHTML = [
+  const secCards = [
     kpiStat("🔌 AC geladen", `${k.ac_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("⚡ DC (Supercharger)", `${k.dc_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`),
     kpiStat("⚡ DC-Anteil", `${dcPct} %`),
     kpiStat("🔋 Ladeverlust", `${k.charging_loss_kwh?.toLocaleString("de-DE", {minimumFractionDigits:1})} kWh`, `${k.charging_loss_pct} % der geladenen Energie (AC 10% / DC 5%)`),
-    kpiStat("📏 Reichweite", `${k.last_range?.toLocaleString("de-DE")} km`),
     kpiStat("🌱 CO₂ Ø", `${k.avg_co2?.toLocaleString("de-DE", {maximumFractionDigits:1})} g/kWh`),
     kpiStat("💡 AC Kosten", `${fmtEUR(k.ac_cost_per_100km)}/100km`),
     kpiStat("💡 DC Kosten", `${fmtEUR(k.dc_cost_per_100km)}/100km`),
     kpiStat("📊 Plausibilität", `${pl.lower}–${pl.upper}`, `Mittelwert ${pl.mean} ± 2σ kWh/100km (Ausreißer ausgeblendet)`),
-  ].join("");
+  ];
+  // Reichweite nur anzeigen, wenn ein sinnvoller Wert vorliegt (kein 0 km)
+  if (k.last_range && k.last_range > 0) {
+    secCards.push(kpiStat("📏 Reichweite", `${k.last_range.toLocaleString("de-DE")} km`));
+  }
+  document.getElementById("statsSecondary").innerHTML = secCards.join("");
+
+  // Energie nach Quelle (Donut) – liegt jetzt im Statistik-Tab
+  drawSourceChart();
+
+  // Chart-Typ-Buttons aufbauen + Re-Render-Hook
+  buildChartTypeButtons();
+  window.__renderStatsAgain = () => { try { drawStatChart("chartCons", labels, s.map(d => d.consumption), "#198754", "kWh/100km", 1); } catch(e){}
+                                   try { drawStatChart("chartPrice", labels, s.map(d => d.price_per_kwh), "#0d6efd", "€/kWh", 3); } catch(e){}
+                                   try { drawStatChart("chartCost100", labels, s.map(d => d.cost_per_100), "#ffc107", "€/100km", 2); } catch(e){}
+                                   try { drawStatChart("chartKm", labels, s.map(d => d.cum_km), "#6f42c1", "km", 0); } catch(e){}
+                                   try { drawStatChart("chartSoc", labels, dayCons, "#fd7e14", "kWh/100km", 1); } catch(e){} };
 }
 
 function renderStatistics(d) {
@@ -759,6 +911,28 @@ function renderStatistics(d) {
     html += "</tbody></table></div>";
     hm.innerHTML = html;
   }
+  // Zweite Heatmap: geladene kWh pro Wochentag x Stunde
+  const heatK = d.heatmap_kwh || [];
+  const hmk = document.getElementById("statHeatmapKwh");
+  if (hmk && heatK.length === 7) {
+    const maxK = Math.max(0.1, ...heatK.flat());
+    const days = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+    let html = '<div class="small mb-1">Zellenfarbe = geladene kWh zu dieser Uhrzeit (dunkler = mehr)</div>';
+    html += '<div style="overflow-x:auto"><table class="table table-sm" style="font-size:.7rem">';
+    html += "<thead><tr><th></th>" + Array.from({length:24}, (_,h)=>`<th class="text-center">${h}</th>`).join("") + "</tr></thead><tbody>";
+    for (let i=0;i<7;i++) {
+      html += `<tr><td class="text-end fw-bold">${days[i]}</td>`;
+      for (let h=0;h<24;h++) {
+        const v = heatK[i][h];
+        const a = v / maxK;
+        const bg = v <= 0 ? "#f1f3f5" : `rgba(255,193,7,${0.15 + a*0.85})`;
+        html += `<td class="text-center p-0" style="background:${bg};width:3.5%">${v>0?v.toFixed(1):""}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table></div>";
+    hmk.innerHTML = html;
+  }
 }
 
 function kpiStat(label, value, sub) {
@@ -804,11 +978,17 @@ function kpi(label, value) {
 // Tab-Wechsel: Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
 let __chartData = null;
 let __statsData = null;
+let __socData = null;
+let __dailyKm = null;
 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
   tab.addEventListener("shown.bs.tab", (e) => {
     const target = e.target.getAttribute("data-bs-target");
     if (target === "#tabStats") {
       if (__chartData) setTimeout(() => { renderStats(__chartData); renderStatistics(__statData); }, 30);
+      // SoC- + km/Tag-Charts muessen beim Anzeigen neu gezeichnet werden,
+      // da Chart.js in versteckten (display:none) Tab-Panes nicht korrekt misst.
+      if (__socData) setTimeout(() => { try { renderSocCharts(__socData); } catch(err){ console.error("renderSocCharts", err); } }, 40);
+      if (__dailyKm) setTimeout(() => { try { renderDailyKm(__dailyKm); } catch(err){ console.error("renderDailyKm", err); } }, 40);
     } else if (target === "#tabHome") {
       if (__statsData) setTimeout(() => renderCharts(__statsData), 30);
     }
@@ -816,6 +996,21 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
 });
 
 // --- Zeitraum-Auswahl (90T / 1J / All / eigener Bereich) ---
+// Datumsfelder beim Start sinnvoll vorbelegen (letzte 365 Tage), damit der
+// Zeitraum-Filter sofort sichtbar "etwas tut" und nicht leer wirkt.
+(function initRangeInputs() {
+  const rf = document.getElementById("rangeFrom");
+  const rt = document.getElementById("rangeTo");
+  if (rf && rt) {
+    const today = new Date();
+    const yearAgo = new Date();
+    yearAgo.setFullYear(today.getFullYear() - 1);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    if (!rf.value) rf.value = fmt(yearAgo);
+    if (!rt.value) rt.value = fmt(today);
+  }
+})();
+
 document.querySelectorAll('[data-days]').forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
@@ -823,6 +1018,12 @@ document.querySelectorAll('[data-days]').forEach(btn => {
     currentDays = parseInt(btn.getAttribute("data-days"), 10);
     customFrom = null;
     customTo = null;
+    // Schnellbereich aktiv -> Datumsfelder leeren, damit klar ist: jetzt gilt
+    // der Schnellbereich, nicht die manuelle Auswahl.
+    const rf = document.getElementById("rangeFrom");
+    const rt = document.getElementById("rangeTo");
+    if (rf) rf.value = "";
+    if (rt) rt.value = "";
     updateRangeLabel();
     loadAll();
   });
@@ -843,6 +1044,12 @@ if (btnRange) {
     updateRangeLabel();
     loadAll();
   });
+}
+
+// Limit-Auswahl für "Letzte Ladevorgänge" -> neu paginieren
+const mergedLimitSel = document.getElementById("mergedLimit");
+if (mergedLimitSel) {
+  mergedLimitSel.addEventListener("change", () => { window.__mergedPage = 0; renderMergedPage(); });
 }
 
 updateRangeLabel();
@@ -1014,7 +1221,7 @@ function renderDrivesTable() {
       <td class="text-end">${d.km ?? "–"}</td>
       <td class="text-end">${d.cons_per_100 ?? "–"}</td>
       <td class="text-end small">${soc}</td>
-      <td class="text-end">${d.speed_avg ?? "–"}</td>
+      <td class="text-end">${(typeof d.speed_avg === "number") ? d.speed_avg.toFixed(1) : (d.speed_avg ?? "–")}</td>
       <td class="text-end">${d.outside_temp_avg ?? "–"}</td>
     </tr>`;
   }).join("");

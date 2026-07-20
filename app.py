@@ -948,6 +948,62 @@ def _detect_provider(geofence, address):
     return "Öffentliche Ladestation"
 
 
+def derive_odometer_for_date(db, date):
+    """Leitet den KM-Stand fuer ein Datum ab, wenn er bei einer Extra-Kosten-
+    Buchung nicht erfasst wurde.
+
+    Strategie: nimm den KM-Stand des Ladevorgangs (EVCC odometer / TM
+    odometer_start), dessen Zeitstempel dem Buchungsdatum am naechsten liegt
+    (vorzugsweise am selben Tag oder danach; sonst der letzte davor). FALLBACK:
+    wenn keine Ladevorgänge da sind, der groesste bekannte Tacho-Stand aus den
+    Fahrten (drives.odometer_end). Liefert None, wenn gar nichts bekannt.
+    """
+    if not date:
+        return None
+    d19 = str(date)[:10]
+    try:
+        target = datetime.fromisoformat(d19).date()
+    except Exception:
+        return None
+    from datetime import date as _date
+    candidates = []  # (abs_days_diff, odometer, is_after)
+    for tbl, ts_col, odo_col in (
+        ("home_sessions", "created", "odometer"),
+        ("external_sessions", "started_at", "odometer_start"),
+    ):
+        try:
+            rows = db.execute(
+                f"SELECT {ts_col}, {odo_col} FROM {tbl} WHERE {odo_col} IS NOT NULL AND {odo_col} > 0"
+            ).fetchall()
+        except Exception:
+            rows = []
+        for r in rows:
+            ts = str(dict(r).get(ts_col) or "")[:10]
+            odo = dict(r).get(odo_col)
+            if not ts or odo is None:
+                continue
+            try:
+                d = datetime.fromisoformat(ts).date()
+            except Exception:
+                continue
+            diff = (d - target).days
+            candidates.append((abs(diff), odo, diff >= 0))
+    if candidates:
+        # Bevorzuge Eintraege am/nahe dem Datum; bei Gleichstand den mit KM-Stand.
+        candidates.sort(key=lambda c: (0 if c[2] else 1, c[0], -c[1] if c[1] else 0))
+        return candidates[0][1]
+    # Fallback: groesster Tacho-Stand aus Fahrten
+    try:
+        row = db.execute(
+            "SELECT MAX(odometer_end) AS m FROM drives WHERE odometer_end IS NOT NULL AND odometer_end > 0"
+        ).fetchone()
+        if row:
+            return dict(row).get("m")
+    except Exception:
+        pass
+    return None
+
+
 def sync_teslamate():
     tm = config["teslamate"]
     client = TeslaMateClient(tm["url"], tm.get("api_token", ""))
@@ -2425,14 +2481,51 @@ def api_statistics():
     home = [dict(r) for r in db.execute(home_q + " ORDER BY created ASC", params).fetchall()]
     ext = [dict(r) for r in db.execute(ext_q + " ORDER BY started_at ASC", params).fetchall()]
 
+    # EVCC-Zeitfenster (fuer TM-Zuhause-Erkennung via Ueberlappung, s.u.)
+    def _pd(v):
+        s = str(v or "").replace("Z", "").replace("+00:00", "")
+        try:
+            return datetime.fromisoformat(s[:19])
+        except Exception:
+            return None
+    evcc_windows = []
+    for r in home:
+        sdt = _pd(r.get("created"))
+        edt = _pd(r.get("finished")) or sdt
+        if sdt is not None:
+            evcc_windows.append((sdt, edt))
+
+    # Road-Trip-Import-Ladungen (provider='Road Trip') sind KEIN echtes
+    # Fremdladen. Ausserdem duerfen TeslaMate-Zuhause-Ladungen (doppeltes
+    # Tracking mit EVCC) NICHT als Extern gewertet werden. Beides wird fuer
+    # die Extern-Statistik ausgeklammert, damit "Extern O kWh" nur echte
+    # Fremdladungen (Supercharger/Arbeit/oeffentliche Saule) zaehlt.
+    # Erkennung von TM-Zuhause wie in build_stats: Adress-/Geofence-Match
+    # ODER zeitliche Ueberlappung mit einem EVCC-Wallbox-Ladevorgang.
+    def _tm_is_home(r):
+        cdt = _pd(r.get("started_at"))
+        if cdt is not None:
+            for sdt, edt in evcc_windows:
+                if sdt <= cdt <= edt:
+                    return True
+        return _is_home_address(r.get("location_name"), r.get("address"))
+    def _is_real_external(r):
+        if (r.get("provider") or "") == "Road Trip":
+            return False
+        if _tm_is_home(r):
+            return False
+        return True
+    ext_real = [r for r in ext if _is_real_external(r)]
+    ext_import = [r for r in ext if (r.get("provider") or "") == "Road Trip"]
+
     # --- Monatsvergleich (Kosten + Energie) aus build_stats.monthly ---
     stats = build_stats(days, from_date, to_date)
     monthly = stats.get("monthly", [])
 
-    # --- Standorttyp-Verteilung (nur echte Externe, TM) ---
+    # --- Standorttyp-Verteilung (nur echte Externe, TM; Road-Trip-Import separat) ---
     # Zuhause = EVCC (Wallbox). Externe nach Adress-Typ gruppieren.
     loc_map = defaultdict(lambda: {"kwh": 0.0, "cost": 0.0, "sessions": 0, "added": 0.0})
-    for r in ext:
+    for r in ext_real:
         addr = (r.get("location_name") or r.get("address") or "").lower()
         if _is_home_address(r.get("location_name"), r.get("address")):
             typ = "Zuhause"
@@ -2446,6 +2539,11 @@ def api_statistics():
         loc_map[typ]["cost"] += float(r.get("cost_total") or 0)
         loc_map[typ]["added"] += float(r.get("energy_kwh") or 0)
         loc_map[typ]["sessions"] += 1
+    if ext_import:
+        imp_kwh = sum(float(r.get("energy_kwh") or 0) for r in ext_import)
+        imp_cost = sum(float(r.get("cost_total") or 0) for r in ext_import)
+        loc_map["Road Trip (Import)"] = {"kwh": imp_kwh, "cost": imp_cost,
+                                          "sessions": len(ext_import), "added": imp_kwh}
     by_location = [{"type": k, **v} for k, v in sorted(loc_map.items(), key=lambda kv: -kv[1]["kwh"])]
 
     # --- Durchschnitt je Ladevorgang (kWh, Kosten, Dauer) ---
@@ -2458,19 +2556,19 @@ def api_statistics():
             return None
     home_durs = [_dur_h(r.get("created"), r.get("finished")) for r in home]
     home_durs = [d for d in home_durs if d is not None]
-    ext_durs = [_dur_h(r.get("started_at"), r.get("finished_at")) for r in ext]
+    ext_durs = [_dur_h(r.get("started_at"), r.get("finished_at")) for r in ext_real]
     ext_durs = [d for d in ext_durs if d is not None]
     all_durs = home_durs + ext_durs
     n_home = len(home)
-    n_ext = len(ext)
+    n_ext = len(ext_real)
     n_all = n_home + n_ext
     avg_per_charge = {
         "n_charges": n_all,
         "avg_kwh": round(sum(float(r.get("charged_kwh") or 0) for r in home) / n_home, 2) if n_home else 0,
         "avg_cost": round(sum(float(r.get("total_cost") or 0) for r in home) / n_home, 2) if n_home else 0,
         "avg_duration_h": round(sum(all_durs) / len(all_durs), 2) if all_durs else 0,
-        "ext_avg_kwh": round(sum(float(r.get("energy_kwh") or 0) for r in ext) / n_ext, 2) if n_ext else 0,
-        "ext_avg_cost": round(sum(float(r.get("cost_total") or 0) for r in ext) / n_ext, 2) if n_ext else 0,
+        "ext_avg_kwh": round(sum(float(r.get("energy_kwh") or 0) for r in ext_real) / n_ext, 2) if n_ext else 0,
+        "ext_avg_cost": round(sum(float(r.get("cost_total") or 0) for r in ext_real) / n_ext, 2) if n_ext else 0,
     }
 
     # --- AC/DC-Anteil (aus api_charts-KPIs) ---
@@ -2493,16 +2591,19 @@ def api_statistics():
 
     # --- Ladezeiten-Heatmap: Wochentag (0=Mo) x Stunde (0-23) ---
     heat = [[0] * 24 for _ in range(7)]
+    heat_kwh = [[0.0] * 24 for _ in range(7)]
     for r in home:
         try:
             dt = datetime.fromisoformat(str(r.get("created")).replace("Z", "")[:19])
             heat[dt.weekday()][dt.hour] += 1
+            heat_kwh[dt.weekday()][dt.hour] += float(r.get("charged_kwh") or 0)
         except Exception:
             pass
     for r in ext:
         try:
             dt = datetime.fromisoformat(str(r.get("started_at")).replace("Z", "")[:19])
             heat[dt.weekday()][dt.hour] += 1
+            heat_kwh[dt.weekday()][dt.hour] += float(r.get("energy_kwh") or 0)
         except Exception:
             pass
 
@@ -2513,6 +2614,7 @@ def api_statistics():
         "ac_dc": ac_dc,
         "home_vs_extern": home_vs_extern,
         "heatmap": heat,
+        "heatmap_kwh": heat_kwh,
     })
 
 
@@ -2844,6 +2946,191 @@ def _csv_response(text, filename):
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Road Trip Rück-Import (iOS "Road Trip MPG" -> CarTankLogger)
+# ---------------------------------------------------------------------------
+def _parse_roadtrip_csv(text):
+    """Parst den Road Trip CSV-Export (';'-Trenner, dt. Dezimalkomma, kW.h).
+
+    Liefert Liste von Dicts mit den FuelRecord-Feldern, die wir brauchen:
+    odometer, date, kwh, unit_price, total, full(0/1), location.
+    Nur die 'Kraftstoff'-Sektion wird ausgewertet; Reifen/Touren/Wartung
+    bleiben beim Rueck-Import unangetastet (CarTankLogger hat keine solchen
+    Tabellen, also werden sie schlicht ignoriert).
+    """
+    def _de(s):
+        if s is None:
+            return None
+        s = s.strip().strip('"')
+        if s == "":
+            return None
+        s = s.replace(",", ".")  # dt. Dezimalkomma
+        try:
+            return float(s)
+        except ValueError:
+            return s
+
+    lines = text.replace("\ufeff", "").splitlines()
+    # Sektion 'Kraftstoff' finden
+    start = None
+    for i, l in enumerate(lines):
+        if l.strip() == "Kraftstoff":
+            start = i + 1
+            break
+    if start is None:
+        return []
+    # Header der Kraftstoff-Sektion (erste nicht-leere Zeile nach 'Kraftstoff')
+    hdr = None
+    j = start
+    while j < len(lines) and not lines[j].strip():
+        j += 1
+    if j >= len(lines):
+        return []
+    hdr = [c.strip() for c in lines[j].split(";")]
+    j += 1
+    out = []
+    idx = {name: hdr.index(name) for name in (
+        "Tachostand (km)", "Datum", "Getankt Betrag", "Getankt Einheiten",
+        "Preis pro Einheit", "Total Preis", "Vollgetankt", "Ort") if name in hdr}
+
+    def _unquote(s):
+        if s is None:
+            return ""
+        s = s.strip()
+        if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+            s = s[1:-1]
+        return s.strip()
+
+    while j < len(lines):
+        l = lines[j].strip()
+        j += 1
+        if not l:
+            continue
+        # Sektion endet, wenn eine andere Ueberschrift kommt
+        if l in ("Wartung", "Touren", "Automobil", "Reifen", "VALUATIONS"):
+            break
+        parts = l.split(";")
+        if len(parts) <= max(idx.values(), default=0):
+            continue
+        odo = _de(parts[idx["Tachostand (km)"]])
+        date = _unquote(parts[idx["Datum"]]) if "Datum" in idx and idx["Datum"] < len(parts) else ""
+        kwh = _de(parts[idx["Getankt Betrag"]]) if "Getankt Betrag" in idx else None
+        unit = _de(parts[idx["Preis pro Einheit"]]) if "Preis pro Einheit" in idx else None
+        total = _de(parts[idx["Total Preis"]]) if "Total Preis" in idx else None
+        fullraw = parts[idx["Vollgetankt"]] if "Vollgetankt" in idx else ""
+        full = 1 if (fullraw or "").strip().lower() in ("full", "voll", "vollgetankt", "1") else 0
+        loc = _unquote(parts[idx["Ort"]]) if "Ort" in idx else ""        # Nur echte Zahlenwerte uebernehmen
+        if not date or (kwh is None and total is None):
+            continue
+        out.append({
+            "odometer": odo if isinstance(odo, (int, float)) else None,
+            "date": date,
+            "kwh": kwh if isinstance(kwh, (int, float)) else None,
+            "unit_price": unit if isinstance(unit, (int, float)) else None,
+            "total": total if isinstance(total, (int, float)) else None,
+            "full": full,
+            "location": loc or "",
+        })
+    return out
+
+
+def _parse_roadtrip_rtvd(text):
+    """Parst das native Road Trip Backup (.roadtrip, base64 in 'Data:'-Zeilen).
+
+    Liefert dieselbe Dict-Liste wie _parse_roadtrip_csv.
+    """
+    import base64, urllib.parse
+    blobs = []
+    for l in text.splitlines():
+        if l.startswith("Data:"):
+            blobs.append(l.split(":", 1)[1].strip())
+    if not blobs:
+        return []
+    b64 = "".join(blobs)
+    b64 += "=" * (-len(b64) % 4)
+    try:
+        dec = base64.b64decode(b64).decode("utf-8", "replace")
+    except Exception:
+        return []
+    # Wie CSV, nur dass dec bereits die gleiche Sektionsstruktur hat
+    return _parse_roadtrip_csv(dec)
+
+
+def _import_roadtrip_rows(rows):
+    """Schreibt geparste Road-Trip-Ladungen in external_sessions (Dedup).
+
+    Vermeidet Doppel: (round(odometer), date[0:10], round(kwh,3)) darf nicht
+    schon existieren. Jede Ladung wird als externe Ladung (provider='Road Trip')
+    gespeichert, damit sie nicht mit EVCC/TeslaMate-Sync kollidiert.
+    """
+    db = get_db()
+    inserted = 0
+    now = datetime.now().isoformat()
+    for r in rows:
+        odo = r.get("odometer")
+        date = r.get("date") or ""
+        kwh = r.get("kwh")
+        if odo is None or not date or kwh is None:
+            continue
+        # Datums-Normalisierung: '2026-6-23 11:16' -> '2026-06-23T11:16:00'
+        iso = _parse_dt(date)
+        if iso is None:
+            iso = datetime.now()
+        day = str(iso)[:10]
+        odo_r = round(float(odo), 1)
+        kwh_r = round(float(kwh), 3)
+        # Dedup-Check
+        existing = db.execute(
+            """SELECT id FROM external_sessions
+               WHERE odometer_end=? AND substr(started_at,1,10)=? AND energy_kwh=?
+               AND provider='Road Trip' LIMIT 1""",
+            (odo_r, day, kwh_r)).fetchone()
+        if existing:
+            continue
+        try:
+            db.execute(
+                """INSERT INTO external_sessions
+                   (teslamate_session_id, started_at, finished_at, location_name, address,
+                    provider, energy_kwh, energy_used_kwh, odometer_start, odometer_end,
+                    soc_start, soc_end, cost_total, price_per_kwh, manual_price, imported_at, raw)
+                   VALUES (NULL,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?,0,?,?)""",
+                (iso.isoformat(), iso.isoformat(),
+                 r.get("location") or "Road Trip", r.get("location") or "Road Trip",
+                 "Road Trip", kwh_r, kwh_r,
+                 odo_r, odo_r,
+                 r.get("total") or 0.0, r.get("unit_price") or 0.0,
+                 now, json.dumps(r, default=str)))
+            inserted += 1
+        except sqlite3.IntegrityError:
+            pass
+    db.commit()
+    return inserted
+
+
+@app.route("/api/import/roadtrip", methods=["POST"])
+def api_import_roadtrip():
+    """Laedt eine Road Trip MPG Datei (.roadtrip Backup ODER CSV-Export) hoch
+    und importiert die Ladungen (Kraftstoff/FuelRecords) in external_sessions.
+
+    Reifen/Touren/Wartung aus der Datei werden NICHT uebernommen (CarTankLogger
+    hat keine solchen Tabellen) — sie bleiben in der Road Trip App erhalten.
+    Doppelte Ladungen (Tachostand+Datum+kWh) werden uebersprungen.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Keine Datei (field 'file')"}), 400
+    f = request.files["file"]
+    raw = f.read().decode("utf-8", "replace")
+    fname = (f.filename or "").lower()
+    if fname.endswith(".roadtrip") or raw.lstrip().startswith("RTVD"):
+        rows = _parse_roadtrip_rtvd(raw)
+    else:
+        rows = _parse_roadtrip_csv(raw)
+    if not rows:
+        return jsonify({"error": "Keine Ladungen (Kraftstoff) in der Datei gefunden", "parsed": 0}), 422
+    inserted = _import_roadtrip_rows(rows)
+    return jsonify({"ok": True, "parsed": len(rows), "inserted": inserted})
 
 
 @app.route("/api/soc")
@@ -3183,7 +3470,7 @@ def api_drives_compare():
             "route": f"{r.get('start_address') or ''} → {r.get('end_address') or ''}",
             "km": round(km, 1),
             "duration_min": r.get("duration_min"),
-            "speed_avg": r.get("speed_avg"),
+            "speed_avg": round(float(r.get("speed_avg")), 1) if r.get("speed_avg") is not None else None,
             "speed_max": r.get("speed_max"),
             "energy_kwh": round(energy, 2) if energy else None,
             "cons_per_100": cons,
@@ -3200,9 +3487,12 @@ def api_drives_compare():
     def _avg(key):
         vals = [d[key] for d in drives if d.get(key) is not None]
         return round(sum(vals) / len(vals), 2) if vals else None
+    def _avg_1(key):
+        vals = [d[key] for d in drives if d.get(key) is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
     averages = {
         "km": _avg("km"), "duration_min": _avg("duration_min"),
-        "speed_avg": _avg("speed_avg"), "energy_kwh": _avg("energy_kwh"),
+        "speed_avg": _avg_1("speed_avg"), "energy_kwh": _avg("energy_kwh"),
         "cons_per_100": _avg("cons_per_100"), "soc_used": _avg("soc_used"),
         "outside_temp_avg": _avg("outside_temp_avg"),
     }
@@ -3480,6 +3770,13 @@ def api_extra_costs():
     if request.method == "GET":
         rows = [dict(r) for r in db.execute(
             "SELECT * FROM extra_costs ORDER BY date DESC")]
+        # KM-Stand ableiten, wenn nicht erfasst: aus dem naechstgelegenen
+        # Ladevorgang (home_sessions/external_sessions) oder Fahrt (drives).
+        for r in rows:
+            if r.get("odometer") in (None, 0, ""):
+                r["odometer_derived"] = derive_odometer_for_date(db, r.get("date"))
+            else:
+                r["odometer_derived"] = r.get("odometer")
         return jsonify(rows)
     if request.method == "POST":
         d = request.get_json(force=True)

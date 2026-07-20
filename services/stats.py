@@ -253,8 +253,21 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
 
     # --- Echter Ladeverlust (Wall - Akku) aus Daten ---
     # home_sessions hat charged_kwh (Wall). TM-Home hat energy_kwh (Akku).
-    tm_home_added = sum(float(r.get("energy_kwh") or 0) for r in ext_all if _is_home_external_row(r))
-    home_loss = (home_kwh - tm_home_added) if (tm_home_added > 0 and home_kwh > tm_home_added) else 0.0
+    # WICHTIG: TeslaMate hat oft Datenluecken (Auto offline). Dann ist
+    # tm_home_added << home_kwh und die Differenz ist KEINE Verlust, sondern
+    # eine fehlende TM-Ladung. Verlust daher nur ansetzen, wenn TM die EVCC-
+    # Wandmenge zu >=70% abdeckt (sonst Datenluecke -> keine Aussage, loss=0).
+    tm_home_rows = [r for r in ext_all if _is_home_external_row(r)]
+    tm_home_added = sum(float(r.get("energy_kwh") or 0) for r in tm_home_rows)
+    tm_home_used = sum(float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0) for r in tm_home_rows)
+    home_loss = 0.0
+    if home_kwh > 0 and tm_home_used > 0:
+        used_cov = tm_home_used / home_kwh
+        if 0.70 <= used_cov <= 1.30:
+            loss = home_kwh - tm_home_added      # Wand(EVCC) - Akku(TM)
+            loss_pct = loss / home_kwh if home_kwh > 0 else 0
+            if 0 <= loss_pct <= 0.35:            # physikalisch realistisch (<=35%)
+                home_loss = round(loss, 2)
 
     netto_is_estimate = True
     if home_loss > 0 and consumption_bruto > 0:

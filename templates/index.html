@@ -16,29 +16,34 @@
         position: sticky; top: 0; z-index: 1030;
         background: #212529;
         box-shadow: 0 2px 6px rgba(0,0,0,.25);
+        padding-top: 0; padding-bottom: 0;
       }
-      .app-header .nav-tabs { border-bottom: none; }
+      .app-header .navbar-brand { font-size: 1.0rem; }
+      .app-header .nav-tabs .nav-link { padding: .35rem .6rem; font-size: .85rem; }
+      .app-header .input-group-sm .form-control,
+      .app-header .input-group-sm .input-group-text { font-size: .75rem; padding: .1rem .35rem; }
+      .app-header .btn-group-sm .btn { font-size: .75rem; padding: .1rem .4rem; }
       .app-header .nav-tabs .nav-link {
         color: #adb5bd; border: none; border-bottom: 3px solid transparent;
-        border-radius: 0; padding: .5rem .75rem;
+        border-radius: 0; padding: .35rem .6rem; font-size: .85rem;
       }
       .app-header .nav-tabs .nav-link:hover { color: #fff; }
       .app-header .nav-tabs .nav-link.active {
         color: #fff; background: transparent; border-bottom-color: #0d6efd;
       }
       /* KPI-Kachel: fette Zahl, sofort lesbar */
-      .kpi-card .kpi-label { font-size: .72rem; letter-spacing: .02em; }
-      .kpi-card .kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.15; }
-      .kpi-card .kpi-sub { font-size: .7rem; opacity: .8; }
-      .kpi-card .kpi-icon { font-size: 1.1rem; }
+      .kpi-card .kpi-label { font-size: .68rem; letter-spacing: .02em; }
+      .kpi-card .kpi-value { font-size: 1.15rem; font-weight: 700; line-height: 1.15; }
+      .kpi-card .kpi-sub { font-size: .62rem; opacity: .8; }
+      .kpi-card .kpi-icon { font-size: .95rem; }
       @media (max-width: 576px) {
-        .kpi-card .kpi-value { font-size: 1.2rem; }
+        .kpi-card .kpi-value { font-size: 1.0rem; }
       }
     </style>
 </head>
 <body>
 
-<!-- STICKY HEADER: Titel + Verwaltung + Tabs -->
+<!-- STICKY HEADER: Titel + Verwaltung + Tabs + Zeitraum -->
 <header class="app-header text-light">
   <div class="container-fluid px-3">
     <div class="d-flex align-items-center justify-content-between py-2">
@@ -48,40 +53,35 @@
         <a class="btn btn-outline-light btn-sm" href="/admin">Verwaltung</a>
       </div>
     </div>
-    <!-- Tabs im Header -->
-    <ul class="nav nav-tabs" id="dataTabs" role="tablist">
-      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Übersicht</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
-    </ul>
+    <!-- Tabs + Zeitraum-Auswahl im Header -->
+    <div class="d-flex align-items-end justify-content-between flex-wrap gap-2">
+      <ul class="nav nav-tabs border-0 mb-0" id="dataTabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Übersicht</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
+      </ul>
+      <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Schnellzeitraum">
+          <button class="btn btn-outline-light" data-days="90">90 T</button>
+          <button class="btn btn-outline-light active" data-days="365">1 J</button>
+          <button class="btn btn-outline-light" data-days="9999">All</button>
+        </div>
+        <div class="input-group input-group-sm" style="width:auto">
+          <span class="input-group-text bg-dark text-light border-secondary">Von</span>
+          <input type="date" id="rangeFrom" class="form-control form-control-sm bg-dark text-light border-secondary">
+          <span class="input-group-text bg-dark text-light border-secondary">Bis</span>
+          <input type="date" id="rangeTo" class="form-control form-control-sm bg-dark text-light border-secondary">
+          <button class="btn btn-primary btn-sm" id="btnRange" type="button">Anwenden</button>
+        </div>
+        <small class="text-light opacity-75 ms-1" id="rangeLabel">Letzte 365 Tage</small>
+      </div>
+    </div>
   </div>
 </header>
 
 <div class="container-fluid px-3 py-3">
-    <!-- Zeitraum-Auswahl -->
-    <div class="row mb-3 align-items-center">
-        <div class="col-md-6">
-            <small class="text-muted" id="rangeLabel">Letzte 365 Tage</small>
-        </div>
-        <div class="col-md-6 text-md-end">
-            <div class="btn-group btn-group-sm mb-2" role="group">
-                <button class="btn btn-outline-secondary" data-days="90">90 T</button>
-                <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
-                <button class="btn btn-outline-secondary" data-days="9999">All</button>
-            </div>
-            <div class="mb-2 d-inline-block ms-md-2">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text">Von</span>
-                    <input type="date" id="rangeFrom" class="form-control form-control-sm">
-                    <span class="input-group-text">Bis</span>
-                    <input type="date" id="rangeTo" class="form-control form-control-sm">
-                    <button class="btn btn-outline-primary" id="btnRange" type="button">Anwenden</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- HAUPTSEITE: 8 Entscheidungs-KPIs (Punkt 4) -->
     <div class="row g-2 mb-3" id="summaryCards"></div>
@@ -96,13 +96,25 @@
         </div>
     </div>
 
-    <!-- Letzte Ladevorgänge + Energie nach Quelle -->
+    <!-- Letzte Ladevorgänge + Filter/Pagination -->
     <div class="row g-2 mb-3">
-        <div class="col-lg-8">
+        <div class="col-12">
             <div class="card h-100">
-                <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
+                <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span>🔌 Letzte Ladevorgänge</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="small mb-0">Anzeigen:</label>
+                        <select class="form-select form-select-sm" id="mergedLimit" style="width:auto">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="all">Alle</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive" style="max-height:420px;overflow:auto">
                         <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
                             <thead><tr>
                                 <th>Datum</th><th>Stationen</th>
@@ -113,13 +125,14 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    <div class="d-flex justify-content-between align-items-center p-2" id="mergedPager">
+                        <span class="small text-muted" id="mergedPagerInfo"></span>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" id="mergedPrev" disabled>‹ Zurück</button>
+                            <button class="btn btn-outline-secondary" id="mergedNext" disabled>Weiter ›</button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="card h-100">
-                <div class="card-header py-2">⚡ Energie nach Quelle</div>
-                <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
             </div>
         </div>
     </div>
@@ -140,6 +153,15 @@
         </div>
         <div class="tab-pane fade" id="tabStats">
             <div class="row g-2 mb-3" id="statsKpis"></div>
+            <!-- Energie nach Quelle (von Hauptseite hierher verschoben) -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ Energie nach Quelle</div>
+                        <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
             <!-- Monatsvergleich: Kosten + Energie -->
             <div class="row g-2 mb-3">
                 <div class="col-lg-6">
@@ -178,10 +200,10 @@
             </div>
             <!-- Ø pro Ladevorgang Kacheln -->
             <div class="row g-2 mb-3" id="statAvgCards"></div>
-            <!-- Ladezeiten-Heatmap -->
+            <!-- Ladezeiten: Heatmap nach geladener kWh (Wochentag x Uhrzeit) -->
             <div class="card mb-3">
-                <div class="card-header py-2">🔥 Ladezeiten (Wochentag × Uhrzeit)</div>
-                <div class="card-body" id="statHeatmap"></div>
+                <div class="card-header py-2">🔥 Ladezeiten – geladene kWh (Wochentag × Uhrzeit)</div>
+                <div class="card-body" id="statHeatmapKwh"></div>
             </div>
             <!-- SoC-Auswertung -->
             <div class="card mb-3">
@@ -270,7 +292,10 @@
             <div class="row g-3">
                 <div class="col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header py-2">⚡ Verbrauch (kWh/100 km)</div>
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>⚡ Verbrauch (kWh/100 km)</span>
+                            <span class="chart-type-btns" data-chart="chartCons"></span>
+                        </div>
                         <div class="card-body">
                             <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCons"></span><span class="text-muted small ms-1">Ø</span></div>
                             <canvas id="chartCons" height="180"></canvas>
@@ -279,7 +304,10 @@
                 </div>
                 <div class="col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header py-2">💶 Energiepreis (€/kWh)</div>
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>💶 Energiepreis (€/kWh)</span>
+                            <span class="chart-type-btns" data-chart="chartPrice"></span>
+                        </div>
                         <div class="card-body">
                             <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiPrice"></span><span class="text-muted small ms-1">Ø</span></div>
                             <canvas id="chartPrice" height="180"></canvas>
@@ -288,7 +316,10 @@
                 </div>
                 <div class="col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header py-2">💡 Kosten (€/100 km)</div>
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>💡 Kosten (€/100 km)</span>
+                            <span class="chart-type-btns" data-chart="chartCost100"></span>
+                        </div>
                         <div class="card-body">
                             <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCost100"></span><span class="text-muted small ms-1">Ø</span></div>
                             <canvas id="chartCost100" height="180"></canvas>
@@ -297,7 +328,10 @@
                 </div>
                 <div class="col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header py-2">🛣️ Gesamtkilometer (kumuliert)</div>
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>🛣️ Gesamtkilometer (kumuliert)</span>
+                            <span class="chart-type-btns" data-chart="chartKm"></span>
+                        </div>
                         <div class="card-body">
                             <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiKm"></span><span class="text-muted small ms-1">km</span></div>
                             <canvas id="chartKm" height="180"></canvas>
@@ -306,13 +340,17 @@
                 </div>
                 <div class="col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header py-2">🔋 Verbrauch pro Lade-Intervall (SOC-basiert)</div>
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>🔋 Verbrauch pro Lade-Intervall (SOC-basiert)</span>
+                            <span class="chart-type-btns" data-chart="chartSoc"></span>
+                        </div>
                         <div class="card-body">
                             <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiSocCons"></span><span class="text-muted small ms-1">Ø</span></div>
                             <canvas id="chartSoc" height="180"></canvas>
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
             <!-- Sekundaer-KPIs + Kategorie-Karten -->
             <div class="row g-2 mt-2" id="statsSecondary"></div>
