@@ -3801,6 +3801,11 @@ def api_seed():
     """Testdaten einspielen (nur sinnvoll mit MOCK_MODE)."""
     sync_evcc()
     sync_teslamate()
+    # Fahrten (TeslaMate-Drives) fuer km/Tag + Fahrtenvergleich
+    try:
+        sync_teslamate_drives()
+    except Exception as e:
+        app.logger.warning("Seed: Fahrten-Sync uebersprungen: %s", e)
     # ein paar Beispiel-Extra-Kosten
     db = get_db()
     db.execute("""INSERT INTO extra_costs (category, date, description, amount, odometer, note, created_at)

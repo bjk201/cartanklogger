@@ -2,10 +2,31 @@
 
 Vollständiges Ladekosten-Tracking für dein EV – kombiniert **EVCC** (Laden zuhause)
 und **TeslaMate** (externes Laden) in einer einfachen Web-App, inkl. aller
-Nebenkosten (Anschaffung, Service, Zubehör, Versicherung, Steuer).
+Nebenkosten (Anschaffung, Service, Zubehör, Versicherung, Steuer) und
+**Fahrten-Auswertung** aus TeslaMate.
 
 Orientiert an Tank-Logging-Apps (Spritmonitor/Tankerkönig): Odometer-/KM-Stand,
 Verbrauch (kWh/100 km), Kosten/km, monatliche Auswertung.
+
+## Features
+
+- **Zuhause (EVCC):** Ladevorgänge inkl. `solarPercentage` (PV-Anteil), aufgeteilt
+  in Netz- vs. PV-Anteil mit Zeitwert-Bewertung.
+- **Extern (TeslaMate):** Supercharger-/Fremdsäulen-Ladungen (Ort, Datum, kWh, KM).
+- **Fahrten (TeslaMate Drives):** km/Tag (auch an ladefreien Tagen), Ø km/h,
+  Verbrauch je Fahrt und **Fahrtenvergleich** (mehrere Fahrten auswählen →
+  nebeneinanderlegen, sparsamste grün / verbrauchsstärkste rot).
+- **SoC-Auswertung:** Start-/End-SoC aus EVCC **und** TeslaMate werden gespeichert;
+  Histogramme (SoC-Verteilung, Ladezeitpunkt nach Stunde), sowie Verbrauch
+  **verknüpft mit SoC** (kWh/100 km je SoC-Intervall).
+- **Road Trip MPG (iOS) Export & Import:** nativer CSV-Export (Fill Unit `kW.h`)
+  zum Import in die iOS-App *Road Trip MPG* – und Rückimport deiner dort
+  erfassten Ladungen (Provider dann „Road Trip", werden in der Statistik
+  separat ausgewiesen und nicht als echte Extern-Ladungen verrechnet).
+- **Dashboard:** Kacheln, Heatmap (Lademenge nach Wochentag×Stunde), Diagramme
+  frei wählbar als Balken / Linie / Kreis mit optionalem gleitenden Mittelwert.
+- **Zeitraum-Filter:** schwarze Kopfzeile mit Schnellbereichen (90 T / 1 J / All)
+  und freier Von/Bis-Auswahl; wirkt auf alle Tabellen und Diagramme.
 
 ## Funktionsweise
 
@@ -143,9 +164,15 @@ Beispiel-Sitzungen + Extra-Kosten.
 |---|---|---|
 | `/api/sync/evcc` | POST | EVCC-Sitzungen importieren |
 | `/api/sync/teslamate` | POST | TeslaMate-Sitzungen importieren |
-| `/api/sync/all` | POST | beide |
+| `/api/sync/teslamate/drives` | POST | TeslaMate-Fahrten (Drives) importieren |
+| `/api/sync/all` | POST | EVCC + TeslaMate (Sitzungen) |
 | `/api/sessions` | GET | alle Sitzungen (Home + Extern) |
-| `/api/stats?days=365` | GET | aggregierte Kennzahlen |
+| `/api/drives` | GET | Fahrten (TeslaMate Drives) im Zeitraum |
+| `/api/drives/compare?ids=1,2,3` | GET | Detailvergleich mehrerer Fahrten |
+| `/api/soc` | GET | SoC-Verteilung, Ladezeitpunkte, Verbrauch↔SoC |
+| `/api/statistics` | GET | aggregierte Kennzahlen (Zuhause vs. Extern etc.) |
+| `/api/roadtrip/export` | GET | CSV-Export für *Road Trip MPG* (Fill Unit `kW.h`) |
+| `/api/roadtrip/import` | POST | CSV-Rückimport aus *Road Trip MPG* (nur Ladungen) |
 | `/api/price-periods` | GET/POST/DELETE | zeitabhängige Preise |
 | `/api/recompute` | POST | alle Home-Kosten neu bewerten |
 | `/api/external/<id>/price` | PUT | manueller Extern-Preis |
