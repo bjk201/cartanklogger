@@ -221,6 +221,50 @@
                     </div>
                 </div>
             </div>
+            <!-- Fahrten & km/Tag (aus TeslaMate-Drives) -->
+            <div class="card mb-3">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span>🚗 Gefahrene km pro Tag (auch fahrtfreie Tage) + Verbrauch</span>
+                    <button class="btn btn-sm btn-outline-primary" id="btnSyncDrives" title="Fahrten aus TeslaMate laden">Fahrten sync</button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2" id="dailyKmSummary"></div>
+                    <canvas id="chartDailyKm" height="200"></canvas>
+                </div>
+            </div>
+            <!-- Fahrten-Vergleich (Pendelstrecke uebereinanderlegen) -->
+            <div class="card mb-3">
+                <div class="card-header py-2">🔀 Fahrten vergleichen (Pendelstrecke übereinanderlegen)</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Filter (Start/Ziel, z.B. „Arbeit")</label>
+                            <input type="text" class="form-control form-control-sm" id="driveFilter" placeholder="Pendelstrecke filtern…">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0">Zeitraum (Tage)</label>
+                            <input type="number" class="form-control form-control-sm" id="driveDays" value="90" min="1">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-sm btn-outline-secondary w-100" id="btnLoadDrives">Fahrten laden</button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-1">Mehrere Fahrten anhaken → <b>Vergleichen</b>. Sparsamste wird grün, verbrauchsstärkste rot markiert.</div>
+                    <div class="table-responsive" style="max-height:280px;overflow:auto">
+                        <table class="table table-sm table-hover align-middle mb-2" id="drivesTable">
+                            <thead><tr>
+                                <th style="width:32px"></th>
+                                <th>Datum</th><th>Strecke</th><th class="text-end">km</th>
+                                <th class="text-end">kWh/100</th><th class="text-end">SoC</th>
+                                <th class="text-end">Ø km/h</th><th class="text-end">°C</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-sm btn-primary" id="btnCompareDrives" disabled>Vergleichen (0)</button>
+                    <div id="driveCompareResult" class="mt-3"></div>
+                </div>
+            </div>
             <!-- Bestehende Tiefen-Charts (Verbrauch/Preis/Kosten/km/Intervall) -->
             <div class="row g-3">
                 <div class="col-lg-6">

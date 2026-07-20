@@ -56,6 +56,7 @@ async function loadAll() {
   const chartData = await safeJson(`/api/charts?${rp}`, {});
   const statData = await safeJson(`/api/statistics?${rp}`, {});
   const socData = await safeJson(`/api/soc?${rp}`, {});
+  const dailyKm = await safeJson(`/api/daily-km?${rp}`, {days:[], summary:{}});
   __chartData = chartData;
   __statsData = stats;
   __statData = statData;
@@ -68,6 +69,7 @@ async function loadAll() {
   try { renderStats(chartData); } catch(e){ console.error("renderStats", e); }
   try { renderStatistics(statData); } catch(e){ console.error("renderStatistics", e); }
   try { renderSocCharts(socData); } catch(e){ console.error("renderSocCharts", e); }
+  try { renderDailyKm(dailyKm); } catch(e){ console.error("renderDailyKm", e); }
   try { renderExtra(); } catch(e){ console.error("renderExtra", e); }
 }
 
@@ -934,6 +936,166 @@ function renderSocCharts(d) {
     });
   }
 }
+
+// --- Fahrten & km/Tag (TeslaMate-Drives) ---
+function renderDailyKm(d) {
+  if (!d || !d.days) return;
+  const s = d.summary || {};
+  const sumEl = document.getElementById("dailyKmSummary");
+  if (sumEl) {
+    const cards = [
+      ["Gesamt km", s.total_km != null ? s.total_km.toLocaleString("de-DE") : "–"],
+      ["Ø km/Kalendertag", s.avg_km_per_calendar_day ?? "–"],
+      ["Ø km/Fahrtag", s.avg_km_per_driving_day ?? "–"],
+      ["Fahrtage", s.driving_days ?? "–"],
+      ["Ø Verbrauch", s.avg_cons_per_100 != null ? s.avg_cons_per_100 + " kWh/100" : "–"],
+    ];
+    sumEl.innerHTML = cards.map(([l,v]) =>
+      `<div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-2 text-center">
+        <div class="small text-muted">${l}</div><div class="fw-bold">${v}</div></div></div>`).join("");
+  }
+  const ctx = document.getElementById("chartDailyKm");
+  if (!ctx || !window.Chart) return;
+  if (window._dailyKmChart) window._dailyKmChart.destroy();
+  const labels = d.days.map(x => x.date.slice(5));   // MM-DD
+  const km = d.days.map(x => x.km);
+  const cons = d.days.map(x => x.cons_per_100);
+  window._dailyKmChart = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: "bar", label: "km/Tag", data: km, backgroundColor: "#0d6efd", yAxisID: "y", borderRadius: 2 },
+        { type: "line", label: "Verbrauch kWh/100", data: cons, borderColor: "#fd7e14",
+          backgroundColor: "#fd7e1433", yAxisID: "y1", tension: 0.3, spanGaps: true, pointRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxRotation: 90, autoSkip: true, maxTicksLimit: 20 } },
+        y: { position: "left", beginAtZero: true, title: { display: true, text: "km" }, ticks: { font: { size: 10 } } },
+        y1: { position: "right", beginAtZero: true, title: { display: true, text: "kWh/100" },
+              grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+let _driveList = [];
+let _driveSel = new Set();
+
+async function loadDrivesList() {
+  const days = parseInt(document.getElementById("driveDays")?.value) || 90;
+  const q = (document.getElementById("driveFilter")?.value || "").trim();
+  const url = `/api/drives?days=${days}` + (q ? `&q=${encodeURIComponent(q)}` : "");
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    _driveList = d.drives || [];
+    _driveSel.clear();
+    renderDrivesTable();
+    updateCompareBtn();
+    document.getElementById("driveCompareResult").innerHTML = "";
+  } catch(e) { console.error("loadDrivesList", e); }
+}
+
+function renderDrivesTable() {
+  const tb = document.querySelector("#drivesTable tbody");
+  if (!tb) return;
+  if (!_driveList.length) { tb.innerHTML = `<tr><td colspan="8" class="text-muted text-center">Keine Fahrten. Erst „Fahrten sync", dann „Fahrten laden".</td></tr>`; return; }
+  tb.innerHTML = _driveList.map(d => {
+    const dt = d.start_date ? d.start_date.slice(0,16).replace("T"," ") : "";
+    const soc = (d.soc_start != null && d.soc_end != null) ? `${d.soc_start}→${d.soc_end}%` : "–";
+    return `<tr>
+      <td><input type="checkbox" class="drive-cb" data-id="${d.id}" ${_driveSel.has(d.id)?"checked":""}></td>
+      <td class="small">${dt}</td>
+      <td class="small">${d.route||""}</td>
+      <td class="text-end">${d.km ?? "–"}</td>
+      <td class="text-end">${d.cons_per_100 ?? "–"}</td>
+      <td class="text-end small">${soc}</td>
+      <td class="text-end">${d.speed_avg ?? "–"}</td>
+      <td class="text-end">${d.outside_temp_avg ?? "–"}</td>
+    </tr>`;
+  }).join("");
+  tb.querySelectorAll(".drive-cb").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const id = parseInt(cb.dataset.id);
+      if (cb.checked) _driveSel.add(id); else _driveSel.delete(id);
+      updateCompareBtn();
+    });
+  });
+}
+
+function updateCompareBtn() {
+  const btn = document.getElementById("btnCompareDrives");
+  if (!btn) return;
+  btn.textContent = `Vergleichen (${_driveSel.size})`;
+  btn.disabled = _driveSel.size < 1;
+}
+
+async function compareDrives() {
+  if (!_driveSel.size) return;
+  const ids = Array.from(_driveSel).join(",");
+  try {
+    const r = await fetch(`/api/drives/compare?ids=${ids}`);
+    const d = await r.json();
+    renderDriveCompare(d);
+  } catch(e) { console.error("compareDrives", e); }
+}
+
+function renderDriveCompare(d) {
+  const el = document.getElementById("driveCompareResult");
+  if (!el) return;
+  if (d.error) { el.innerHTML = `<div class="alert alert-warning py-2">${d.error}</div>`; return; }
+  const a = d.averages || {};
+  const rows = (d.drives||[]).map(x => {
+    const cls = x.is_best ? "table-success" : (x.is_worst ? "table-danger" : "");
+    const dlt = x.cons_delta != null ? (x.cons_delta>0?`+${x.cons_delta}`:x.cons_delta) : "–";
+    const dt = x.start_date ? x.start_date.slice(0,16).replace("T"," ") : "";
+    return `<tr class="${cls}">
+      <td class="small">${dt}</td><td class="small">${x.route||""}</td>
+      <td class="text-end">${x.km ?? "–"}</td>
+      <td class="text-end fw-bold">${x.cons_per_100 ?? "–"}</td>
+      <td class="text-end">${dlt}</td>
+      <td class="text-end small">${x.soc_start??"–"}→${x.soc_end??"–"}%</td>
+      <td class="text-end">${x.soc_used ?? "–"}</td>
+      <td class="text-end">${x.duration_min ?? "–"}</td>
+      <td class="text-end">${x.speed_avg ?? "–"}</td>
+      <td class="text-end">${x.outside_temp_avg ?? "–"}</td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `
+    <div class="small text-muted mb-1">Ø Verbrauch der Auswahl: <b>${a.cons_per_100 ?? "–"} kWh/100</b>
+      · Ø Tempo ${a.speed_avg ?? "–"} km/h · Ø Temp ${a.outside_temp_avg ?? "–"}°C
+      · <span class="text-success">grün = sparsamste</span>, <span class="text-danger">rot = höchster Verbrauch</span></div>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr><th>Datum</th><th>Strecke</th><th class="text-end">km</th>
+        <th class="text-end">kWh/100</th><th class="text-end">Δ Ø</th><th class="text-end">SoC</th>
+        <th class="text-end">SoC%</th><th class="text-end">min</th><th class="text-end">Ø km/h</th><th class="text-end">°C</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+
+async function syncDrives() {
+  const btn = document.getElementById("btnSyncDrives");
+  if (btn) { btn.disabled = true; btn.textContent = "Lädt…"; }
+  try {
+    const tok = await ensureCsrf();
+    const r = await fetch("/api/sync/drives", { method: "POST", headers: { "X-CSRFToken": tok } });
+    const d = await r.json();
+    if (btn) btn.textContent = `+${d.inserted||0} Fahrten`;
+    await loadAll();
+    await loadDrivesList();
+  } catch(e) { console.error("syncDrives", e); if (btn) btn.textContent = "Fehler"; }
+  finally { if (btn) { setTimeout(()=>{ btn.disabled=false; btn.textContent="Fahrten sync"; }, 2000); } }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("btnLoadDrives")?.addEventListener("click", loadDrivesList);
+  document.getElementById("btnCompareDrives")?.addEventListener("click", compareDrives);
+  document.getElementById("btnSyncDrives")?.addEventListener("click", syncDrives);
+  document.getElementById("driveFilter")?.addEventListener("keydown", (e)=>{ if(e.key==="Enter") loadDrivesList(); });
+});
 
 // --- Sichtbare Versionsanzeige (Footer) ---
 // Laedt /api/version und zeigt Build-Zeit + Commit, damit man sofort sieht,

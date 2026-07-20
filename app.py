@@ -423,6 +423,27 @@ def init_db(db):
             note        TEXT,
             created_at  TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS drives (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            teslamate_drive_id  INTEGER UNIQUE,
+            start_date          TEXT,
+            end_date            TEXT,
+            start_address       TEXT,
+            end_address         TEXT,
+            distance_km         REAL,
+            odometer_start      REAL,
+            odometer_end        REAL,
+            duration_min        INTEGER,
+            speed_max           INTEGER,
+            speed_avg           REAL,
+            soc_start           REAL,
+            soc_end             REAL,
+            energy_consumed_kwh REAL,
+            outside_temp_avg    REAL,
+            imported_at         TEXT,
+            raw                 TEXT
+        );
         """
     )
     # Spalte energy_used_kwh nur ergaenzen, falls aeltere DB (Migration).
@@ -663,6 +684,38 @@ class TeslaMateClient:
             return out
         except Exception as e:
             app.logger.warning(f"TeslaMate Abruf Fehler: {e}")
+        return []
+
+    def get_drives(self, limit=1000):
+        """Holt Fahrten (drives) aus teslamateapi: GET /cars/:id/drives.
+
+        Response-Huelle: {"data": {"drives": [ {drive_id, start_date, end_date,
+        odometer_details{odometer_start/end/distance}, battery_details{...},
+        duration_min, speed_max, speed_avg, energy_consumed_net, ...} ]}}.
+        Wir flachen die verschachtelten Details in ein einfaches Dict ab.
+        """
+        if mock_mode():
+            return _mock_teslamate_drives()
+        try:
+            car_ids = self._cars() or [1]
+            out = []
+            for cid in car_ids:
+                try:
+                    r = requests.get(
+                        f"{self.base}/cars/{cid}/drives",
+                        params={"limit": limit},
+                        timeout=60,
+                    )
+                    if r.status_code != 200:
+                        app.logger.warning(f"TeslaMate /drives: {r.status_code}")
+                        continue
+                    drives = r.json().get("data", {}).get("drives", [])
+                    out.extend(drives)
+                except Exception as e:
+                    app.logger.warning(f"TeslaMate /drives Fehler: {e}")
+            return out
+        except Exception as e:
+            app.logger.warning(f"TeslaMate Drives Abruf Fehler: {e}")
         return []
 
     def get_status(self, car_id=None):
@@ -979,6 +1032,87 @@ def sync_teslamate():
     return {"inserted": inserted, "fetched": len(sessions)}
 
 
+def _drive_flat(d):
+    """Flacht eine TM-Drive (verschachtelt) in ein einfaches Dict ab."""
+    od = d.get("odometer_details") or {}
+    bd = d.get("battery_details") or {}
+    def _f(v):
+        try:
+            return float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    dist = _f(od.get("odometer_distance"))
+    o_s = _f(od.get("odometer_start"))
+    o_e = _f(od.get("odometer_end"))
+    if dist is None and o_s is not None and o_e is not None:
+        dist = round(o_e - o_s, 1)
+    return {
+        "drive_id": d.get("drive_id") or d.get("id"),
+        "start_date": d.get("start_date"),
+        "end_date": d.get("end_date"),
+        "start_address": d.get("start_address") or "",
+        "end_address": d.get("end_address") or "",
+        "distance_km": dist,
+        "odometer_start": o_s,
+        "odometer_end": o_e,
+        "duration_min": d.get("duration_min"),
+        "speed_max": d.get("speed_max"),
+        "speed_avg": _f(d.get("speed_avg")),
+        "soc_start": _f(bd.get("start_battery_level")),
+        "soc_end": _f(bd.get("end_battery_level")),
+        "energy_consumed_kwh": _f(d.get("energy_consumed_net")),
+        "outside_temp_avg": _f(d.get("outside_temp_avg")),
+    }
+
+
+def sync_teslamate_drives():
+    """Holt Fahrten (drives) aus TeslaMate und speichert sie in der drives-Tabelle.
+
+    Jede Fahrt hat km, Dauer, SoC-Start/Ende und (falls vorhanden) den von
+    TeslaMate berechneten Netto-Energieverbrauch. Daraus lassen sich km/Tag
+    (auch an ladefreien Tagen) und der Verbrauch pro Fahrt/Tag ableiten.
+    """
+    tm = config["teslamate"]
+    client = TeslaMateClient(tm["url"], tm.get("api_token", ""))
+    drives = client.get_drives()
+    db = get_db()
+    now = datetime.now().isoformat()
+    inserted = 0
+    store_raw = _store_raw()
+    for raw in drives:
+        d = _drive_flat(raw)
+        did = d["drive_id"]
+        if did is None:
+            continue
+        started = _parse_dt(d["start_date"])
+        finished = _parse_dt(d["end_date"])
+        try:
+            cur = db.execute(
+                """INSERT OR IGNORE INTO drives
+                   (teslamate_drive_id, start_date, end_date, start_address, end_address,
+                    distance_km, odometer_start, odometer_end, duration_min, speed_max,
+                    speed_avg, soc_start, soc_end, energy_consumed_kwh, outside_temp_avg,
+                    imported_at, raw)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    did,
+                    started.isoformat() if started else d["start_date"],
+                    finished.isoformat() if finished else d["end_date"],
+                    d["start_address"], d["end_address"],
+                    d["distance_km"], d["odometer_start"], d["odometer_end"],
+                    d["duration_min"], d["speed_max"], d["speed_avg"],
+                    d["soc_start"], d["soc_end"], d["energy_consumed_kwh"],
+                    d["outside_temp_avg"], now,
+                    json.dumps(raw, default=str) if store_raw else None,
+                ),
+            )
+            inserted += cur.rowcount
+        except sqlite3.IntegrityError:
+            pass
+    db.commit()
+    return {"inserted": inserted, "fetched": len(drives)}
+
+
 # ---------------------------------------------------------------------------
 # Mock-Daten (für Tests ohne live Instanzen)
 # ---------------------------------------------------------------------------
@@ -1004,6 +1138,107 @@ def _mock_evcc_sessions():
             "socStart": 40 + (i % 4) * 10,
             "socEnd": 80 + (i % 3) * 5,
         })
+    return out
+
+
+def _mock_teslamate_drives():
+    """Beispiel-Fahrten im Format der teslamateapi (/cars/<id>/drives).
+
+    Enthaelt bewusst eine wiederkehrende PENDELSTRECKE (Home->Arbeit und zurueck)
+    ueber mehrere Tage mit leicht schwankendem Verbrauch, damit die
+    Vergleichsfunktion (mehrere Fahrten uebereinanderlegen) testbar ist.
+    Verschachtelte Struktur wie die echte API: odometer_details/battery_details.
+    """
+    base = datetime.now() - timedelta(days=30)
+    out = []
+    did = 2000
+    odo = 42000.0
+    # 14 Werktage Pendeln: morgens hin (~32 km), abends zurueck (~32 km)
+    for day in range(14):
+        d0 = base + timedelta(days=day)
+        # kleine Verbrauchs-Variation ueber die Zeit (Wetter/Fahrstil)
+        cons_factor = 1.0 + (day % 5) * 0.06   # 1.00 .. 1.24
+        for leg, (h, sa, ea, dist) in enumerate([
+            (7,  "Zuhause", "Arbeit GmbH", 32.4),
+            (17, "Arbeit GmbH", "Zuhause", 33.1),
+        ]):
+            start = d0.replace(hour=h, minute=0, second=0, microsecond=0)
+            dur = 38 + (day % 4) * 3
+            end = start + timedelta(minutes=dur)
+            # Verbrauch ~ 16 kWh/100km * dist * factor
+            energy = round(dist * 0.16 * cons_factor, 2)
+            soc_s = 85 - leg * 12 - (day % 3) * 2
+            soc_e = soc_s - int(energy / 0.75)   # grobe SoC-Abnahme
+            odo_start = odo
+            odo_end = odo + dist
+            odo = odo_end
+            out.append({
+                "drive_id": did,
+                "start_date": start.isoformat() + "Z",
+                "end_date": end.isoformat() + "Z",
+                "start_address": sa,
+                "end_address": ea,
+                "duration_min": dur,
+                "duration_str": f"{dur} min",
+                "speed_max": 118,
+                "speed_avg": round(dist / (dur / 60.0), 1),
+                "power_max": 95,
+                "power_min": -30,
+                "odometer_details": {
+                    "odometer_start": round(odo_start, 1),
+                    "odometer_end": round(odo_end, 1),
+                    "odometer_distance": round(dist, 1),
+                },
+                "battery_details": {
+                    "start_usable_battery_level": soc_s,
+                    "start_battery_level": soc_s,
+                    "end_usable_battery_level": soc_e,
+                    "end_battery_level": soc_e,
+                    "reduced_range": False,
+                    "is_sufficiently_precise": True,
+                },
+                "outside_temp_avg": round(8 + day * 0.5, 1),
+                "inside_temp_avg": 21.0,
+                "energy_consumed_net": energy,
+            })
+            did += 1
+    # ein paar laengere Wochenendfahrten
+    for k in range(3):
+        d0 = base + timedelta(days=5 + k * 7, hours=10)
+        dist = 145.0 + k * 40
+        dur = 105 + k * 25
+        end = d0 + timedelta(minutes=dur)
+        energy = round(dist * 0.17, 2)
+        soc_s = 92
+        soc_e = soc_s - int(energy / 0.75)
+        odo_start = odo
+        odo_end = odo + dist
+        odo = odo_end
+        out.append({
+            "drive_id": did,
+            "start_date": d0.isoformat() + "Z",
+            "end_date": end.isoformat() + "Z",
+            "start_address": "Zuhause",
+            "end_address": ["Alpen Ausflug", "Bodensee", "Schwarzwald"][k],
+            "duration_min": dur,
+            "duration_str": f"{dur} min",
+            "speed_max": 165,
+            "speed_avg": round(dist / (dur / 60.0), 1),
+            "power_max": 120, "power_min": -45,
+            "odometer_details": {
+                "odometer_start": round(odo_start, 1),
+                "odometer_end": round(odo_end, 1),
+                "odometer_distance": round(dist, 1),
+            },
+            "battery_details": {
+                "start_battery_level": soc_s, "start_usable_battery_level": soc_s,
+                "end_battery_level": soc_e, "end_usable_battery_level": soc_e,
+                "reduced_range": False, "is_sufficiently_precise": True,
+            },
+            "outside_temp_avg": 15.0, "inside_temp_avg": 21.0,
+            "energy_consumed_net": energy,
+        })
+        did += 1
     return out
 
 
@@ -1430,11 +1665,18 @@ def api_sync_teslamate():
     return jsonify({"ok": True, **res})
 
 
+@app.route("/api/sync/drives", methods=["POST"])
+def api_sync_drives():
+    res = sync_teslamate_drives()
+    return jsonify({"ok": True, **res})
+
+
 @app.route("/api/sync/all", methods=["POST"])
 def api_sync_all():
     e = sync_evcc()
     t = sync_teslamate()
-    return jsonify({"ok": True, "evcc": e, "teslamate": t})
+    d = sync_teslamate_drives()
+    return jsonify({"ok": True, "evcc": e, "teslamate": t, "drives": d})
 
 
 @app.route("/api/sync/backfill-teslamate", methods=["POST"])
@@ -2761,6 +3003,225 @@ def api_soc():
         "by_hour": hours,
         "by_weekday": weekdays,
         "by_provider": providers,
+    })
+
+
+def _drive_rows(days=365, from_date=None, to_date=None):
+    """Fahrten aus der drives-Tabelle im Zeitraum, chronologisch."""
+    db = get_db()
+    if from_date and to_date:
+        lo, hi = from_date + "T00:00:00", to_date + "T23:59:59"
+    else:
+        lo = (datetime.now() - timedelta(days=days)).isoformat()
+        hi = None
+    q = "SELECT * FROM drives WHERE start_date >= ?"
+    params = [lo]
+    if hi:
+        q += " AND start_date <= ?"
+        params.append(hi)
+    q += " ORDER BY start_date ASC"
+    return [dict(r) for r in db.execute(q, params).fetchall()]
+
+
+@app.route("/api/daily-km")
+def api_daily_km():
+    """Gefahrene km pro Tag (auch an Tagen ohne Ladung), plus Verbrauch & SoC.
+
+    Aggregiert alle TeslaMate-Fahrten je Kalendertag:
+      - km:            Summe distance_km
+      - energy_kwh:    Summe energy_consumed_net (Netto-Verbrauch)
+      - cons_per_100:  kWh/100km (Verbrauch) -> Vergleich ueber Zeit
+      - soc_start/soc_end: erster Start-SoC / letzter End-SoC des Tages
+      - drives:        Anzahl Fahrten
+    Tage ganz ohne Fahrt tauchen mit km=0 auf (luecklose Reihe).
+    """
+    days = request.args.get("days", 90, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    rows = _drive_rows(days, from_date, to_date)
+
+    from collections import defaultdict
+    agg = defaultdict(lambda: {"km": 0.0, "energy": 0.0, "drives": 0,
+                               "soc_start": None, "soc_end": None,
+                               "first_ts": None, "last_ts": None})
+    for r in rows:
+        ts = r.get("start_date") or ""
+        day = str(ts)[:10]
+        if not day:
+            continue
+        a = agg[day]
+        a["km"] += float(r.get("distance_km") or 0)
+        a["energy"] += float(r.get("energy_consumed_kwh") or 0)
+        a["drives"] += 1
+        # SoC: erster Start / letzter Ende des Tages (nach Zeit)
+        if a["first_ts"] is None or ts < a["first_ts"]:
+            a["first_ts"] = ts
+            a["soc_start"] = r.get("soc_start")
+        if a["last_ts"] is None or ts >= a["last_ts"]:
+            a["last_ts"] = ts
+            a["soc_end"] = r.get("soc_end")
+
+    # Lueckenlose Tagesreihe erzeugen
+    if from_date and to_date:
+        d0 = datetime.fromisoformat(from_date)
+        d1 = datetime.fromisoformat(to_date)
+    else:
+        d1 = datetime.now()
+        d0 = d1 - timedelta(days=days)
+    out = []
+    cur = d0
+    while cur.date() <= d1.date():
+        key = cur.strftime("%Y-%m-%d")
+        a = agg.get(key)
+        if a:
+            km = round(a["km"], 1)
+            energy = round(a["energy"], 2)
+            cons = round(energy / km * 100, 1) if km > 0 and energy > 0 else None
+            out.append({
+                "date": key, "km": km, "energy_kwh": energy,
+                "cons_per_100": cons, "drives": a["drives"],
+                "soc_start": a["soc_start"], "soc_end": a["soc_end"],
+            })
+        else:
+            out.append({
+                "date": key, "km": 0.0, "energy_kwh": 0.0,
+                "cons_per_100": None, "drives": 0,
+                "soc_start": None, "soc_end": None,
+            })
+        cur += timedelta(days=1)
+
+    total_km = round(sum(x["km"] for x in out), 1)
+    total_energy = round(sum(x["energy_kwh"] for x in out), 2)
+    driving_days = sum(1 for x in out if x["km"] > 0)
+    avg_cons = round(total_energy / total_km * 100, 1) if total_km > 0 else None
+    return jsonify({
+        "days": out,
+        "summary": {
+            "total_km": total_km,
+            "total_energy_kwh": total_energy,
+            "driving_days": driving_days,
+            "calendar_days": len(out),
+            "avg_km_per_calendar_day": round(total_km / len(out), 1) if out else 0,
+            "avg_km_per_driving_day": round(total_km / driving_days, 1) if driving_days else 0,
+            "avg_cons_per_100": avg_cons,
+        },
+    })
+
+
+@app.route("/api/drives")
+def api_drives():
+    """Liste der Fahrten (zum Auswaehlen fuer den Vergleich).
+
+    Pro Fahrt: id, Datum, Start/Ziel, km, Dauer, Verbrauch, kWh/100km, SoC.
+    Optionaler Filter q= (Substring in Start/Ziel) fuer die Pendelstrecke.
+    """
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    q = (request.args.get("q") or "").strip().lower()
+    rows = _drive_rows(days, from_date, to_date)
+    out = []
+    for r in rows:
+        route = f"{r.get('start_address') or ''} → {r.get('end_address') or ''}"
+        if q and q not in route.lower():
+            continue
+        km = float(r.get("distance_km") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        cons = round(energy / km * 100, 1) if km > 0 and energy > 0 else None
+        out.append({
+            "id": r.get("teslamate_drive_id"),
+            "start_date": r.get("start_date"),
+            "end_date": r.get("end_date"),
+            "route": route,
+            "start_address": r.get("start_address"),
+            "end_address": r.get("end_address"),
+            "km": round(km, 1),
+            "duration_min": r.get("duration_min"),
+            "speed_avg": r.get("speed_avg"),
+            "speed_max": r.get("speed_max"),
+            "energy_kwh": round(energy, 2) if energy else None,
+            "cons_per_100": cons,
+            "soc_start": r.get("soc_start"),
+            "soc_end": r.get("soc_end"),
+            "outside_temp_avg": r.get("outside_temp_avg"),
+        })
+    # Neueste zuerst fuer die Auswahl-Liste
+    out.sort(key=lambda x: x["start_date"] or "", reverse=True)
+    return jsonify({"drives": out, "count": len(out)})
+
+
+@app.route("/api/drives/compare")
+def api_drives_compare():
+    """Detailvergleich mehrerer Fahrten (Pendelstrecke uebereinanderlegen).
+
+    Parameter ids=1,2,3 (teslamate_drive_id). Liefert je Fahrt die
+    Kennzahlen nebeneinander + Deltas gegen den Durchschnitt, damit man
+    z.B. sieht, welche Pendelfahrt sparsamer war und warum (Temperatur, Tempo).
+    """
+    ids_raw = request.args.get("ids", "")
+    ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()]
+    if not ids:
+        return jsonify({"error": "Parameter ids= fehlt (z.B. ids=2000,2001)"}), 400
+    db = get_db()
+    placeholders = ",".join("?" * len(ids))
+    rows = [dict(r) for r in db.execute(
+        f"SELECT * FROM drives WHERE teslamate_drive_id IN ({placeholders})",
+        ids).fetchall()]
+    # Reihenfolge wie angefragt
+    by_id = {r["teslamate_drive_id"]: r for r in rows}
+    drives = []
+    for i in ids:
+        r = by_id.get(i)
+        if not r:
+            continue
+        km = float(r.get("distance_km") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        cons = round(energy / km * 100, 1) if km > 0 and energy > 0 else None
+        drives.append({
+            "id": i,
+            "start_date": r.get("start_date"),
+            "route": f"{r.get('start_address') or ''} → {r.get('end_address') or ''}",
+            "km": round(km, 1),
+            "duration_min": r.get("duration_min"),
+            "speed_avg": r.get("speed_avg"),
+            "speed_max": r.get("speed_max"),
+            "energy_kwh": round(energy, 2) if energy else None,
+            "cons_per_100": cons,
+            "soc_start": r.get("soc_start"),
+            "soc_end": r.get("soc_end"),
+            "soc_used": (round(r["soc_start"] - r["soc_end"], 1)
+                         if r.get("soc_start") is not None and r.get("soc_end") is not None else None),
+            "outside_temp_avg": r.get("outside_temp_avg"),
+        })
+    if not drives:
+        return jsonify({"error": "Keine Fahrten zu diesen IDs gefunden"}), 404
+
+    # Durchschnitte + beste/schlechteste Verbrauchsfahrt
+    def _avg(key):
+        vals = [d[key] for d in drives if d.get(key) is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+    averages = {
+        "km": _avg("km"), "duration_min": _avg("duration_min"),
+        "speed_avg": _avg("speed_avg"), "energy_kwh": _avg("energy_kwh"),
+        "cons_per_100": _avg("cons_per_100"), "soc_used": _avg("soc_used"),
+        "outside_temp_avg": _avg("outside_temp_avg"),
+    }
+    cons_vals = [(d["id"], d["cons_per_100"]) for d in drives if d.get("cons_per_100") is not None]
+    best = min(cons_vals, key=lambda x: x[1])[0] if cons_vals else None
+    worst = max(cons_vals, key=lambda x: x[1])[0] if cons_vals else None
+    # Delta gegen Durchschnitt anreichern
+    for d in drives:
+        if d.get("cons_per_100") is not None and averages["cons_per_100"] is not None:
+            d["cons_delta"] = round(d["cons_per_100"] - averages["cons_per_100"], 1)
+        else:
+            d["cons_delta"] = None
+        d["is_best"] = (d["id"] == best)
+        d["is_worst"] = (d["id"] == worst)
+    return jsonify({
+        "drives": drives,
+        "averages": averages,
+        "best_consumption_id": best,
+        "worst_consumption_id": worst,
     })
 
 
