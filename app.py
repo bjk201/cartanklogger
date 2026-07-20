@@ -2189,14 +2189,14 @@ def api_charts():
     1) Verbrauch kWh/100km  2) €/kWh  3) €/100km  4) kumulierte km
     Plus Sekundaer-KPIs: geladene kWh, Reichweite, Ladeverluste, AC/DC, CO2.
     """
-    days = request.args.get("days", 365, type=int)
+    days_param = request.args.get("days", 365, type=int)
     from_date = request.args.get("from")
     to_date = request.args.get("to")
     if from_date and to_date:
         cutoff = from_date + "T00:00:00"
         end = to_date + "T23:59:59"
     else:
-        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now() - timedelta(days=days_param)).isoformat()
         end = None
     db = get_db()
     evcc_q = "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, solar_percentage, loadpoint, raw FROM home_sessions WHERE created >= ?"
@@ -2249,6 +2249,8 @@ def api_charts():
     day_co2 = defaultdict(list)
     day_dc_kwh = defaultdict(float)  # Supercharger = DC
     day_ac_kwh = defaultdict(float)
+    day_dc_cost = defaultdict(float)  # echte DC-Kosten (Punkt 5)
+    day_ac_cost = defaultdict(float)  # echte AC-Kosten (Punkt 5)
     day_added = defaultdict(float)   # TM added (Akku)
     day_used = defaultdict(float)    # TM used (Wand)
     day_range_end = defaultdict(float)
@@ -2284,8 +2286,10 @@ def api_charts():
         if not _is_home_address(t.get("address"), t.get("address")):
             if is_dc:
                 day_dc_kwh[day] += kwh
+                day_dc_cost[day] += float(t.get("cost_total") or 0)
             else:
                 day_ac_kwh[day] += kwh
+                day_ac_cost[day] += float(t.get("cost_total") or 0)
         re = _tm_range_end(t.get("raw"))
         if re: day_range_end[day] = max(day_range_end[day], re)
 
@@ -2335,16 +2339,39 @@ def api_charts():
             "cost_per_100": cost_per_100, "co2": co2, "loss": loss,
             "ac_kwh": round(day_ac_kwh.get(d, 0), 2),
             "dc_kwh": round(day_dc_kwh.get(d, 0), 2),
+            "ac_cost": round(day_ac_cost.get(d, 0), 2),
+            "dc_cost": round(day_dc_cost.get(d, 0), 2),
             "range": round(day_range_end.get(d, 0), 0),
         })
     series.sort(key=lambda x: x["day"])
 
+    # --- Echte gefahrene km pro Tag aus TeslaMate-Drives (Wahrheit) ---
+    # korrigiert die Odometer-Diff-Schätzung (Tacho-Sprünge). (Punkt 4)
+    try:
+        from collections import defaultdict as _dd
+        drive_km_by_day = _dd(float)
+        for dr in _drive_rows(days_param, from_date, to_date):
+            dk = (dr.get("start_date") or "")[:10]
+            if not dk:
+                continue
+            try:
+                drive_km_by_day[dk] += float(dr.get("distance_km") or 0)
+            except Exception:
+                pass
+        for s in series:
+            if s["day"] in drive_km_by_day:
+                s["km"] = round(drive_km_by_day[s["day"]], 1)
+    except Exception:
+        pass
+
     # --- Gesamt-KPIs ---
     total_kwh = round(sum(s["kwh"] for s in series), 2)
     total_cost = round(sum(s["cost"] for s in series), 2)
-    total_km = round(_total_km_odo, 1)  # Tachostand (max odometer), nicht kumulative Diff
+    total_km = round(sum(s["km"] for s in series), 1) or 0.0  # gefahrene km (Summe Tages-km), nicht Tacho-Stand
     total_ac = round(sum(s["ac_kwh"] for s in series), 2)
     total_dc = round(sum(s["dc_kwh"] for s in series), 2)
+    total_dc_cost = round(sum(s["dc_cost"] for s in series), 2)
+    total_ac_cost = round(sum(s["ac_cost"] for s in series), 2)
     avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
     avg_cost_100 = round(total_cost / (total_km / 100.0), 2) if total_km > 0 else 0
     # gewichteter €/kWh ueber alle Tage
@@ -2447,8 +2474,10 @@ def api_charts():
             "charging_loss_pct": round(total_charging_loss / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
             # P5: AC/DC-Split (Kosten + Verbrauch)
             "ac_share_pct": round(total_ac / (total_ac + total_dc) * 100, 1) if (total_ac + total_dc) > 0 else 0,
-            "dc_cost_per_100km": round((total_dc / (total_ac + total_dc) * avg_cost_100) if (total_ac + total_dc) > 0 else 0, 2),
-            "ac_cost_per_100km": round((total_ac / (total_ac + total_dc) * avg_cost_100) if (total_ac + total_dc) > 0 else 0, 2),
+            # P5: echte DC/AC-Kosten pro 100km (nicht % von Gesamt-€/100km).
+            # DC-Kosten = Summe der echten externen DC-Ladekosten / gefahrene km.
+            "dc_cost_per_100km": round(total_dc_cost / (total_km / 100.0), 2) if total_km > 0 else 0,
+            "ac_cost_per_100km": round(total_ac_cost / (total_km / 100.0), 2) if total_km > 0 else 0,
         },
     })
 
@@ -2712,6 +2741,28 @@ def api_roadtrip():
         o = day_odo[d]
         day_km[d] = round(o - prev, 1) if prev > 0 else 0.0
         prev = o
+
+    # --- Echte gefahrene km pro Tag aus TeslaMate-Drives (Wahrheit) ---
+    # Die Odometer-Differenz zwischen Ladevorgängen ist fehleranfällig
+    # (Tacho-Sprünge, Resets, nicht erfasste Fahrten) und zeigt dann
+    # viel zu hohe km (z.B. 340 km an einem Tag, an dem nur ~216 km
+    # gefahren wurden). Wenn echte Drives vorhanden sind, überschreiben
+    # wir die Odometer-Schätzung damit. (Punkt 4)
+    try:
+        drive_rows = _drive_rows(days, from_date, to_date)
+        drive_km_by_day = defaultdict(float)
+        for dr in drive_rows:
+            dk = (dr.get("start_date") or "")[:10]
+            if not dk:
+                continue
+            try:
+                drive_km_by_day[dk] += float(dr.get("distance_km") or 0)
+            except Exception:
+                pass
+        for d, km in drive_km_by_day.items():
+            day_km[d] = round(km, 1)
+    except Exception:
+        pass  # Fallback: Odometer-Diff bleibt stehen
 
     # --- Pins deduplizieren: pro Adresse nur EIN Pin (Summe der kWh) ---
     # Zuerst alle Adressen sammeln, die als "Zuhause" (Wallbox/EVCC) geladen wurden
