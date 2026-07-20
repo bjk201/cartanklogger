@@ -974,6 +974,7 @@ function kpi(label, value) {
       </div>
     </div>
   </div>`;
+}
 
 // Tab-Wechsel: Statistik/Home-Tab sichtbar -> neu zeichnen (sonst Canvas 0px)
 let __chartData = null;
@@ -996,49 +997,49 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
 });
 
 // --- Zeitraum-Auswahl (90T / 1J / All / eigener Bereich) ---
-document.querySelectorAll('[data-days]').forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentDays = parseInt(btn.getAttribute("data-days"), 10);
-    customFrom = null;
-    customTo = null;
-    // Schnellbereich aktiv -> Datumsfelder leeren, damit klar ist: jetzt gilt
-    // der Schnellbereich, nicht die manuelle Auswahl.
-    const rf = document.getElementById("rangeFrom");
-    const rt = document.getElementById("rangeTo");
-    if (rf) rf.value = "";
-    if (rt) rt.value = "";
-    updateRangeLabel();
-    loadAll();
+// Alle Handler werden im DOMContentLoaded registriert, damit die Elemente
+// garantiert im DOM sind (zuvor lief der btnRange-Handler teils ins Leere,
+// wenn das Script vor dem DOM geparst wurde -> Filter griff nicht).
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll('[data-days]').forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentDays = parseInt(btn.getAttribute("data-days"), 10);
+      customFrom = null;
+      customTo = null;
+      const rf = document.getElementById("rangeFrom");
+      const rt = document.getElementById("rangeTo");
+      if (rf) rf.value = "";
+      if (rt) rt.value = "";
+      updateRangeLabel();
+      loadAll();
+    });
   });
+
+  const btnRange = document.getElementById("btnRange");
+  if (btnRange) {
+    btnRange.addEventListener("click", () => {
+      const from = document.getElementById("rangeFrom").value;
+      const to = document.getElementById("rangeTo").value;
+      if (!from || !to) {
+        alert("Bitte Von- und Bis-Datum wählen.");
+        return;
+      }
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
+      customFrom = from;
+      customTo = to;
+      updateRangeLabel();
+      loadAll();
+    });
+  }
+
+  const mergedLimitSel = document.getElementById("mergedLimit");
+  if (mergedLimitSel) {
+    mergedLimitSel.addEventListener("change", () => { window.__mergedPage = 0; renderMergedPage(); });
+  }
+  updateRangeLabel();
 });
-
-const btnRange = document.getElementById("btnRange");
-if (btnRange) {
-  btnRange.addEventListener("click", () => {
-    const from = document.getElementById("rangeFrom").value;
-    const to = document.getElementById("rangeTo").value;
-    if (!from || !to) {
-      alert("Bitte Von- und Bis-Datum wählen.");
-      return;
-    }
-    document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
-    customFrom = from;
-    customTo = to;
-    updateRangeLabel();
-    loadAll();
-  });
-}
-
-// Limit-Auswahl für "Letzte Ladevorgänge" -> neu paginieren
-const mergedLimitSel = document.getElementById("mergedLimit");
-if (mergedLimitSel) {
-  mergedLimitSel.addEventListener("change", () => { window.__mergedPage = 0; renderMergedPage(); });
-}
-
-updateRangeLabel();
-}
 
 // --- SoC-Auswertung: Verteilungs- und Zeitdiagramme ---
 function drawBarChart(canvasId, labels, values, color, unit) {
