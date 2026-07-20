@@ -2440,9 +2440,13 @@ def api_export_roadtrip_csv():
     home = [dict(r) for r in db.execute(evcc_q + " ORDER BY created ASC", params).fetchall()]
     ext = [dict(r) for r in db.execute(tm_q + " ORDER BY started_at ASC", params).fetchall()]
 
-    # (date, odometer, fill_kwh, unit_price, total, location, notes)
-    # Jede Ladung = ein kompletter "Fill-up" (Full Tank), Einheit kWh.
-    rows = []
+    # Parameter: Schwellwert (Anteil der Maximal-Ladung), ab dem eine Ladung
+    # als 'voll' (Full Tank) gilt. Kleinere = Partial (Top-up).
+    # 1.0 = alle als voll markieren (altes Verhalten).
+    full_threshold = request.args.get("full_threshold", 0.5, type=float)
+    full_threshold = max(0.0, min(1.0, full_threshold))
+
+    rows = []  # (date, odometer, fill_kwh, unit_price, total, location, notes, _is_home)
 
     for e in home:
         d = (e.get("created") or "")[:10]
@@ -2452,7 +2456,7 @@ def api_export_roadtrip_csv():
         unit = float(e.get("price_per_kwh") or 0)
         loc = e.get("loadpoint") or ""
         note = e.get("note") or "Wallbox (Zuhause)"
-        rows.append((d, odo, kwh, unit, total, str(loc), str(note)))
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note), True))
 
     for t in ext:
         d = (t.get("started_at") or "")[:10]
@@ -2467,23 +2471,34 @@ def api_export_roadtrip_csv():
         if provider and provider.lower() not in (loc or "").lower():
             note = " ".join(p for p in (loc, provider) if p).strip()
         note = note or "Ladestopp"
-        rows.append((d, odo, kwh, unit, total, str(loc), str(note)))
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note), False))
 
     # Nach Datum sortieren (aufsteigend = chronologisch)
     rows.sort(key=lambda r: r[0])
 
+    # Voll-Tank-Erkennung (Heuristik, da keine Batterie-SoC gespeichert wird):
+    # Eine Ladung gilt als 'voll' (Full Tank = 1), wenn ihre geladene Energie
+    # >= full_threshold * (groesste Ladung im Export). Kleinere Ladungen sind
+    # Top-ups (Partial = 0) -> Road Trip MPG ueberspringt sie bei der
+    # Verbrauchsrechnung und rechnet erst beim naechsten vollen Stopp korrekt.
+    # Das verhindert Verbrauchs-Spikes durch Zwischenladungen.
+    # full_threshold >= 1.0 bedeutet ausdruecklich: ALLE Ladungen als voll.
+    max_kwh = max((r[2] for r in rows), default=0.0)
+    threshold_kwh = max_kwh * full_threshold
+    all_full = full_threshold >= 1.0
+
     # Road Trip MPG CSV-Spalten (siehe darrensoft.ca/roadtrip/manual/csv-import/columns/).
     # 'Fill Unit' = kWh erzwingt Strom-Einheit unabhaengig vom Fahrzeugprofil-Default.
-    # 'Full Tank' = 1 markiert jede Ladung als vollstaendig getankt (korrekte Verbrauchsrechnung).
     header = ["Date", "Odometer", "Fill Amount", "Fill Unit",
               "Price per Unit", "Total Price", "Full Tank", "Location", "Notes"]
     buf = _StringIO()
     w = _csv.writer(buf)
     w.writerow(header)
-    for d, odo, kwh, unit, total, loc, note in rows:
+    for d, odo, kwh, unit, total, loc, note, _is_home in rows:
         # Leere/ungueltige Zeilen nicht exportieren
         if not d or (kwh <= 0 and total <= 0):
             continue
+        full = 1 if (all_full or kwh >= threshold_kwh) else 0
         w.writerow([
             d,
             f"{odo:.1f}" if odo else "",
@@ -2491,7 +2506,7 @@ def api_export_roadtrip_csv():
             "kWh",
             f"{unit:.4f}" if unit else "",
             f"{total:.2f}" if total else "",
-            "1",
+            str(full),
             loc,
             note,
         ])

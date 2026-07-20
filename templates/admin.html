@@ -73,11 +73,18 @@
                 <div class="card-header">Export</div>
                 <div class="card-body">
                     <div class="row g-2 align-items-end">
-                        <div class="col-6">
+                        <div class="col-5">
                             <label class="form-label small mb-0">Zeitraum (Tage)</label>
                             <input class="form-control form-control-sm" id="rtDays" type="number" min="1" value="365">
                         </div>
-                        <div class="col-6">
+                        <div class="col-7">
+                            <label class="form-label small mb-0">Vollladen ab</label>
+                            <select class="form-select form-select-sm" id="rtFull">
+                                <option value="0.5" selected>Top-up erkennen (≥50% Max)</option>
+                                <option value="1.0">Alle als voll</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mt-2">
                             <button class="btn btn-outline-info btn-sm w-100" id="rtExport">⬇️ Road Trip CSV</button>
                         </div>
                     </div>
@@ -453,10 +460,11 @@ document.addEventListener("click", async (e) => {
   if (!btn) return;
   e.preventDefault();
   const days = parseInt($("rtDays")?.value) || 365;
+  const full = parseFloat($("rtFull")?.value) || 0.5;
   const msg = document.getElementById("rtMsg");
   try {
     // Browser startet den Download automatisch wegen Content-Disposition: attachment
-    window.location.href = `/api/export/roadtrip-csv?days=${encodeURIComponent(days)}`;
+    window.location.href = `/api/export/roadtrip-csv?days=${encodeURIComponent(days)}&full_threshold=${encodeURIComponent(full)}`;
     if (msg) { msg.textContent = "✅ Download gestartet."; msg.className = "text-success small mt-2"; }
   } catch (err) {
     if (msg) { msg.textContent = "Fehler: " + err.message; msg.className = "text-danger small mt-2"; }
