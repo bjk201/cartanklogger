@@ -2390,6 +2390,123 @@ def api_roadtrip():
             "n_days": len(days_sorted),
         },
     })
+
+
+@app.route("/api/export/roadtrip-csv")
+def api_export_roadtrip_csv():
+    """Export aller Ladevorgänge als Road Trip MPG (Darren Stone) CSV.
+
+    Die iOS-App 'Road Trip MPG' importiert CSV direkt (Spalten siehe
+    https://apps.apple.com/app/road-trip-mpg/id299392794). Sie ist eine
+    Verbrenner-App (Fill-up = Tankfuellung in Litern/Gallons), kennt aber
+    KEIN kWh-Feld.
+
+    Mapping fuer EV-Ladedaten (jede Ladung = ein 'Fill-up'):
+      Date          -> Ladestart (YYYY-MM-DD)
+      Odometer      -> Tachostand km beim Laden
+      Fill Amount   -> geladene Energie in kWh (= 'Fuel amount')
+      Price per Unit-> €/kWh (= 'Price per unit')
+      Total Price   -> Gesamtkosten € (Bonus-Spalte, von der App erkannt)
+      Note          -> Ort/Anbieter (Bonus-Spalte)
+
+    Die Spaltenueberschriften sind bewusst die App-Standardnamen, damit der
+    Import ohne manuelles Column-Mapping klappt.
+    """
+    import csv as _csv
+    from io import StringIO as _StringIO
+
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+
+    db = get_db()
+    evcc_q = ("SELECT created, odometer, charged_kwh, total_cost, price_per_kwh, "
+              "loadpoint, note FROM home_sessions WHERE created >= ?")
+    tm_q = ("SELECT started_at, odometer_end, odometer_start, energy_kwh, "
+            "cost_total, price_per_kwh, provider, address, location_name, note "
+            "FROM external_sessions WHERE started_at >= ?")
+    params = [cutoff]
+    if end:
+        evcc_q += " AND created <= ?"
+        tm_q += " AND started_at <= ?"
+        params = [cutoff, end]
+
+    home = [dict(r) for r in db.execute(evcc_q + " ORDER BY created ASC", params).fetchall()]
+    ext = [dict(r) for r in db.execute(tm_q + " ORDER BY started_at ASC", params).fetchall()]
+
+    # (date, odometer, fill_kwh, unit_price, total, location, notes)
+    # Jede Ladung = ein kompletter "Fill-up" (Full Tank), Einheit kWh.
+    rows = []
+
+    for e in home:
+        d = (e.get("created") or "")[:10]
+        odo = float(e.get("odometer") or 0)
+        kwh = float(e.get("charged_kwh") or 0)
+        total = float(e.get("total_cost") or 0)
+        unit = float(e.get("price_per_kwh") or 0)
+        loc = e.get("loadpoint") or ""
+        note = e.get("note") or "Wallbox (Zuhause)"
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note)))
+
+    for t in ext:
+        d = (t.get("started_at") or "")[:10]
+        odo = float(t.get("odometer_end") or t.get("odometer_start") or 0)
+        kwh = float(t.get("energy_kwh") or 0)
+        total = float(t.get("cost_total") or 0)
+        unit = float(t.get("price_per_kwh") or 0)
+        loc = _location_label(t.get("location_name"), t.get("address")) or ""
+        provider = t.get("provider") or ""
+        # Provider nur ergaenzen, wenn er nicht schon im Ortsnamen steckt
+        note = loc
+        if provider and provider.lower() not in (loc or "").lower():
+            note = " ".join(p for p in (loc, provider) if p).strip()
+        note = note or "Ladestopp"
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note)))
+
+    # Nach Datum sortieren (aufsteigend = chronologisch)
+    rows.sort(key=lambda r: r[0])
+
+    # Road Trip MPG CSV-Spalten (siehe darrensoft.ca/roadtrip/manual/csv-import/columns/).
+    # 'Fill Unit' = kWh erzwingt Strom-Einheit unabhaengig vom Fahrzeugprofil-Default.
+    # 'Full Tank' = 1 markiert jede Ladung als vollstaendig getankt (korrekte Verbrauchsrechnung).
+    header = ["Date", "Odometer", "Fill Amount", "Fill Unit",
+              "Price per Unit", "Total Price", "Full Tank", "Location", "Notes"]
+    buf = _StringIO()
+    w = _csv.writer(buf)
+    w.writerow(header)
+    for d, odo, kwh, unit, total, loc, note in rows:
+        # Leere/ungueltige Zeilen nicht exportieren
+        if not d or (kwh <= 0 and total <= 0):
+            continue
+        w.writerow([
+            d,
+            f"{odo:.1f}" if odo else "",
+            f"{kwh:.3f}" if kwh else "",
+            "kWh",
+            f"{unit:.4f}" if unit else "",
+            f"{total:.2f}" if total else "",
+            "1",
+            loc,
+            note,
+        ])
+    csv_text = buf.getvalue()
+    return _csv_response(csv_text, "cartanklogger_roadtrip.csv")
+
+
+def _csv_response(text, filename):
+    """Baut eine saubere text/csv-Response mit Download-Header."""
+    from flask import Response
+    return Response(
+        text,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 @app.route("/api/price-periods", methods=["GET", "POST", "DELETE"])
 def api_price_periods():
     db = get_db()

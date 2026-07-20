@@ -68,6 +68,23 @@
                     <div id="syncMsg" class="small"></div>
                 </div>
             </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Export</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-6">
+                            <label class="form-label small mb-0">Zeitraum (Tage)</label>
+                            <input class="form-control form-control-sm" id="rtDays" type="number" min="1" value="365">
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-outline-info btn-sm w-100" id="rtExport">⬇️ Road Trip CSV</button>
+                        </div>
+                    </div>
+                    <div class="form-text">Liefert alle Ladevorgänge als Road Trip MPG (Darren Stone) CSV zum Import in die iOS-App. Einheit pro Zeile = kWh.</div>
+                    <div id="rtMsg" class="small mt-2"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Preisperioden -->
@@ -427,6 +444,22 @@ document.addEventListener("click", async (e) => {
     await csrfFetch(`/api/external/${id}`, {method:"DELETE"});
     bootstrap.Modal.getInstance(document.getElementById("extModal")).hide();
     loadExtPrices();
+  }
+});
+
+// Road Trip MPG CSV-Export – direkter Download (GET-Route, kein CSRF noetig)
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("#rtExport");
+  if (!btn) return;
+  e.preventDefault();
+  const days = parseInt($("rtDays")?.value) || 365;
+  const msg = document.getElementById("rtMsg");
+  try {
+    // Browser startet den Download automatisch wegen Content-Disposition: attachment
+    window.location.href = `/api/export/roadtrip-csv?days=${encodeURIComponent(days)}`;
+    if (msg) { msg.textContent = "✅ Download gestartet."; msg.className = "text-success small mt-2"; }
+  } catch (err) {
+    if (msg) { msg.textContent = "Fehler: " + err.message; msg.className = "text-danger small mt-2"; }
   }
 });
 
