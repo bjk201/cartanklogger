@@ -996,21 +996,6 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
 });
 
 // --- Zeitraum-Auswahl (90T / 1J / All / eigener Bereich) ---
-// Datumsfelder beim Start sinnvoll vorbelegen (letzte 365 Tage), damit der
-// Zeitraum-Filter sofort sichtbar "etwas tut" und nicht leer wirkt.
-(function initRangeInputs() {
-  const rf = document.getElementById("rangeFrom");
-  const rt = document.getElementById("rangeTo");
-  if (rf && rt) {
-    const today = new Date();
-    const yearAgo = new Date();
-    yearAgo.setFullYear(today.getFullYear() - 1);
-    const fmt = (d) => d.toISOString().slice(0, 10);
-    if (!rf.value) rf.value = fmt(yearAgo);
-    if (!rt.value) rt.value = fmt(today);
-  }
-})();
-
 document.querySelectorAll('[data-days]').forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
@@ -1302,6 +1287,17 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnCompareDrives")?.addEventListener("click", compareDrives);
   document.getElementById("btnSyncDrives")?.addEventListener("click", syncDrives);
   document.getElementById("driveFilter")?.addEventListener("keydown", (e)=>{ if(e.key==="Enter") loadDrivesList(); });
+  // Datumsfelder sinnvoll vorbelegen (letzte 365 Tage), damit der
+  // Zeitraum-Filter sofort sichtbar "etwas tut" und nicht leer wirkt.
+  const rf = document.getElementById("rangeFrom");
+  const rt = document.getElementById("rangeTo");
+  if (rf && rt && !rf.value && !rt.value) {
+    const today = new Date();
+    const yearAgo = new Date();
+    yearAgo.setFullYear(today.getFullYear() - 1);
+    rf.value = yearAgo.toISOString().slice(0, 10);
+    rt.value = today.toISOString().slice(0, 10);
+  }
 });
 
 // --- Sichtbare Versionsanzeige (Footer) ---
@@ -1330,4 +1326,4 @@ document.addEventListener("DOMContentLoaded", () => {
 })();
 
 // Eindeutiger Build-Marker (zum Verifizieren, ob der Browser die neue app.js laedt)
-window.__APP_MARKER = "2026-07-17-final-r3";
+window.__APP_MARKER = "2026-07-20-dashboard-overhaul";
