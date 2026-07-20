@@ -55,6 +55,7 @@ async function loadAll() {
   const trip  = await safeJson(`/api/roadtrip?${rp}`, {per_day:[], stops:[]});
   const chartData = await safeJson(`/api/charts?${rp}`, {});
   const statData = await safeJson(`/api/statistics?${rp}`, {});
+  const socData = await safeJson(`/api/soc?${rp}`, {});
   __chartData = chartData;
   __statsData = stats;
   __statData = statData;
@@ -66,6 +67,7 @@ async function loadAll() {
   try { renderRoadtrip(trip); } catch(e){ console.error("renderRoadtrip", e); }
   try { renderStats(chartData); } catch(e){ console.error("renderStats", e); }
   try { renderStatistics(statData); } catch(e){ console.error("renderStatistics", e); }
+  try { renderSocCharts(socData); } catch(e){ console.error("renderSocCharts", e); }
   try { renderExtra(); } catch(e){ console.error("renderExtra", e); }
 }
 
@@ -842,6 +844,95 @@ if (btnRange) {
 }
 
 updateRangeLabel();
+}
+
+// --- SoC-Auswertung: Verteilungs- und Zeitdiagramme ---
+function drawBarChart(canvasId, labels, values, color, unit) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !window.Chart) return;
+  if (ctx.clientWidth === 0 && ctx.offsetParent === null) {
+    requestAnimationFrame(() => drawBarChart(canvasId, labels, values, color, unit));
+    return;
+  }
+  if (window.socCharts && window.socCharts[canvasId]) window.socCharts[canvasId].destroy();
+  window.socCharts = window.socCharts || {};
+  window.socCharts[canvasId] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: unit, data: values,
+        backgroundColor: color, borderRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function renderSocCharts(d) {
+  if (!d || typeof d !== "object") return;
+  const s = d.summary || {};
+  // Zusammenfassungs-Kacheln
+  const sumEl = document.getElementById("socSummary");
+  if (sumEl) {
+    const cards = [
+      ["Ladungen", s.total ?? "–"],
+      ["mit SoC-Daten", s.with_soc ?? "–"],
+      ["Ø SoC Start", s.avg_soc_start != null ? s.avg_soc_start + " %" : "–"],
+      ["Ø SoC Ende", s.avg_soc_end != null ? s.avg_soc_end + " %" : "–"],
+      ["Ø Spanne", s.avg_span != null ? s.avg_span + " %" : "–"],
+    ];
+    sumEl.innerHTML = cards.map(([l, v]) =>
+      `<div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-2 text-center">
+        <div class="small text-muted">${l}</div>
+        <div class="fw-bold">${v}</div></div></div>`).join("");
+  }
+  // SoC-Verteilungen (10%-Faecher 0..100)
+  const buckets = (arr) => (arr || []).map(x => `${x.bucket}–${x.bucket + 9}%`);
+  const counts = (arr) => (arr || []).map(x => x.count);
+  drawBarChart("chartSocStart", buckets(d.soc_start_hist),
+               counts(d.soc_start_hist), "#0d6efd", "Ladungen");
+  drawBarChart("chartSocEnd", buckets(d.soc_end_hist),
+               counts(d.soc_end_hist), "#198754", "Ladungen");
+  drawBarChart("chartSocSpan", buckets(d.charge_span),
+               counts(d.charge_span), "#fd7e14", "Ladungen");
+  // Wann geladen? (24h)
+  const hours = d.by_hour || [];
+  drawBarChart("chartSocHour",
+               hours.map((_, i) => `${i}:00`), hours, "#6f42c1", "Ladungen");
+  // Wo geladen? (Anbieter: Anzahl + kWh kombiniert als gestapelt)
+  const provs = d.by_provider || [];
+  const pCtx = document.getElementById("chartSocProvider");
+  if (pCtx && window.Chart) {
+    if (window.socCharts && window.socCharts["chartSocProvider"]) window.socCharts["chartSocProvider"].destroy();
+    window.socCharts = window.socCharts || {};
+    window.socCharts["chartSocProvider"] = new Chart(pCtx, {
+      type: "bar",
+      data: {
+        labels: provs.map(p => p.provider),
+        datasets: [
+          { label: "Ladungen", data: provs.map(p => p.count), backgroundColor: "#0d6efd", borderRadius: 3 },
+          { label: "kWh", data: provs.map(p => p.kwh), backgroundColor: "#ffc107", borderRadius: 3 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: "y",
+        plugins: { legend: { display: true, labels: { font: { size: 10 } } } },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 10 } } },
+        },
+      },
+    });
+  }
 }
 
 // --- Sichtbare Versionsanzeige (Footer) ---

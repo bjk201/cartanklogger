@@ -18,6 +18,7 @@ from flask import Flask, render_template, jsonify, request, g, session
 
 # Domänenmodell + Matching + Statistik (vereinheitlichte Charge-Sicht)
 from services.stats import build_stats_from_rows, compute_home_cost_row as _stats_compute_home_cost_row
+import db as dbmod
 
 try:
     import yaml
@@ -338,6 +339,13 @@ def get_db():
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
         init_db(g.db)
+        # Migrationen: fehlende Spalten (z.B. soc_start/soc_end) bei bereits
+        # existierenden Tabellen ergaenzen. Wichtig fuer Container-Updates auf
+        # eine neue Version ohne DB-Neuaufbau.
+        try:
+            dbmod._ensure_migrations(g.db)
+        except Exception as e:
+            app.logger.warning(f"Migration uebersprungen: {e}")
     return g.db
 
 
@@ -361,6 +369,8 @@ def init_db(db):
             odometer        REAL,
             charged_kwh     REAL,
             solar_percentage REAL,
+            soc_start        REAL,
+            soc_end          REAL,
             pv_kwh          REAL,
             grid_kwh        REAL,
             grid_cost       REAL,
@@ -378,6 +388,8 @@ def init_db(db):
             finished_at       TEXT,
             location_name     TEXT,
             address           TEXT,
+            soc_start         REAL,
+            soc_end           REAL,
             latitude          REAL,
             longitude         REAL,
             provider          TEXT,
@@ -747,6 +759,39 @@ def _parse_dt(val):
     return None
 
 
+def _to_float(v):
+    """Sicheres float() – gibt None zurueck, wenn v nicht numerisch ist."""
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_soc(s, prefixes=("soc", "soc_", "battery", "battery_", "startSoc", "endSoc")):
+    """Liest Start/End-SoC feldnamen-robust aus einer EVCC-Session.
+
+    EVCC-Versionen liefern das SoC-Feld mal als 'socStart'/'socEnd',
+    'soc_start'/'soc_end', 'startSoc'/'endSoc' oder 'batteryStart'/'batteryEnd'.
+    Wir probieren mehrere Varianten, damit der Sync unabhaengig von der
+    genauen EVCC-Version funktioniert. Gibt (soc_start, soc_end) zurueck.
+    """
+    def _find(*names):
+        for n in names:
+            if n in s and s[n] not in (None, ""):
+                try:
+                    return float(s[n])
+                except (TypeError, ValueError):
+                    return None
+        return None
+    soc_start = _find("socStart", "soc_start", "startSoc", "start_soc",
+                      "batteryStart", "battery_start", "socBegin", "soc_begin")
+    soc_end = _find("socEnd", "soc_end", "endSoc", "end_soc",
+                    "batteryEnd", "battery_end", "socFinish", "soc_finish")
+    return soc_start, soc_end
+
+
 def sync_evcc():
     evcc = config["evcc"]
     client = EVCCClient(
@@ -774,20 +819,23 @@ def sync_evcc():
             solar_f = 0.0
         if solar_f <= 1.0 and solar_f > 0:
             solar_f = solar_f * 100.0
+        # SoC feldnamen-robust auslesen (EVCC-Version-abhaengig)
+        soc_start, soc_end = _extract_soc(s)
         cost = compute_home_cost(charged, solar_f, created)
         try:
             cur = db.execute(
                 """INSERT OR IGNORE INTO home_sessions
                    (evcc_session_id, created, finished, loadpoint, vehicle, odometer,
-                    charged_kwh, solar_percentage, pv_kwh, grid_kwh, grid_cost, pv_cost,
+                    charged_kwh, solar_percentage, soc_start, soc_end,
+                    pv_kwh, grid_kwh, grid_cost, pv_cost,
                     total_cost, price_per_kwh, imported_at, raw)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sid, created.isoformat(),
                     finished.isoformat() if finished else None,
                     s.get("loadpoint", ""), s.get("vehicle", ""),
                     s.get("odometer"),
-                    charged, solar,
+                    charged, solar, soc_start, soc_end,
                     cost["pv_kwh"], cost["grid_kwh"], cost["grid_cost"],
                     cost["pv_cost"], cost["total_cost"], cost["price_per_kwh"],
                     now, json.dumps(s, default=str),
@@ -877,6 +925,18 @@ def sync_teslamate():
         raw_val = json.dumps(s, default=str) if _store_raw() else None
         lat = s.get("latitude") if _store_exact_location() else None
         lng = s.get("longitude") if _store_exact_location() else None
+        # SoC aus TeslaMate (charge_energy_added etc. liefert keine SoC,
+        # aber start_battery_level/end_battery_level sind im charges-Payload).
+        soc_start = s.get("start_battery_level")
+        soc_end = s.get("end_battery_level")
+        try:
+            soc_start = float(soc_start) if soc_start not in (None, "") else None
+        except (TypeError, ValueError):
+            soc_start = None
+        try:
+            soc_end = float(soc_end) if soc_end not in (None, "") else None
+        except (TypeError, ValueError):
+            soc_end = None
         # Adress-Label: immer anonymisiert (nie rohe Strasse/Hausnummer in der API)
         label = _location_label(s.get("geofence"), s.get("address"))
         if existing is None:
@@ -884,8 +944,8 @@ def sync_teslamate():
                 """INSERT OR IGNORE INTO external_sessions
                    (teslamate_session_id, started_at, finished_at, location_name, address,
                     latitude, longitude, provider, energy_kwh, energy_used_kwh, odometer_start,
-                    odometer_end, cost_total, price_per_kwh, manual_price, imported_at, raw)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    odometer_end, soc_start, soc_end, cost_total, price_per_kwh, manual_price, imported_at, raw)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sid, started.isoformat(),
                     finished.isoformat() if finished else None,
@@ -893,6 +953,7 @@ def sync_teslamate():
                     lat, lng, provider,
                     energy, energy_used, s.get("odometer"),
                     s.get("odometer"),
+                    soc_start, soc_end,
                     cost_total, round(ppk, 4), 0, now, raw_val,
                 ),
             )
@@ -939,6 +1000,9 @@ def _mock_evcc_sessions():
             "solarPercentage": solar,
             "price": 3.5,
             "pricePerKWh": 0.33,
+            # SoC (Version 1: camelCase socStart/socEnd)
+            "socStart": 40 + (i % 4) * 10,
+            "socEnd": 80 + (i % 3) * 5,
         })
     return out
 
@@ -2427,10 +2491,10 @@ def api_export_roadtrip_csv():
 
     db = get_db()
     evcc_q = ("SELECT created, odometer, charged_kwh, total_cost, price_per_kwh, "
-              "loadpoint, note FROM home_sessions WHERE created >= ?")
+              "loadpoint, note, soc_start, soc_end FROM home_sessions WHERE created >= ?")
     tm_q = ("SELECT started_at, odometer_end, odometer_start, energy_kwh, "
-            "cost_total, price_per_kwh, provider, address, location_name, note "
-            "FROM external_sessions WHERE started_at >= ?")
+            "cost_total, price_per_kwh, provider, address, location_name, note, "
+            "soc_start, soc_end FROM external_sessions WHERE started_at >= ?")
     params = [cutoff]
     if end:
         evcc_q += " AND created <= ?"
@@ -2456,7 +2520,9 @@ def api_export_roadtrip_csv():
         unit = float(e.get("price_per_kwh") or 0)
         loc = e.get("loadpoint") or ""
         note = e.get("note") or "Wallbox (Zuhause)"
-        rows.append((d, odo, kwh, unit, total, str(loc), str(note), True))
+        ss = _to_float(e.get("soc_start"))
+        se = _to_float(e.get("soc_end"))
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note), True, ss, se))
 
     for t in ext:
         d = (t.get("started_at") or "")[:10]
@@ -2471,21 +2537,35 @@ def api_export_roadtrip_csv():
         if provider and provider.lower() not in (loc or "").lower():
             note = " ".join(p for p in (loc, provider) if p).strip()
         note = note or "Ladestopp"
-        rows.append((d, odo, kwh, unit, total, str(loc), str(note), False))
+        ss = _to_float(t.get("soc_start"))
+        se = _to_float(t.get("soc_end"))
+        rows.append((d, odo, kwh, unit, total, str(loc), str(note), False, ss, se))
 
     # Nach Datum sortieren (aufsteigend = chronologisch)
     rows.sort(key=lambda r: r[0])
 
-    # Voll-Tank-Erkennung (Heuristik, da keine Batterie-SoC gespeichert wird):
-    # Eine Ladung gilt als 'voll' (Full Tank = 1), wenn ihre geladene Energie
-    # >= full_threshold * (groesste Ladung im Export). Kleinere Ladungen sind
-    # Top-ups (Partial = 0) -> Road Trip MPG ueberspringt sie bei der
-    # Verbrauchsrechnung und rechnet erst beim naechsten vollen Stopp korrekt.
-    # Das verhindert Verbrauchs-Spikes durch Zwischenladungen.
-    # full_threshold >= 1.0 bedeutet ausdruecklich: ALLE Ladungen als voll.
+    # Voll-Tank-Erkennung (jetzt ueber gespeicherten SoC, nicht mehr nur kWh-Heuristik):
+    # Eine Ladung gilt als 'voll' (Full Tank = 1), wenn:
+    #   - der End-SoC hoch ist (>= soc_full_end, Default 95%)  ODER
+    #   - die geladene Spanne gross ist (Ende - Start >= soc_full_span, Default 60%)
+    # Ladungen ohne SoC-Daten (z.B. aeltere EVCC-Version) fallen auf die
+    # kWh-Heuristik zurueck (full_threshold * groesste Ladung im Export).
+    # full_threshold >= 1.0 erzwingt ausdruecklich ALLE als voll.
+    soc_full_end = request.args.get("soc_full_end", 95.0, type=float)
+    soc_full_span = request.args.get("soc_full_span", 60.0, type=float)
     max_kwh = max((r[2] for r in rows), default=0.0)
     threshold_kwh = max_kwh * full_threshold
     all_full = full_threshold >= 1.0
+
+    def _is_full(kwh, ss, se):
+        if all_full:
+            return True
+        # Echte SoC-Entscheidung
+        if ss is not None and se is not None and (se - ss) >= 0:
+            if se >= soc_full_end or (se - ss) >= soc_full_span:
+                return True
+        # Fallback: keine/ungueltige SoC -> kWh-Heuristik
+        return kwh >= threshold_kwh
 
     # Road Trip MPG CSV-Spalten (siehe darrensoft.ca/roadtrip/manual/csv-import/columns/).
     # 'Fill Unit' = kWh erzwingt Strom-Einheit unabhaengig vom Fahrzeugprofil-Default.
@@ -2494,11 +2574,11 @@ def api_export_roadtrip_csv():
     buf = _StringIO()
     w = _csv.writer(buf)
     w.writerow(header)
-    for d, odo, kwh, unit, total, loc, note, _is_home in rows:
+    for d, odo, kwh, unit, total, loc, note, _is_home, ss, se in rows:
         # Leere/ungueltige Zeilen nicht exportieren
         if not d or (kwh <= 0 and total <= 0):
             continue
-        full = 1 if (all_full or kwh >= threshold_kwh) else 0
+        full = 1 if _is_full(kwh, ss, se) else 0
         w.writerow([
             d,
             f"{odo:.1f}" if odo else "",
@@ -2522,6 +2602,168 @@ def _csv_response(text, filename):
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@app.route("/api/soc")
+def api_soc():
+    """SoC-Auswertung (State of Charge) ueber alle Ladevorgaenge.
+
+    Liefert Verteilungen, mit denen das Frontend Diagramme zeichnet:
+      - soc_start_hist:  Histogramm der Start-SoC (in 10%-Faechern)
+      - soc_end_hist:    Histogramm der End-SoC
+      - charge_span:     Verteilung der geladenen Spanne (Ende-Start) in 10%-Faechern
+      - by_hour:         WANN wurde geladen? Anzahl Ladungen pro Tagesstunde (0..23)
+      - by_weekday:      Anzahl pro Wochentag (Mon..So)
+      - by_provider:     WO wurde geladen? Anzahl + kWh je Anbieter (Top-Urls)
+      - summary:         Ø Start/End-SoC, Ø Spanne, Anzahl mit/ohne SoC-Daten
+    """
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+
+    db = get_db()
+    from collections import defaultdict
+    q = ("SELECT started_at, created, soc_start, soc_end, energy_kwh, "
+         "charged_kwh, provider, location_name, address, energy_used_kwh "
+         "FROM ("
+         "  SELECT started_at, NULL AS created, soc_start, soc_end, energy_kwh, "
+         "         0 AS charged_kwh, provider, location_name, address, energy_used_kwh "
+         "  FROM external_sessions WHERE started_at >= ? "
+         "  UNION ALL "
+         "  SELECT NULL AS started_at, created, soc_start, soc_end, 0 AS energy_kwh, "
+         "         charged_kwh, 'Zuhause' AS provider, NULL AS location_name, "
+         "         NULL AS address, NULL AS energy_used_kwh "
+         "  FROM home_sessions WHERE created >= ?"
+         ")")
+    params = [cutoff, cutoff]
+    if end:
+        q = q.replace("started_at >= ?", "started_at >= ? AND started_at <= ?")
+        q = q.replace("created >= ?", "created >= ? AND created <= ?")
+        params = [cutoff, end, cutoff, end]
+    rows = [dict(r) for r in db.execute(q, params).fetchall()]
+
+    def _bucket(v, size=10):
+        if v is None:
+            return None
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            return None
+        return int(min(100, max(0, fv)) // size) * size
+
+    def _hour(dt):
+        if not dt:
+            return None
+        s = str(dt)
+        # Format YYYY-MM-DD HH:MM oder ISO
+        m = None
+        import re as _re
+        mm = _re.search(r"(\d{1,2}):(\d{2})", s)
+        if mm:
+            return int(mm.group(1))
+        return None
+
+    def _weekday(dt):
+        if not dt:
+            return None
+        s = str(dt)[:19]
+        try:
+            d = datetime.fromisoformat(s.replace("Z", ""))
+            return d.weekday()  # 0=Mon
+        except Exception:
+            return None
+
+    soc_start_hist = defaultdict(int)
+    soc_end_hist = defaultdict(int)
+    charge_span = defaultdict(int)
+    by_hour = defaultdict(int)
+    by_weekday = defaultdict(int)
+    by_provider = defaultdict(lambda: {"count": 0, "kwh": 0.0})
+    n_with_soc = 0
+    n_total = 0
+    sum_start = 0.0
+    sum_end = 0.0
+    sum_span = 0.0
+    n_span = 0
+
+    for r in rows:
+        n_total += 1
+        ss = _to_float(r.get("soc_start"))
+        se = _to_float(r.get("soc_end"))
+        kwh = _to_float(r.get("energy_kwh")) or _to_float(r.get("charged_kwh")) or 0.0
+        # Zeitstempel: extern uses started_at, home uses created
+        ts = r.get("started_at") or r.get("created")
+        hr = _hour(ts)
+        wd = _weekday(ts)
+        if hr is not None:
+            by_hour[hr] += 1
+        if wd is not None:
+            by_weekday[wd] += 1
+        # Anbieter
+        prov = r.get("provider") or "Unbekannt"
+        if not prov or prov.strip() == "":
+            prov = "Unbekannt"
+        by_provider[prov]["count"] += 1
+        by_provider[prov]["kwh"] += float(kwh or 0)
+        # SoC
+        if ss is not None or se is not None:
+            n_with_soc += 1
+        b_s = _bucket(ss)
+        b_e = _bucket(se)
+        if b_s is not None:
+            soc_start_hist[b_s] += 1
+            sum_start += ss or 0
+        if b_e is not None:
+            soc_end_hist[b_e] += 1
+            sum_end += se or 0
+        if ss is not None and se is not None and (se - ss) >= 0:
+            span = se - ss
+            sum_span += span
+            n_span += 1
+            b_sp = _bucket(span)
+            if b_sp is not None:
+                charge_span[b_sp] += 1
+
+    # Histogramme als sortierte Listen fuellen (0..100 in 10er-Schritten)
+    def _hist_fill(d):
+        return [{"bucket": b, "count": d.get(b, 0)} for b in range(0, 101, 10)]
+
+    # by_hour als 24er-Liste
+    hours = [by_hour.get(h, 0) for h in range(24)]
+    # by_weekday als 7er-Liste (Mon..So)
+    weekdays = [by_weekday.get(w, 0) for w in range(7)]
+    # by_provider als Liste (nach Anzahl sortiert)
+    providers = sorted(
+        [{"provider": p, "count": v["count"], "kwh": round(v["kwh"], 2)}
+         for p, v in by_provider.items()],
+        key=lambda x: x["count"], reverse=True)
+
+    summary = {
+        "total": n_total,
+        "with_soc": n_with_soc,
+        "without_soc": n_total - n_with_soc,
+        "avg_soc_start": round(sum_start / n_with_soc, 1) if n_with_soc else None,
+        "avg_soc_end": round(sum_end / n_with_soc, 1) if n_with_soc else None,
+        "avg_span": round(sum_span / n_span, 1) if n_span else None,
+    }
+
+    return jsonify({
+        "summary": summary,
+        "soc_start_hist": _hist_fill(soc_start_hist),
+        "soc_end_hist": _hist_fill(soc_end_hist),
+        "charge_span": _hist_fill(charge_span),
+        "by_hour": hours,
+        "by_weekday": weekdays,
+        "by_provider": providers,
+    })
+
+
 @app.route("/api/price-periods", methods=["GET", "POST", "DELETE"])
 def api_price_periods():
     db = get_db()
