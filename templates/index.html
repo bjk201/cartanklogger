@@ -155,7 +155,122 @@
         </div>
         <div class="tab-pane fade" id="tabStats">
             <div class="row g-2 mb-3" id="statsKpis"></div>
-            <!-- Energie nach Quelle (von Hauptseite hierher verschoben) -->
+            <!-- Energie-Blöcke: AC geladen / DC geladen / DC-Anteil / Ladeverlust / CO₂ Ø / AC Kosten / DC Kosten / Plausibilität -->
+            <div class="row g-2 mb-3" id="energyBlocks">
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🔌 AC geladen</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="acLoadedValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="acLoadedBar"></div>
+                            </div>
+                            <small class="text-muted">Total geladene kWh unterwegs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC (Supercharger)</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcLoadedValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="dcLoadedBar"></div>
+                            </div>
+                            <small class="text-muted">Total DC geladen unterwegs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC-Anteil</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcShareValue">0</span> <span class="text-muted">%</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="dcShareBar"></div>
+                            </div>
+                            <small class="text-muted">Anteil von DC an Gesamt-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🔋 Ladeverlust</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="chargingLossValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-warning" role="progressbar" style="width: 0%" id="chargingLossBar"></div>
+                            </div>
+                            <small class="text-muted">Geschätzter Energieverlust durch Ladungseffizienz</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🌱 CO₂ Ø</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="co2AvgValue">0</span> <span class="text-muted">g/kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="co2AvgBar"></div>
+                            </div>
+                            <small class="text-muted">Durchschnittlicher CO₂-Ausstoß pro kWh</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">💡 AC Kosten</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="acCostValue">0</span> <span class="text-muted">€/100km</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="acCostBar"></div>
+                            </div>
+                            <small class="text-muted">Kosten pro 100km für AC-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC Kosten</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcCostValue">0</span> <span class="text-muted">€/100km</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: 0%" id="dcCostBar"></div>
+                            </div>
+                            <small class="text-muted">Kosten pro 100km für DC-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📊 Plausibilität</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="plausibilityValue">0</span> <span class="text-muted">%</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%" id="plausibilityBar"></div>
+                            </div>
+                            <small class="text-muted">Statistische Plausibilitätsprüfung (Mittelwert ± 2σ)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Energie nach Quelle (ursprüngliche Blöcke hierher verschoben) -->
             <div class="row g-2 mb-3">
                 <div class="col-lg-4">
                     <div class="card h-100">
