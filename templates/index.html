@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarTankLogger - Neuer Dashboard</title>
+    <title>CarTankLogger Dashboard</title>
     
-    <!-- Bootstrap 5 for layout and components -->
+    <!-- Bootstrap 5 for layout -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     
-    <!-- Our custom styles -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Chart.js for future use -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <meta name="csrf-token" content="">
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <!-- Header -->
+    <!-- Header with Logo and Theme Toggle -->
     <header class="app-header">
         <div class="container-fluid px-3">
             <div class="d-flex align-items-center justify-content-between py-2">
@@ -27,43 +28,40 @@
                     <button class="btn btn-outline-secondary btn-sm" id="themeToggle">
                         <i class="bi bi-moon-fill" id="themeIcon"></i> Tag/Nacht
                     </button>
-                    <a class="btn btn-primary" href="/admin" target="adminFrame">
-                        <i class="bi bi-gear me-1"></i> Admin Bereich
-                    </a>
                 </div>
             </div>
-        </div>
+        
     </header>
 
     <!-- Main Content -->
     <div class="container-fluid px-3 py-3">
         <div class="row">
-            <!-- Sidebar Navigation -->
-            <div class="col-md-3 col-lg-2">
+            <!-- Sidebar Navigation (Left) -->
+            <div class="col-md-3 col-lg-2 sidebar-col">
                 <nav class="sidebar">
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link active" href="#tab-overview">
+                            <a class="nav-link active" href="#" data-tab="overview">
                                 <i class="bi bi-house me-2"></i> Übersicht
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#tab-statistics">
-                                <i class="bi bi-bar-chart me-2"></i> Statistiken
+                            <a class="nav-link" href="#" data-tab="statistics">
+                                <i class="bi bi-bar-chart me-2"></i> Statistik
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#tab-evcc">
-                                <i class="bi bi-evcc me-2"></i> EVCC Daten
+                            <a class="nav-link" href="#" data-tab="evcc">
+                                <i class="bi bi-ev-station me-2"></i> EVCC Daten
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#tab-teslamate">
+                            <a class="nav-link" href="#" data-tab="teslamate">
                                 <i class="bi bi-car-front me-2"></i> TeslaMate Daten
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#tab-admin">
+                        <li class="nav-item admin-item">
+                            <a class="nav-link" href="/admin" id="adminButton" target="adminFrame">
                                 <i class="bi bi-gear me-2"></i> Admin Bereich
                             </a>
                         </li>
@@ -76,116 +74,75 @@
                 <main class="main-content">
                     <!-- Overview Tab -->
                     <div class="tab-pane active" id="tab-overview">
-                        <h1 class="h2 mb-4">Übersicht</h1>
-                        
-                        <!-- KPI Cards Grid -->
-                        <div class="row g-3 mb-4" id="kpiCards">
-                            <!-- KPI cards will be rendered here -->
-                            <div class="col-12 text-center py-4">
-                                <div class="text-muted">Lade Übersichtsdaten...</div>
-                            </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h1 class="h2 mb-0">Übersicht - Ladeeinheiten</h1>
+                            <span class="text-muted small" id="loadingIndicator" style="display: none;">
+                                <i class="bi bi-arrow-clockwise spin"></i> Lade...
+                            </span>
                         </div>
                         
-                        <!-- Main Charts -->
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header">Monatsvergleich: Kosten</div>
-                                    <div class="card-body">
-                                        <div class="chart-container">
-                                            <canvas id="monthlyCostChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header">Energiequellen</div>
-                                    <div class="card-body">
-                                        <div class="chart-container">
-                                            <canvas id="sourcePieChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Heatmap -->
                         <div class="card">
-                            <div class="card-header">Ladehäufigkeit (Wochentag × Uhrzeit)</div>
-                            <div class="card-body">
-                                <div class="chart-container">
-                                    <canvas id="heatmapChart"></canvas>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead class="sticky-header">
+                                            <tr>
+                                                <th class="sticky-column">Datum/Zeit</th>
+                                                <th>Ladung (kWh)</th>
+                                                <th>Dauer (min)</th>
+                                                <th>Preis (€)</th>
+                                                <th>Quelle</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="loadingUnitsTable">
+                                            <tr>
+                                                <td colspan="6" class="text-center py-4">Lade Ladeeinheiten...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Statistics Tab -->
+                    <!-- Statistics Tab (Empty - as requested) -->
                     <div class="tab-pane" id="tab-statistics">
-                        <h1 class="h2 mb-4">Statistiken</h1>
-                        
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <div class="card">
-                                    <div class="card-header">Verbrauch Trend</div>
-                                    <div class="card-body">
-                                        <div class="chart-container">
-                                            <canvas id="consumptionTrendChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card">
-                                    <div class="card-header">Kosten nach Standort</div>
-                                    <div class="card-body">
-                                        <div class="chart-container">
-                                            <canvas id="costByLocationChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card">
-                                    <div class="card-header">Effizienz Überwachung</div>
-                                    <div class="card-body">
-                                        <div class="chart-container">
-                                            <canvas id="efficiencyChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
+                        <h1 class="h2 mb-4">Statistik</h1>
+                        <div class="card">
+                            <div class="card-body text-center py-5">
+                                <i class="bi bi-clock-history display-1 text-muted opacity-25"></i>
+                                <p class="mt-3 mb-0 text-muted">Statistiken werden geladen...</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- EVCC Data Tab -->
                     <div class="tab-pane" id="tab-evcc">
-                        <h1 class="h2 mb-4">EVCC Daten</h1>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h1 class="h2 mb-0">EVCC Daten</h1>
+                            <span class="text-muted small" id="evccLoadingIndicator" style="display: none;">
+                                <i class="bi bi-arrow-clockwise spin"></i> Lade...
+                            </span>
+                        </div>
                         
                         <div class="card">
-                            <div class="card-header">EVCC Ladesitzungen</div>
-                            <div class="card-body">
+                            <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead>
+                                    <table class="table table-hover mb-0">
+                                        <thead class="sticky-header">
                                             <tr>
-                                                <th>Datum</th>
-                                                <th>Loadpoint</th>
-                                                <th>Fahrzeug</th>
-                                                <th>kWh</th>
-                                                <th>PV %</th>
-                                                <th>Kosten</th>
-                                                <th>Odometer</th>
+                                                <th class="sticky-column">Start</th>
+                                                <th>Ende</th>
+                                                <th>Ladung (kWh)</th>
+                                                <th>Dauer (min)</th>
+                                                <th>Preis (€)</th>
+                                                <th>Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody id="evccTableBody">
-                                            <!-- Data will be populated here -->
+                                        <tbody id="evccData" style="display: block; max-height: 600px; overflow-y: auto;">
                                             <tr>
-                                                <td colspan="7" class="text-center text-muted py-3">
-                                                    EVCC data will be displayed here<br>
-                                                    <small class="text-muted">Using data from /api/sessions</small>
-                                                </td>
+                                                <td colspan="6" class="text-center py-4">Lade EVCC Daten...</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -196,31 +153,30 @@
 
                     <!-- TeslaMate Data Tab -->
                     <div class="tab-pane" id="tab-teslamate">
-                        <h1 class="h2 mb-4">TeslaMate Daten</h1>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h1 class="h2 mb-0">TeslaMate Daten</h1>
+                            <span class="text-muted small" id="teslamateLoadingIndicator" style="display: none;">
+                                <i class="bi bi-arrow-clockwise spin"></i> Lade...
+                            </span>
+                        </div>
                         
                         <div class="card">
-                            <div class="card-header">TeslaMate Ladesitzungen</div>
-                            <div class="card-body">
+                            <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead>
+                                    <table class="table table-hover mb-0">
+                                        <thead class="sticky-header">
                                             <tr>
-                                                <th>Datum</th>
-                                                <th>Ort</th>
-                                                <th>Adresse</th>
-                                                <th>Energie (kWh)</th>
-                                                <th>Kosten</th>
-                                                <th>Preis/kWh</th>
-                                                <th>Manuell</th>
+                                                <th class="sticky-column">Datum/Zeit</th>
+                                                <th>Start</th>
+                                                <th>Ladung (kWh)</th>
+                                                <th>Dauer (min)</th>
+                                                <th>KM</th>
+                                                <th>Preis (€)</th>
                                             </tr>
                                         </thead>
-                                        <tbody id="teslamateTableBody">
-                                            <!-- Data will be populated here -->
+                                        <tbody id="teslamateData" style="display: block; max-height: 600px; overflow-y: auto;">
                                             <tr>
-                                                <td colspan="7" class="text-center text-muted py-3">
-                                                    TeslaMate data will be populated here<br>
-                                                    <small class="text-muted">Using data from /api/sessions</small>
-                                                </td>
+                                                <td colspan="6" class="text-center py-4">Lade TeslaMate Daten...</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -229,74 +185,22 @@
                         </div>
                     </div>
 
-                    <!-- Admin Tab -->
-                    <div class="tab-pane" id="tab-admin">
-                        <h1 class="h2 mb-4">Admin Bereich</h1>
-                        
-                        <!-- Admin iframe -->
-                        <div class="card">
-                            <div class="card-header">Admin Interface</div>
-                            <div class="card-body p-0" style="height: 600px;">
-                                <iframe src="/admin" style="width: 100%; height: 100%; border: none;"></iframe>
-                            </div>
+                    <!-- Admin Iframe (Hidden by default, shown when admin button clicked) -->
+                    <div class="tab-pane" id="tab-admin" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h1 class="h2 mb-0">Admin Bereich</h1>
                         </div>
+                        <iframe name="adminFrame" class="admin-iframe" style="display: none;"></iframe>
                     </div>
                 </main>
             </div>
         </div>
     </div>
 
-    <!-- Scripts -->
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/js/app.js"></script>
     
-    <script>
-        // Theme toggle functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            // Theme toggle
-            const themeToggle = document.getElementById('themeToggle');
-            const themeIcon = document.getElementById('themeIcon');
-            const body = document.body;
-            
-            // Check for saved theme preference
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark') {
-                body.classList.add('dark-mode');
-                themeIcon.className = 'bi bi-sun-fill';
-            }
-            
-            themeToggle.addEventListener('click', function() {
-                if (body.classList.contains('dark-mode')) {
-                    body.classList.remove('dark-mode');
-                    themeIcon.className = 'bi bi-moon-fill';
-                    localStorage.setItem('theme', 'light');
-                } else {
-                    body.classList.add('dark-mode');
-                    themeIcon.className = 'bi bi-sun-fill';
-                    localStorage.setItem('theme', 'dark');
-                }
-            });
-            
-            // Sidebar navigation
-            document.querySelectorAll('.sidebar .nav-link').forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    
-                    // Remove active class from all links
-                    document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
-                    
-                    // Add active class to clicked link
-                    this.classList.add('active');
-                    
-                    // Scroll to target section
-                    const targetId = this.getAttribute('href').substring(1);
-                    const targetSection = document.getElementById(targetId);
-                    if (targetSection) {
-                        targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                });
-            });
-        });
-    </script>
+    <!-- Custom JavaScript -->
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
