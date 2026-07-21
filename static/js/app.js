@@ -92,28 +92,37 @@ async function loadAll() {
 function renderSummary(s) {
   const t = s.totals || {}, h = s.home || {}, e = s.external || {}, x = s.extra || {};
   const monthly = s.monthly || [];
-  // Kosten diesen Monat = letzter (aktuellster) Monat in der Monatsliste
   const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
   const costThisMonth = curMonth ? (curMonth.home_cost + curMonth.ext_cost + curMonth.extra) : 0;
 
-  // Zuhause vs. Extern: Anteil an geladener Energie
   const homeKwh = t.home_kwh || 0;
   const extKwh = t.ext_kwh || 0;
   const homeShare = (homeKwh + extKwh) > 0 ? Math.round(homeKwh / (homeKwh + extKwh) * 100) : 0;
+  const tco = t.tco || 0;
 
+  // P1.2: 8 Kern-Entscheidungs-KPIs (Kosten -> Nutzung -> Effizienz -> Quellen)
+  // Jede Kachel mit Tooltip (title) zur Berechnung.
   const cards = [
-    {icon:"💶", t:"Kosten diesen Monat", v:fmtEUR(costThisMonth), s:curMonth ? curMonth.month : "–", c:"success"},
-    {icon:"⚡", t:"Geladene Energie", v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:"primary"},
-    {icon:"🛣️", t:"Gefahrene km", v:Number(t.distance_km||0).toLocaleString("de-DE")+" km", s:"Tacho-Stand (max)", c:"secondary"},
-    {icon:"💡", t:"Kosten / 100 km", v:fmtEUR(t.tco_per_100km)+" /100km", s:`TCO ${fmtEUR(t.tco)}`, c:"warning"},
-    {icon:"🔋", t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:`Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)} (geschätzt)`, c:"info"},
-    {icon:"☀️", t:"PV-Anteil", v:fmtPct(h.pv_share_pct), s:`${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(homeKwh)}`, c:"success"},
-    {icon:"🏠", t:"Zuhause vs. Extern", v:`${homeShare} % Zuhause`, s:`${fmtKwh(homeKwh)} zu Hause · ${fmtKwh(extKwh)} extern`, c:"primary"},
-    {icon:"🔌", t:"Ladeverluste", v:fmtKwh(t.home_loss_kwh), s:"Wallbox → Akku (Differenz)", c:"dark"},
+    {icon:"💶", t:"Gesamtkosten", v:fmtEUR(tco + (x.extra_total||0)), s:`Laden + Extra-Kosten im Zeitraum`, c:"success",
+     tip:"Laden (Zuhause+Extern) plus alle Extra-Kosten (Anschaffung, Versicherung, Steuer, Service, Zubehör) im gewählten Zeitraum."},
+    {icon:"💡", t:"Kosten / 100 km", v:fmtEUR(t.tco_per_100km)+" /100km", s:`TCO ${fmtEUR(tco)}`, c:"warning",
+     tip:"Gesamtkosten durch gefahrene km × 100. Die wichtigste Alltagskennzahl: was dich jedes gefahrene 100-km-Stück wirklich kostet."},
+    {icon:"🛣️", t:"Gefahrene km", v:Number(t.distance_km||0).toLocaleString("de-DE")+" km", s:"aus TeslaMate-Fahrten", c:"secondary",
+     tip:"Summe der gefahrenen km aus TeslaMate-Drives im Zeitraum (echte Fahrten, nicht Tacho-Differenz)."},
+    {icon:"⚡", t:"Geladene kWh", v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:"primary",
+     tip:"Gesamte geladene Energie im Zeitraum, aufgeteilt nach Zuhause (Wallbox) und Extern (Supercharger/öffentlich)."},
+    {icon:"🔋", t:"Verbrauch", v:fmtKwh(t.consumption_kwh_per_100km)+" /100km", s:`Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)} (geschätzt)`, c:"info",
+     tip:"Durchschnittsverbrauch kWh/100km ab Wand (brutto). 'Akku' ist der geschätzte Netto-Verbrauch ab Batterie (~15% Ladeverlust abgezogen)."},
+    {icon:"☀️", t:"PV-Anteil", v:fmtPct(h.pv_share_pct), s:`${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(homeKwh)}`, c:"success",
+     tip:"Anteil des Zuhause-Stroms, der aus eigener PV kam. Höher = günstiger und grüner geladen."},
+    {icon:"🏠", t:"Zuhause vs. Extern", v:`${homeShare} % Zuhause`, s:`${fmtKwh(homeKwh)} zu Hause · ${fmtKwh(extKwh)} extern`, c:"primary",
+     tip:"Anteil der geladenen Energie, der zu Hause (Wallbox) geladen wurde. Extern = Fremdladung (teurer)."},
+    {icon:"🔌", t:"Ø Preis / kWh", v:fmtEUR(t.avg_price_per_kwh)+" /kWh", s:"Mischpreis alle Ladevorgänge", c:"dark",
+     tip:"Gewichteter Durchschnittspreis über alle Ladevorgänge (Zuhause-Stromkosten + Extern-Preise), gewichtet nach geladener kWh."},
   ];
   document.getElementById("summaryCards").innerHTML = cards.map(c => `
     <div class="col-6 col-md-4 col-lg-3">
-      <div class="card kpi-card text-white bg-${c.c} h-100">
+      <div class="card kpi-card text-white bg-${c.c} h-100" ${c.tip ? `title="${c.tip}"` : ""}>
         <div class="card-body py-2">
           <div class="kpi-label opacity-75"><span class="kpi-icon">${c.icon}</span> ${c.t}</div>
           <div class="kpi-value">${c.v}</div>
@@ -1049,6 +1058,24 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
       customFrom = from;
       customTo = to;
+      updateRangeLabel();
+      loadAll();
+    });
+  }
+
+  // P1.4: "Dieses Jahr" Button -> setzt customFrom/customTo auf Jan 1 - Dez 31
+  const btnThisYear = document.getElementById("btnThisYear");
+  if (btnThisYear) {
+    btnThisYear.addEventListener("click", () => {
+      const y = new Date().getFullYear();
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove("active"));
+      btnThisYear.classList.add("active");
+      customFrom = `${y}-01-01`;
+      customTo = `${y}-12-31`;
+      const rf = document.getElementById("rangeFrom");
+      const rt = document.getElementById("rangeTo");
+      if (rf) rf.value = customFrom;
+      if (rt) rt.value = customTo;
       updateRangeLabel();
       loadAll();
     });
