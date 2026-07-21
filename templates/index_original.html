@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarTankLogger – Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="csrf-token" content="">
+    <style>
+      /* Aufklapp-Detailzeile in der Zusammenfassungstabelle */
+      tr.collapse-row > td { padding: 0 !important; }
+      tr.collapse-row .collapse:not(.show) { display: none; }
+      /* Sticky Header: bleibt beim Scrollen oben sichtbar (Titel + Tabs) */
+      .app-header {
+        position: sticky; top: 0; z-index: 1030;
+        background: #212529;
+        box-shadow: 0 2px 6px rgba(0,0,0,.25);
+        padding-top: 0; padding-bottom: 0;
+      }
+      .app-header .navbar-brand { font-size: 1.0rem; }
+      .app-header .nav-tabs .nav-link { padding: .35rem .6rem; font-size: .85rem; }
+      .app-header .input-group-sm .form-control,
+      .app-header .input-group-sm .input-group-text { font-size: .75rem; padding: .1rem .35rem; }
+      .app-header .btn-group-sm .btn { font-size: .75rem; padding: .1rem .4rem; }
+      .app-header .nav-tabs .nav-link {
+        color: #adb5bd; border: none; border-bottom: 3px solid transparent;
+        border-radius: 0; padding: .35rem .6rem; font-size: .85rem;
+      }
+      .app-header .nav-tabs .nav-link:hover { color: #fff; }
+      .app-header .nav-tabs .nav-link.active {
+        color: #fff; background: transparent; border-bottom-color: #0d6efd;
+      }
+      /* KPI-Kachel: fette Zahl, sofort lesbar */
+      .kpi-card .kpi-label { font-size: .68rem; letter-spacing: .02em; }
+      .kpi-card .kpi-value { font-size: 1.15rem; font-weight: 700; line-height: 1.15; }
+      .kpi-card .kpi-sub { font-size: .62rem; opacity: .8; }
+      .kpi-card .kpi-icon { font-size: .95rem; }
+      @media (max-width: 576px) {
+        .kpi-card .kpi-value { font-size: 1.0rem; }
+      }
+    </style>
+</head>
+<body>
+
+<!-- STICKY HEADER: Titel + Verwaltung + Tabs + Zeitraum -->
+<header class="app-header text-light">
+  <div class="container-fluid px-3">
+    <div class="d-flex align-items-center justify-content-between py-2">
+      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
+        <a class="btn btn-outline-light btn-sm" href="/admin">Verwaltung</a>
+      </div>
+    </div>
+    <!-- Tabs + Zeitraum-Auswahl im Header -->
+    <div class="d-flex align-items-end justify-content-between flex-wrap gap-2">
+      <ul class="nav nav-tabs border-0 mb-0" id="dataTabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Übersicht</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">Zuhause (EVCC)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">Extern (TeslaMate)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">Extra-Kosten</button></li>
+      </ul>
+      <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Schnellzeitraum">
+          <button class="btn btn-outline-light" data-days="30">30 T</button>
+          <button class="btn btn-outline-light" data-days="90">90 T</button>
+          <button class="btn btn-outline-light active" data-days="365">1 J</button>
+          <button class="btn btn-outline-light" data-days="9999">Alle</button>
+          <button class="btn btn-outline-light" id="btnThisYear" type="button">Dieses J.</button>
+        </div>
+        <div class="input-group input-group-sm" style="width:auto">
+          <span class="input-group-text bg-dark text-light border-secondary">Von</span>
+          <input type="date" id="rangeFrom" class="form-control form-control-sm bg-dark text-light border-secondary">
+          <span class="input-group-text bg-dark text-light border-secondary">Bis</span>
+          <input type="date" id="rangeTo" class="form-control form-control-sm bg-dark text-light border-secondary">
+          <button class="btn btn-primary btn-sm" id="btnRange" type="button">Anwenden</button>
+        </div>
+        <small class="text-light opacity-75 ms-1" id="rangeLabel">Letzte 365 Tage</small>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container-fluid px-3 py-3">
+
+    <!-- Tabs-Inhalt (Zusammenfassung/Statistik/Home/Ext/Extra) -->
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="tabMerged">
+            <!-- HAUPTSEITE: 8 Entscheidungs-KPIs (nur auf Übersicht) -->
+            <div class="row g-2 mb-3" id="summaryCards"></div>
+
+            <!-- Großer Trendgraph: Kosten pro Monat (nur auf Übersicht) -->
+            <div class="row g-2 mb-3">
+                <div class="col-12">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📈 Kosten pro Monat (Zuhause / Extern / Extra)</div>
+                        <div class="card-body"><canvas id="chartMonthly" height="240"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Letzte Ladevorgänge + Filter/Pagination (nur auf Übersicht) -->
+            <div class="row g-2 mb-3">
+                <div class="col-12">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span>🔌 Letzte Ladevorgänge</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="small mb-0">Anzeigen:</label>
+                                <select class="form-select form-select-sm" id="mergedLimit" style="width:auto">
+                                    <option value="10" selected>10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="all">Alle</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                                <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
+                                    <thead><tr>
+                                        <th>Datum</th><th>Stationen</th>
+                                        <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
+                                        <th>Extern kWh</th><th>Extern €</th>
+                                        <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
+                                    </tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2" id="mergedPager">
+                                <span class="small text-muted" id="mergedPagerInfo"></span>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary" id="mergedPrev" disabled>‹ Zurück</button>
+                                    <button class="btn btn-outline-secondary" id="mergedNext" disabled>Weiter ›</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI-Übersicht (wichtigste Infos auf einen Blick) -->
+             <!-- JAPI-Statische KPIs (damit sie über JS laden können) -->
+             <div class="d-none" id="statsKpisSource">
+                 <div class="row g-2 mb-3" id="statsKpis"></div>
+                 <!-- Reise-Kacheln (ohne Gesamt-km, da diese auf dem Tacho = max odometer basiert) -->
+                 <div class="row g-2 mb-3" id="tripCards"></div>
+                 <!-- Tages-Balkendiagramm: km + kWh -->
+                 <div class="card mb-3">
+                     <div class="card-header py-2">📊 Pro Tag: gefahrene km &amp; geladene kWh</div>
+                     <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
+                 </div>
+             </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabStats">
+             <div class="row g-2 mb-3" id="statsKpis" style="display:none;">
+                 <!-- All KPI charts will be loaded here -->
+             </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🔌 AC geladen</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="acLoadedValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="acLoadedBar"></div>
+                            </div>
+                            <small class="text-muted">Total geladene kWh unterwegs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC (Supercharger)</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcLoadedValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="dcLoadedBar"></div>
+                            </div>
+                            <small class="text-muted">Total DC geladen unterwegs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC-Anteil</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcShareValue">0</span> <span class="text-muted">%</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="dcShareBar"></div>
+                            </div>
+                            <small class="text-muted">Anteil von DC an Gesamt-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🔋 Ladeverlust</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="chargingLossValue">0</span> <span class="text-muted">kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-warning" role="progressbar" style="width: 0%" id="chargingLossBar"></div>
+                            </div>
+                            <small class="text-muted">Geschätzter Energieverlust durch Ladungseffizienz</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🌱 CO₂ Ø</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="co2AvgValue">0</span> <span class="text-muted">g/kWh</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="co2AvgBar"></div>
+                            </div>
+                            <small class="text-muted">Durchschnittlicher CO₂-Ausstoß pro kWh</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">💡 AC Kosten</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="acCostValue">0</span> <span class="text-muted">€/100km</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="acCostBar"></div>
+                            </div>
+                            <small class="text-muted">Kosten pro 100km für AC-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ DC Kosten</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="dcCostValue">0</span> <span class="text-muted">€/100km</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: 0%" id="dcCostBar"></div>
+                            </div>
+                            <small class="text-muted">Kosten pro 100km für DC-Ladungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📊 Plausibilität</div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="h3" id="plausibilityValue">0</span> <span class="text-muted">%</span>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%" id="plausibilityBar"></div>
+                            </div>
+                            <small class="text-muted">Statistische Plausibilitätsprüfung (Mittelwert ± 2σ)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Energie nach Quelle (ursprüngliche Blöcke hierher verschoben) -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ Energie nach Quelle</div>
+                        <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Monatsvergleich: Kosten + Energie -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📅 Monatsvergleich: Kosten</div>
+                        <div class="card-body"><canvas id="statMonthlyCost" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📅 Monatsvergleich: Energie</div>
+                        <div class="card-body"><canvas id="statMonthlyKwh" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Home vs Extern Donut + AC/DC Donut -->
+            <div class="row g-2 mb-3">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">🏠 Zuhause vs. Extern (Kosten)</div>
+                        <div class="card-body"><canvas id="statHomeExt" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">⚡ AC vs. DC (Energie)</div>
+                        <div class="card-body"><canvas id="statAcDc" height="220"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header py-2">📍 Kosten nach Standorttyp</div>
+                        <div class="card-body"><canvas id="statByLocation" height="220"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Ø pro Ladevorgang Kacheln -->
+            <div class="row g-2 mb-3" id="statAvgCards"></div>
+            <!-- Ladezeiten: Heatmap nach geladener kWh (Wochentag x Uhrzeit) -->
+            <div class="card mb-3">
+                <div class="card-header py-2">🔥 Ladezeiten – geladene kWh (Wochentag × Uhrzeit)</div>
+                <div class="card-body" id="statHeatmapKwh"></div>
+            </div>
+            <!-- SoC-Auswertung -->
+            <div class="card mb-3">
+                <div class="card-header py-2">🔋 SoC-Auswertung (Ladezustand- Verteilung)</div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2" id="socSummary"></div>
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header py-2 small">SoC beim Laden beginn (Verteilung)</div>
+                                <div class="card-body"><canvas id="chartSocStart" height="180"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header py-2 small">SoC beim Laden Ende (Verteilung)</div>
+                                <div class="card-body"><canvas id="chartSocEnd" height="180"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header py-2 small">Geladene Spanne (Ende − Start)</div>
+                                <div class="card-body"><canvas id="chartSocSpan" height="180"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header py-2 small">Wann wurde geladen? (Stunde)</div>
+                                <div class="card-body"><canvas id="chartSocHour" height="180"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card h-100">
+                                <div class="card-header py-2 small">Wo wurde geladen? (Anbieter, Anzahl + kWh)</div>
+                                <div class="card-body"><canvas id="chartSocProvider" height="200"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Fahrten & km/Tag (aus TeslaMate-Drives) -->
+            <div class="card mb-3">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span>🚗 Gefahrene km pro Tag (auch fahrtfreie Tage) + Verbrauch</span>
+                    <button class="btn btn-sm btn-outline-primary" id="btnSyncDrives" title="Fahrten aus TeslaMate laden">Fahrten sync</button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2" id="dailyKmSummary"></div>
+                    <canvas id="chartDailyKm" height="200"></canvas>
+                </div>
+            </div>
+            <!-- Fahrten-Vergleich (Pendelstrecke uebereinanderlegen) -->
+            <div class="card mb-3">
+                <div class="card-header py-2">🔀 Fahrten vergleichen (Pendelstrecke übereinanderlegen)</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Filter (Start/Ziel, z.B. „Arbeit")</label>
+                            <input type="text" class="form-control form-control-sm" id="driveFilter" placeholder="Pendelstrecke filtern…">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0">Zeitraum (Tage)</label>
+                            <input type="number" class="form-control form-control-sm" id="driveDays" value="90" min="1">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-sm btn-outline-secondary w-100" id="btnLoadDrives">Fahrten laden</button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-1">Mehrere Fahrten anhaken → <b>Vergleichen</b>. Sparsamste wird grün, verbrauchsstärkste rot markiert.</div>
+                    <div class="table-responsive" style="max-height:280px;overflow:auto">
+                        <table class="table table-sm table-hover align-middle mb-2" id="drivesTable">
+                            <thead><tr>
+                                <th style="width:32px"></th>
+                                <th>Datum</th><th>Strecke</th><th class="text-end">km</th>
+                                <th class="text-end">kWh/100</th><th class="text-end">SoC</th>
+                                <th class="text-end">Ø km/h</th><th class="text-end">°C</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-sm btn-primary" id="btnCompareDrives" disabled>Vergleichen (0)</button>
+                    <div id="driveCompareResult" class="mt-3"></div>
+                </div>
+            </div>
+            <!-- Bestehende Tiefen-Charts (Verbrauch/Preis/Kosten/km/Intervall) -->
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>⚡ Verbrauch (kWh/100 km)</span>
+                            <span class="chart-type-btns" data-chart="chartCons"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCons"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartCons" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>💶 Energiepreis (€/kWh)</span>
+                            <span class="chart-type-btns" data-chart="chartPrice"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiPrice"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartPrice" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>💡 Kosten (€/100 km)</span>
+                            <span class="chart-type-btns" data-chart="chartCost100"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCost100"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartCost100" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>🛣️ Gesamtkilometer (kumuliert)</span>
+                            <span class="chart-type-btns" data-chart="chartKm"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiKm"></span><span class="text-muted small ms-1">km</span></div>
+                            <canvas id="chartKm" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span>🔋 Verbrauch pro Lade-Intervall (SOC-basiert)</span>
+                            <span class="chart-type-btns" data-chart="chartSoc"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiSocCons"></span><span class="text-muted small ms-1">Ø</span></div>
+                            <canvas id="chartSoc" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+            <!-- Sekundaer-KPIs + Kategorie-Karten -->
+            <div class="row g-2 mt-2" id="statsSecondary"></div>
+        </div>
+        <div class="tab-pane fade" id="tabHome">
+            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                <table class="table table-sm table-striped align-middle mb-0" id="tblHome">
+                    <thead><tr>
+                        <th>Datum</th><th>Ladepunkt</th><th>Fzg</th><th>kWh</th><th>PV%</th>
+                        <th>Grid kWh</th><th>PV kWh</th><th>Grid €</th><th>PV €</th>
+                        <th>Gesamt €</th><th>€/kWh</th><th>KM-Stand</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="tabExt">
+            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                <table class="table table-sm table-striped align-middle mb-0" id="tblExt">
+                    <thead><tr>
+                        <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
+                        <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="tabExtra">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="tblExtra">
+                    <thead><tr>
+                        <th>Datum</th><th>Kategorie</th><th>Beschreibung</th><th>€</th><th>KM-Stand</th><th>Aktion</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bearbeiten-Drawer (Offcanvas) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="editDrawer" style="width:420px">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="editDrawerTitle">Bearbeiten</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="editDrawerError" class="alert alert-danger d-none"></div>
+    <form id="editForm">
+      <input type="hidden" id="editId">
+      <input type="hidden" id="editType">
+      <div id="editFields"></div>
+      <div class="d-grid gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">Speichern</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">Abbrechen</button>
+      </div>
+    </form>
+    <hr>
+    <div id="editMeta" class="text-muted small"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ js_version }}"></script>
+
+<!-- Versions-Footer: zeigt sofort, welche App-Version laeuft (Cache-Kontrolle) -->
+<footer class="container-fluid mt-4 mb-3 text-muted small">
+  <hr>
+  <div class="d-flex justify-content-between flex-wrap">
+    <span>CarTankLogger</span>
+    <span id="versionInfo" class="text-end">Version wird geladen…</span>
+  </div>
+</footer>
+
+</body>
+</html>
