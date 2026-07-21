@@ -143,20 +143,23 @@
             </div>
 
             <!-- KPI-Übersicht (wichtigste Infos auf einen Blick) -->
-            <div class="row g-2 mb-3" id="mergedKpis"></div>
-            <!-- Reise-Kacheln (ohne Gesamt-km, da diese auf dem Tacho = max odometer basiert) -->
-            <div class="row g-2 mb-3" id="tripCards"></div>
-            <!-- Tages-Balkendiagramm: km + kWh -->
-            <div class="card mb-3">
-                <div class="card-header py-2">📊 Pro Tag: gefahrene km &amp; geladene kWh</div>
-                <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
+             <!-- JAPI-Statische KPIs (damit sie über JS laden können) -->
+             <div class="d-none" id="statsKpisSource">
+                 <div class="row g-2 mb-3" id="statsKpis"></div>
+                 <!-- Reise-Kacheln (ohne Gesamt-km, da diese auf dem Tacho = max odometer basiert) -->
+                 <div class="row g-2 mb-3" id="tripCards"></div>
+                 <!-- Tages-Balkendiagramm: km + kWh -->
+                 <div class="card mb-3">
+                     <div class="card-header py-2">📊 Pro Tag: gefahrene km &amp; geladene kWh</div>
+                     <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
+                 </div>
+             </div>
             </div>
-            <p class="text-muted small mb-2">Eine Zeile pro Tag. <strong>Zuhause</strong> = EVCC-Wallbox (führend). TeslaMate-Ladungen an Zuhause-Adresse(n) werden nicht doppelt gezählt. <strong>Extern</strong> = nur Fremdladungen (z.&nbsp;B. Supercharger).</p>
-        </div>
-        <div class="tab-pane fade" id="tabStats">
-            <div class="row g-2 mb-3" id="statsKpis"></div>
-            <!-- Energie-Blöcke: AC geladen / DC geladen / DC-Anteil / Ladeverlust / CO₂ Ø / AC Kosten / DC Kosten / Plausibilität -->
-            <div class="row g-2 mb-3" id="energyBlocks">
+
+            <div class="tab-pane fade" id="tabStats">
+             <div class="row g-2 mb-3" id="statsKpis" style="display:none;">
+                 <!-- All KPI charts will be loaded here -->
+             </div>
                 <div class="col-md-6 col-lg-4">
                     <div class="card h-100">
                         <div class="card-header py-2">🔌 AC geladen</div>
@@ -473,8 +476,8 @@
             <div class="row g-2 mt-2" id="statsSecondary"></div>
         </div>
         <div class="tab-pane fade" id="tabHome">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="tblHome">
+            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                <table class="table table-sm table-striped align-middle mb-0" id="tblHome">
                     <thead><tr>
                         <th>Datum</th><th>Ladepunkt</th><th>Fzg</th><th>kWh</th><th>PV%</th>
                         <th>Grid kWh</th><th>PV kWh</th><th>Grid €</th><th>PV €</th>
@@ -485,8 +488,8 @@
             </div>
         </div>
         <div class="tab-pane fade" id="tabExt">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="tblExt">
+            <div class="table-responsive" style="max-height:42vh;overflow:auto">
+                <table class="table table-sm table-striped align-middle mb-0" id="tblExt">
                     <thead><tr>
                         <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
                         <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
