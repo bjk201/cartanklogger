@@ -3,269 +3,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarTankLogger – Clean Dashboard</title>
+    <title>CarTankLogger – Übersicht</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="csrf-token" content="">
-    <style>
-        /* Aufklapp-Detailzeile in der Zusammenfassungstabelle */
-        tr.collapse-row > td { padding: 0 !important; }
-        tr.collapse-row .collapse:not(.show) { display: none; }
-        /* Sticky Header: bleibt beim Scrollen oben sichtbar (Titel + Tabs) */
-        .app-header {
-            position: sticky; top: 0; z-index: 1030;
-            background: #212529;
-            box-shadow: 0 2px 6px rgba(0,0,0,.25);
-            padding-top: 0; padding-bottom: 0;
-        }
-        .app-header .navbar-brand { font-size: 1.0rem; }
-        .app-header .nav-tabs .nav-link { padding: .35rem .6rem; font-size: .85rem; }
-        .app-header .input-group-sm .form-control,
-        .app-header .input-group-sm .input-group-text { font-size: .75rem; padding: .1rem .35rem; }
-        .app-header .btn-group-sm .btn { font-size: .75rem; padding: .1rem .4rem; }
-        .app-header .nav-tabs .nav-link {
-            color: #adb5bd; border: none; border-bottom: 3px solid transparent;
-            border-radius: 0; padding: .35rem .6rem; font-size: .85rem;
-        }
-        .app-header .nav-tabs .nav-link:hover { color: #fff; }
-        .app-header .nav-tabs .nav-link.active {
-            color: #fff; background: transparent; border-bottom-color: #0d6efd;
-        }
-        /* KPI-Kachel: fette Zahl, sofort lesbar */
-        .kpi-card .kpi-label { font-size: .68rem; letter-spacing: .02em; }
-        .kpi-card .kpi-value { font-size: 1.15rem; font-weight: 700; line-height: 1.15; }
-        .kpi-card .kpi-sub { font-size: .62rem; opacity: .8; }
-        .kpi-card .kpi-icon { font-size: .95rem; }
-        @media (max-width: 576px) {
-            .kpi-card .kpi-value { font-size: 1.0rem; }
-        }
-        /* Zusätzliche Pad/Scroll-Styling */
-        .section { padding: 1rem 0; }
-        .table-responsive { max-height:42vh; overflow:auto; }
-        .card-header { font-weight: 600; }
-    </style>
 </head>
 <body>
+    <!-- Sticky Header with Title, Time Range, Mock Badge -->
+    <header class="app-header text-light">
+        <div class="container-fluid px-3">
+            <div class="d-flex align-items-center justify-content-between py-2">
+                <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
+                    <a class="btn btn-outline-light btn-sm" href="/admin">Verwaltung</a>
+                </div>
+            </div>
+            <!-- Timeline Picker with quick buttons -->
+            <div class="d-flex align-items-end justify-content-between flex-wrap gap-2">
+                <ul class="nav nav-tabs border-0 mb-0" id="dataTabs">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabOverview">📊 Übersicht</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStatistics">📈 Statistiken</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAdmin">⚙️ Verwaltung</button></li>
+                </ul>
+                <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Schnellzeitraum">
+                        <button class="btn btn-outline-light" data-days="30">30 T</button>
+                        <button class="btn btn-outline-light" data-days="90">90 T</button>
+                        <button class="btn btn-outline-light active" data-days="365">1 J</button>
+                        <button class="btn btn-outline-light" data-days="9999">Alle</button>
+                        <button class="btn btn-outline-light" id="btnThisYear" type="button">Dieses J.</button>
+                    </div>
+                    <div class="input-group input-group-sm" style="width:auto">
+                        <span class="input-group-text bg-dark text-light border-secondary">Von</span>
+                        <input type="date" id="rangeFrom" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <span class="input-group-text bg-dark text-light border-secondary">Bis</span>
+                        <input type="date" id="rangeTo" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <button class="btn btn-primary btn-sm" id="btnRange" type="button">Anwenden</button>
+                    </div>
+                    <small class="text-light opacity-75 ms-1" id="rangeLabel">Letzte 365 Tage</small>
+                </div>
+            </div>
+        </div>
+    </header>
 
-<!-- Header -->
-<header class="app-header text-light">
-  <div class="container-fluid px-3">
-    <div class="d-flex align-items-center justify-content-between py-2">
-      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
-        <a class="btn btn-outline-light btn-sm" href="/admin">Verwaltung</a>
-      </div>
+    <div class="container-fluid px-3 py-3 d-flex gap-3">
+        <!-- Left Sidebar -->
+        <nav class="sidebar flex-shrink-0" style="width: 220px;">
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link active" href="#tabOverview">📊 Übersicht</a></li>
+                <li class="nav-item"><a class="nav-link" href="#tabStatistics">📈 Statistiken</a></li>
+                <li class="nav-item"><a class="nav-link" href="#tabAdmin">⚙️ Verwaltung</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content flex-grow-1" style="min-width: 0;">
+            <div class="tab-content">
+                <!-- Overview Tab -->
+                <div class="tab-pane fade show active" id="tabOverview">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h1 class="h3 mb-0">Übersicht</h1>
+                        <p class="text-muted small mb-0">Deine Lade-, Kosten- und Verbrauchsdaten im gewählten Zeitraum</p>
+                    </div>
+
+                    <!-- KPI Cards (8) -->
+                    <div class="row g-2 mb-3" id="kpiCards">
+                        <!-- Cards will be filled by app.js -->
+                    </div>
+
+                    <!-- Main Chart (Monthly Cost & Energy Comparison) -->
+                    <div class="card mb-3">
+                        <div class="card-header">📈 Kosten und Energie pro Monat</div>
+                        <div class="card-body">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Heatmap & Latest Entries -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">🕐 Ladehäufigkeit (Wochentag × Uhrzeit)</div>
+                                <div class="card-body">
+                                    <canvas id="heatmapChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">🕒 Letzte Aktivitäten</div>
+                                <div class="card-body table-responsive">
+                                    <table class="table table-sm small" id="latestTable">
+                                        <thead>
+                                            <tr><th>Datum</th><th>Ort</th><th>kWh</th><th>Kosten</th><th>Quelle</th></tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Tab -->
+                <div class="tab-pane fade" id="tabStatistics">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h1 class="h3 mb-0">Statistiken</h1>
+                        <p class="text-muted small mb-0">Umfassende Analyse deiner Laddle- und Kosten-Daten</p>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">📊 Energiequellen</div>
+                                <div class="card-body">
+                                    <canvas id="sourcePieChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">⚡ Energie-Verteilung (Home vs. Extern)</div>
+                                <div class="card-body">
+                                    <canvas id="homeExtChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">📈 Monatsvergleich: Kosten</div>
+                                <div class="card-body">
+                                    <canvas id="monthlyCostChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">📊 Monatsvergleich: Energie</div>
+                                <div class="card-body">
+                                    <canvas id="monthlyEnergyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">🔄 Effizienz-Trend</div>
+                                <div class="card-body">
+                                    <canvas id="efficiencyTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">📍 Kosten nach Standort</div>
+                                <div class="card-body">
+                                    <canvas id="costByLocationChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">🚗 Fahrzeugleistung</div>
+                                <div class="card-body">
+                                    <canvas id="vehiclePerfChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">🌱 CO₂-Auswirkungen</div>
+                                <div class="card-body">
+                                    <canvas id="co2Chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">📋 Tagesbetrachtung (km + kWh)</div>
+                                <div class="card-body">
+                                    <canvas id="dailyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Tab -->
+                <div class="tab-pane fade" id="tabAdmin">
+                    <div class="card">
+                        <div class="card-header">⚙️ Admin-Bereich</div>
+                        <div class="card-body" id="admin-iframe-container">
+                            <iframe src="/admin" style="width:100%; height: 600px; border: none;"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
-    <!-- Tabs + Zeitraum-Auswahl im Header -->
-    <div class="d-flex align-items-end justify-content-between flex-wrap gap-2">
-      <ul class="nav nav-tabs border-0 mb-0" id="dataTabs" role="tablist">
-        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabMerged">📋 Übersicht</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStats">📊 Statistik</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHome">🏠 Zuhause (EVCC)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExt">🌍 Extern (TeslaMate)</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExtra">💰 Extra-Kosten</button></li>
-      </ul>
-      <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
-        <div class="btn-group btn-group-sm" role="group" aria-label="Schnellzeitraum">
-          <button class="btn btn-outline-light" data-days="30">30 T</button>
-          <button class="btn btn-outline-light" data-days="90">90 T</button>
-          <button class="btn btn-outline-light active" data-days="365">1 J</button>
-          <button class="btn btn-outline-light" data-days="9999">Alle</button>
-          <button class="btn btn-outline-light" id="btnThisYear" type="button">Dieses J.</button>
-        </div>
-        <div class="input-group input-group-sm" style="width:auto">
-          <span class="input-group-text bg-dark text-light border-secondary">Von</span>
-          <input type="date" id="rangeFrom" class="form-control form-control-sm bg-dark text-light border-secondary">
-          <span class="input-group-text bg-dark text-light border-secondary">Bis</span>
-          <input type="date" id="rangeTo" class="form-control form-control-sm bg-dark text-light border-secondary">
-          <button class="btn btn-primary btn-sm" id="btnRange" type="button">Anwenden</button>
-        </div>
-        <small class="text-light opacity-75 ms-1" id="rangeLabel">Letzte 365 Tage</small>
-      </div>
-    </div>
-  </div>
-</header>
 
-<!-- Main Content -->
-<div class="container-fluid px-3 py-3">
-    <div class="tab-content">
-
-        <!-- Tab 1: Übersicht (Zusammenfassung) -->
-        <div class="tab-pane fade show active" id="tabMerged">
-            <section id="section1" class="section">
-                <h2 class="sr-only">1️⃣ KPIs & Zusammenfassung (Übersicht)</h2>
-                <!-- 1.1: 8 KPIs (wie Energie-Blöcke) – von Statistik-Tab geladen -->
-                <div class="row g-2 mb-3" id="statsKpis">
-                    <!-- Dynamisch gefüllt durch Statistics-API (wie zuvor) -->
-                </div>
-                <!-- 1.2: Monats-Kosten-Diagramm -->
-                <div class="row g-2 mb-3">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">2️⃣ 📈 Kosten pro Monat (Zuhause / Extern / Extra)</div>
-                            <div class="card-body"><canvas id="chartMonthly" height="240"></canvas></div>
-                        </div>
-                    </div>
-                </div>
-                <!-- 1.3: Letzte Ladevorgänge mit Paginator -->
-                <div class="row g-2 mb-3">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">3️⃣ 🔌 Letzte Ladevorgänge (alle Quellen)</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height:42vh;overflow:auto;">
-                                    <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
-                                        <thead><tr>
-                                            <th>Datum</th><th>Stationen</th>
-                                            <th>Zuhause kWh</th><th>Zuhause €</th><th>PV%</th><th>Ladeverlust</th>
-                                            <th>Extern kWh</th><th>Extern €</th>
-                                            <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
-                                        </tr></thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center p-2" id="mergedPager">
-                                    <span class="small text-muted" id="mergedPagerInfo"></span>
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-secondary" id="mergedPrev">‹ Zurück</button>
-                                        <button class="btn btn-outline-secondary" id="mergedNext">Weiter ›</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Tab 2: Statistik (Statistik-Bereich) -->
-        <div class="tab-pane fade" id="tabStats">
-            <section id="section4" class="section">
-                <h2 class="sr-only">4️⃣ Statistik (Alle Energie-Blöcke + Diagramme)</h2>
-
-                <!-- 4.1: 8 KPI-Karten (Energie-Blöcke) -->
-                <div class="row g-2 mb-3" id="energyBlocks">
-                    <!-- Jede KPI-Karte bekommt eine nummerierte Kopfzeile für späteres Referenzieren -->
-                </div>
-
-                <!-- 4.2: Zusätzliche Chart-Kacheln ( heatmaps, SoC, Monat, Quelle etc. ) -->
-                <div class="row g-2 mb-3">
-                    <!-- 4.2.1: monatlicher KWh-Vergleich -->
-                    <div class="col-lg-6">
-                        <div class="card h-100">
-                            <div class="card-header">4.2.1 📅 Monatsvergleich: Energie</div>
-                            <div class="card-body"><canvas id="statMonthlyKwh" height="220"></canvas></div>
-                        </div>
-                    </div>
-                    <!-- 4.2.2: Energie nach Quelle (Startseite/Extern) -->
-                    <div class="col-lg-4">
-                        <div class="card h-100">
-                            <div class="card-header">4.2.2 🏠 Zuhause vs. Extern (Energie)</div>
-                            <div class="card-body"><canvas id="statHomeExt" height="220"></canvas></div>
-                        </div>
-                    </div>
-                    <!-- 4.2.3: Kosten nach Standort -->
-                    <div class="col-lg-4">
-                        <div class="card h-100">
-                            <div class="card-header">4.2.3 📍 Kosten nach Standort</div>
-                            <div class="card-body"><canvas id="statByLocation" height="220"></canvas></div>
-                        </div>
-                    </div>
-                    <!-- 4.2.4: Ladezeiten-Heatmap -->
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">4.2.4 🔥 Ladezeiten – geladene kWh (Wochentag × Uhrzeit)</div>
-                            <div class="card-body" id="statHeatmapKwh"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 4.3: Durchschnittliche KPI-Karten -->
-                <div class="row g-2 mb-3" id="statAvgCards">
-                    <!-- Wird durch JS gefüllt (z.B. Durchschnittskosten, Durchschnittsverbrauch) -->
-                </div>
-            </section>
-        </div>
-
-        <!-- Tab 3: Zuhause (EVCC) -->
-        <div class="tab-pane fade" id="tabHome">
-            <section id="section6" class="section">
-                <h2 class="sr-only">6️⃣ Zuhause (EVCC) – EVCC-Daten</h2>
-                <div class="row g-2 mb-3">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">6️⃣ 📍 EVCC- Heimlade-Daten (Zuhause)</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height:42vh;overflow:auto;">
-                                    <table class="table table-sm table-striped align-middle mb-0" id="tblHome">
-                                        <thead><tr>
-                                            <th>#</th><th>Datum</th><th>Zeit</th><th>Wallbox</th><th>kWh</th><th>PV%</th><th>Grid kWh</th><th>PV kWh</th><th>Kosten €</th><th>KM-Stand</th><th>Notiz</th>
-                                        </tr></thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Tab 4: Extern (TeslaMate) -->
-        <div class="tab-pane fade" id="tabExt">
-            <section id="section7" class="section">
-                <h2 class="sr-only">7️⃣ Extern (TeslaMate) – TM-Daten</h2>
-                <div class="row g-2 mb-3">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">7️⃣ 📍 TeslaMate-Externe Ladevorgänge</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height:42vh;overflow:auto;">
-                                    <table class="table table-sm table-striped align-middle mb-0" id="tblExt">
-                                        <thead><tr>
-                                            <th>#</th><th>Datum</th><th>Zeit</th><th>Anbieter</th><th>kWh</th><th>Kosten €</th><th>KM-Stand</th><th>Quelle</th><th>Notiz</th>
-                                        </tr></thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Tab 5: Extra-Kosten -->
-        <div class="tab-pane fade" id="tabExtra">
-            <section id="section8" class="section">
-                <h2 class="sr-only">8️⃣ Extra-Kosten – Finanztanggalen</h2>
-                <div class="row g-2 mb-3">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">8️⃣ 📔 Extra-Kosten (Anschaffung/Service/Zubehör/Versicherung/Steuer)</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height:42vh;overflow:auto;">
-                                    <table class="table table-sm table-striped align-middle mb-0" id="tblExtra">
-                                        <thead><tr>
-                                            <th>#</th><th>Datum</th><th>Kategorie</th><th>Beschreibung</th><th>Betrag €</th><th>KM-Stand</th><th>Notiz</th>
-                                        </tr></thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-    </div>
-</div>
-
-<!-- Scripts (unchanged) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v={{ js_version }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ js_version }}"></script>
 </body>
 </html>
