@@ -5,71 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CarTankLogger{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="csrf-token" content="">
-    <style>
-      .sidebar { min-height: calc(100vh - 80px); }
-      .sidebar .nav-link { color: #64748b; border-radius: .375rem; margin-bottom: .25rem; }
-      .sidebar .nav-link:hover { background: #f1f5f9; color: #0f172a; }
-      .sidebar .nav-link.active { background: #2563eb; color: white; }
-      [data-theme="dark"] .sidebar .nav-link { color: #cbd5e1; }
-      [data-theme="dark"] .sidebar .nav-link:hover { background: #334155; color: #f1f5f9; }
-      [data-theme="dark"] .sidebar .nav-link.active { background: #3b82f6; color: white; }
-      [data-theme="dark"] .table { color: #e2e8f0 !important; background: #1e293b !important; }
-      [data-theme="dark"] .card { background: #1e293b !important; border: 1px solid #475569 !important; }
-      [data-theme="dark"] .card-header { background: #334155 !important; color: #f1f5f9 !important; }
-      [data-theme="dark"] .form-control { background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important; }
-      [data-theme="dark"] .form-select { background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important; }
-      [data-theme="dark"] .form-check-input:checked { background-color: #2563eb; border-color: #2563eb; }
-      
-      /* Header - fix text visibility */
-      .app-header {
-        background: var(--bg-header, #f8fafc);
-        border-bottom: 1px solid var(--border-color, #e2e8f0);
-      }
-      .app-header .navbar-brand {
-        color: var(--text-primary, #0f172a) !important;
-        font-weight: 700;
-      }
-      [data-theme="dark"] .app-header {
-        background: var(--bg-header, #1e293b);
-        border-bottom: 1px solid var(--border-color, #334155);
-      }
-      [data-theme="dark"] .app-header .navbar-brand {
-        color: var(--text-primary, #f1f5f9) !important;
-      }
-    </style>
 </head>
 <body>
 
 <header class="app-header">
   <div class="container-fluid px-3">
     <div class="d-flex align-items-center justify-content-between py-2">
+      <!-- Mobile sidebar toggle -->
+      <button class="sidebar-toggle d-md-none" id="sidebarToggle" aria-label="Menü öffnen">
+        <i class="bi bi-list"></i>
+      </button>
       <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-secondary" id="mockBadge" style="display:none">MOCK</span>
-      </div>
     </div>
   </div>
 </header>
 
+<!-- Sidebar overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
 <div class="container-fluid">
   <div class="row">
     <!-- SIDEBAR -->
-    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3">
-      <ul class="nav flex-column sidebar">
+    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar" id="sidebar">
+      <ul class="nav flex-column">
         <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">📋 Übersicht</a></li>
         <li class="nav-item"><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">📊 Statistik</a></li>
         <li class="nav-item"><a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">Zuhause (EVCC)</a></li>
         <li class="nav-item"><a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">Extern (TeslaMate)</a></li>
         <li class="nav-item"><a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a></li>
-        <li class="nav-item"><a class="nav-link" href="/admin">⚙️ Verwaltung</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">⚙️ Verwaltung</a></li>
       </ul>
       
-      <!-- Dark Mode Toggle at bottom of sidebar -->
-      <div class="mt-auto pt-3 border-top">
-        <button class="btn btn-outline-secondary w-100 btn-sm" id="themeToggle">
+      <!-- Theme Toggle at bottom of sidebar -->
+      <div class="theme-toggle">
+        <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggle">
           <i class="bi bi-moon-fill me-2" id="themeIcon"></i>
           <span id="themeLabel">Dark Mode</span>
         </button>
@@ -84,14 +55,15 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"></script>
 <script>
+// Theme toggle
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme');
   const themeToggle = document.getElementById('themeToggle');
   const themeIcon = document.getElementById('themeIcon');
   const themeLabel = document.getElementById('themeLabel');
   
+  const savedTheme = localStorage.getItem('theme');
   if (savedTheme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
     themeIcon.className = 'bi bi-sun-fill me-2';
@@ -106,7 +78,62 @@ function initTheme() {
     themeLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
   });
 }
-document.addEventListener('DOMContentLoaded', initTheme);
+
+// Mobile sidebar toggle
+function initSidebar() {
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  
+  if (!sidebarToggle || !sidebar || !overlay) return;
+  
+  function openSidebar() {
+    sidebar.classList.add('show');
+    overlay.classList.add('show');
+    sidebarToggle.innerHTML = '<i class="bi bi-x-lg"></i>';
+    sidebarToggle.setAttribute('aria-label', 'Menü schließen');
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function closeSidebar() {
+    sidebar.classList.remove('show');
+    overlay.classList.remove('show');
+    sidebarToggle.innerHTML = '<i class="bi bi-list"></i>';
+    sidebarToggle.setAttribute('aria-label', 'Menü öffnen');
+    document.body.style.overflow = '';
+  }
+  
+  sidebarToggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('show')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+  
+  overlay.addEventListener('click', closeSidebar);
+  
+  // Close sidebar when clicking a nav link on mobile
+  document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+    link.addEventListener('click', function() {
+      if (window.innerWidth < 768) {
+        closeSidebar();
+      }
+    });
+  });
+  
+  // Close sidebar on window resize to desktop
+  window.addEventListener('resize', function() {
+    if (window.innerWidth >= 768 && sidebar.classList.contains('show')) {
+      closeSidebar();
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initTheme();
+  initSidebar();
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>
