@@ -1,159 +1,140 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarTankLogger – Verwaltung</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <meta name="csrf-token" content="">
-</head>
-<body>
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
-        <a class="btn btn-outline-light btn-sm" href="/">Dashboard</a>
-    </div>
-</nav>
-
-<div class="container-fluid px-3 py-3">
-    <div class="row g-3">
-        <!-- Verbindung -->
-        <div class="col-lg-6">
-            <div class="card mb-3">
-                <div class="card-header">Verbindungen</div>
-                <div class="card-body">
-                    <h6>EVCC (REST)</h6>
-                    <div class="row g-2">
-                        <div class="col-8"><input class="form-control form-control-sm" id="evcc_host" placeholder="Host (z.B. evcc.local)"></div>
-                        <div class="col-4"><input class="form-control form-control-sm" id="evcc_port" type="number" placeholder="Port 7070"></div>
-                        <div class="col-6"><input class="form-control form-control-sm" id="evcc_password" type="password" placeholder="Admin-Passwort"></div>
-                        <div class="col-6"><input class="form-control form-control-sm" id="evcc_api_token" placeholder="API-Token (optional)"></div>
-                        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="evcc_tls"><label class="form-check-label small">HTTPS verwenden</label></div></div>
-                    </div>
-                    <hr>
-                    <h6>TeslaMate (REST / teslamateapi)</h6>
-                    <div class="row g-2">
-                        <div class="col-8"><input class="form-control form-control-sm" id="tm_url" placeholder="URL (z.B. http://192.168.1.x:8080/api/v1)"></div>
-                        <div class="col-4"><input class="form-control form-control-sm" id="tm_token" placeholder="Token (opt.)"></div>
-                    </div>
-                    <div class="small text-muted mt-1">Die teslamateapi (Port 8080) nutzen, nicht den teslamate-GraphQL-Port 4000.</div>
-                    <hr>
-                    <h6>Allgemein</h6>
-                    <div class="row g-2">
-                        <div class="col-8"><input class="form-control form-control-sm" id="vehicle_name" placeholder="Fahrzeugname"></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="mock_mode"><label class="form-check-label small">Mock-Modus</label></div></div>
-                        <div class="col-12">
-                            <label class="form-label small mb-0 mt-1">Zuhause-Adressen (kommagetrennt)</label>
-                            <input class="form-control form-control-sm" id="home_addresses" placeholder="z.B. Dammstraße, Garage">
-                            <div class="form-text">TeslaMate-Ladungen an diesen Adressen gelten als <strong>Zuhause</strong> (dieselben wie EVCC) – sie werden nicht als extern gezählt und nicht doppelt addiert. Alles andere (z.&nbsp;B. Supercharger) = extern.</div>
-                        </div>
-                    </div>
-                    <div class="d-grid mt-2"><button class="btn btn-primary btn-sm" id="saveCfg">Speichern</button></div>
-                    <div id="cfgMsg" class="small mt-2"></div>
-                </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-header">Daten abrufen (Sync)</div>
-                <div class="card-body d-grid gap-2">
-                    <button class="btn btn-outline-success btn-sm" id="syncAll">🔄 Alle synchronisieren</button>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-secondary" id="syncEvcc">EVCC</button>
-                        <button class="btn btn-outline-secondary" id="syncTm">TeslaMate</button>
-                    </div>
-                    <button class="btn btn-outline-warning btn-sm" id="seedBtn" style="display:none">🧪 Testdaten einspielen (Seed)</button>
-                    <hr>
-                    <button class="btn btn-outline-danger btn-sm" id="resetBtn" type="button">🗑️ Alle Daten zurücksetzen</button>
-                    <div id="syncMsg" class="small"></div>
-                </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-header">Export</div>
-                <div class="card-body">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-5">
-                            <label class="form-label small mb-0">Zeitraum (Tage)</label>
-                            <input class="form-control form-control-sm" id="rtDays" type="number" min="1" value="365">
-                        </div>
-                        <div class="col-7">
-                            <label class="form-label small mb-0">Vollladen ab</label>
-                            <select class="form-select form-select-sm" id="rtFull">
-                                <option value="0.5" selected>Top-up erkennen (≥50% Max)</option>
-                                <option value="1.0">Alle als voll</option>
-                            </select>
-                        </div>
-                        <div class="col-12 mt-2">
-                            <button class="btn btn-outline-info btn-sm w-100" id="rtExport">⬇️ Road Trip CSV</button>
-                        </div>
-                    </div>
-                    <div class="form-text">Liefert alle Ladevorgänge als Road Trip MPG (Darren Stone) CSV zum Import in die iOS-App. Einheit pro Zeile = kWh.</div>
-                    <div id="rtMsg" class="small mt-2"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Preisperioden -->
-        <div class="col-lg-6">
-            <div class="card mb-3">
-                <div class="card-header">Preisperioden (zeitlich anpassbar)</div>
-                <div class="card-body">
-                    <table class="table table-sm" id="tblPrices">
-                        <thead><tr><th>Art</th><th>ab</th><th>bis</th><th>€/kWh</th><th></th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                    <div class="row g-2">
-                        <div class="col-3"><select class="form-select form-select-sm" id="pp_kind">
-                            <option value="grid">Netz</option><option value="feedin">Einspeisung</option></select></div>
-                        <div class="col-3"><input class="form-control form-control-sm" id="pp_from" type="date"></div>
-                        <div class="col-3"><input class="form-control form-control-sm" id="pp_to" type="date" placeholder="offen"></div>
-                        <div class="col-3"><input class="form-control form-control-sm" id="pp_price" type="number" step="0.001" placeholder="0.32"></div>
-                        <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addPrice">Preisperiode hinzufügen</button></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-header">Extra-Kosten (Anschaffung/Service/Zubehör…)</div>
-                <div class="card-body">
-                    <table class="table table-sm" id="tblExtra">
-                        <thead><tr><th>Datum</th><th>Kat.</th><th>Beschr.</th><th>€</th><th></th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                    <div class="row g-2">
-                        <div class="col-3"><input class="form-control form-control-sm" id="ex_date" type="date"></div>
-                        <div class="col-3"><select class="form-select form-select-sm" id="ex_cat">
-                            <option value="purchase">Anschaffung</option><option value="service">Service</option>
-                            <option value="accessory">Zubehör</option><option value="insurance">Versicherung</option>
-                            <option value="tax">Steuer</option><option value="other">Sonstiges</option></select></div>
-                        <div class="col-3"><input class="form-control form-control-sm" id="ex_desc" placeholder="Beschreibung"></div>
-                        <div class="col-3"><input class="form-control form-control-sm" id="ex_amt" type="number" step="0.01" placeholder="Betrag €"></div>
-                        <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addExtra" type="button">Eintragen</button></div>
-                        <div id="extraMsg" class="small mt-2"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Externe Preise -->
+{% extends "base.html" %}
+{% block title %}CarTankLogger – Verwaltung{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <!-- Verbindung -->
+  <div class="col-lg-6">
     <div class="card mb-3">
-        <div class="card-header">Externe Ladevorgänge – Preis automatisch aus TeslaMate oder manuell</div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-sm" id="tblExtPrices">
-                    <thead><tr><th>Datum</th><th>Anbieter</th><th>Ort</th><th>kWh</th><th>€ gesamt</th><th>€/kWh</th><th>Quelle</th><th>Aktion</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div class="form-text">Quelle:
-                <span class="badge bg-secondary">TeslaMate</span> = Kosten automatisch übernommen ·
-                <span class="badge bg-success">manuell</span> = selbst gepflegt ·
-                <span class="badge bg-warning text-dark">fehlt</span> = bitte Preis eingeben
-            </div>
+      <div class="card-header">Verbindungen</div>
+      <div class="card-body">
+        <h6>EVCC (REST)</h6>
+        <div class="row g-2">
+          <div class="col-8"><input class="form-control form-control-sm" id="evcc_host" placeholder="Host (z.B. evcc.local)"></div>
+          <div class="col-4"><input class="form-control form-control-sm" id="evcc_port" type="number" placeholder="Port 7070"></div>
+          <div class="col-6"><input class="form-control form-control-sm" id="evcc_password" type="password" placeholder="Admin-Passwort"></div>
+          <div class="col-6"><input class="form-control form-control-sm" id="evcc_api_token" placeholder="API-Token (optional)"></div>
+          <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="evcc_tls"><label class="form-check-label small">HTTPS verwenden</label></div></div>
         </div>
+        <hr>
+        <h6>TeslaMate (REST / teslamateapi)</h6>
+        <div class="row g-2">
+          <div class="col-8"><input class="form-control form-control-sm" id="tm_url" placeholder="URL (z.B. http://192.168.1.x:8080/api/v1)"></div>
+          <div class="col-4"><input class="form-control form-control-sm" id="tm_token" placeholder="Token (opt.)"></div>
+        </div>
+        <div class="small text-muted mt-1">Die teslamateapi (Port 8080) nutzen, nicht den teslamate-GraphQL-Port 4000.</div>
+        <hr>
+        <h6>Allgemein</h6>
+        <div class="row g-2">
+          <div class="col-8"><input class="form-control form-control-sm" id="vehicle_name" placeholder="Fahrzeugname"></div>
+          <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="mock_mode"><label class="form-check-label small">Mock-Modus</label></div></div>
+          <div class="col-12">
+            <label class="form-label small mb-0 mt-1">Zuhause-Adressen (kommagetrennt)</label>
+            <input class="form-control form-control-sm" id="home_addresses" placeholder="z.B. Dammstraße, Garage">
+            <div class="form-text">TeslaMate-Ladungen an diesen Adressen gelten als <strong>Zuhause</strong> (dieselben wie EVCC) – sie werden nicht als extern gezählt und nicht doppelt addiert. Alles andere (z.&nbsp;B. Supercharger) = extern.</div>
+          </div>
+        </div>
+        <div class="d-grid mt-2"><button class="btn btn-primary btn-sm" id="saveCfg">Speichern</button></div>
+        <div id="cfgMsg" class="small mt-2"></div>
+      </div>
     </div>
+
+    <div class="card mb-3">
+      <div class="card-header">Daten abrufen (Sync)</div>
+      <div class="card-body d-grid gap-2">
+        <button class="btn btn-outline-success btn-sm" id="syncAll">🔄 Alle synchronisieren</button>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary" id="syncEvcc">EVCC</button>
+          <button class="btn btn-outline-secondary" id="syncTm">TeslaMate</button>
+        </div>
+        <button class="btn btn-outline-danger btn-sm" id="resetBtn" type="button">🗑️ Alle Daten zurücksetzen</button>
+        <div id="syncMsg" class="small"></div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">Export</div>
+      <div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-5">
+            <label class="form-label small mb-0">Zeitraum (Tage)</label>
+            <input class="form-control form-control-sm" id="rtDays" type="number" min="1" value="365">
+          </div>
+          <div class="col-7">
+            <label class="form-label small mb-0">Vollladen ab</label>
+            <select class="form-select form-select-sm" id="rtFull">
+              <option value="0.5" selected>Top-up erkennen (≥50% Max)</option>
+              <option value="1.0">Alle als voll</option>
+            </select>
+          </div>
+          <div class="col-12 mt-2">
+            <button class="btn btn-outline-info btn-sm w-100" id="rtExport">⬇️ Road Trip CSV</button>
+          </div>
+        </div>
+        <div class="form-text">Liefert alle Ladevorgänge als Road Trip MPG (Darren Stone) CSV zum Import in die iOS-App. Einheit pro Zeile = kWh.</div>
+        <div id="rtMsg" class="small mt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preisperioden -->
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header">Preisperioden (zeitlich anpassbar)</div>
+      <div class="card-body">
+        <table class="table table-sm" id="tblPrices">
+          <thead><tr><th>Art</th><th>ab</th><th>bis</th><th>€/kWh</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="row g-2">
+          <div class="col-3"><select class="form-select form-select-sm" id="pp_kind">
+            <option value="grid">Netz</option><option value="feedin">Einspeisung</option></select></div>
+          <div class="col-3"><input class="form-control form-control-sm" id="pp_from" type="date"></div>
+          <div class="col-3"><input class="form-control form-control-sm" id="pp_to" type="date" placeholder="offen"></div>
+          <div class="col-3"><input class="form-control form-control-sm" id="pp_price" type="number" step="0.001" placeholder="0.32"></div>
+          <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addPrice">Preisperiode hinzufügen</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">Extra-Kosten (Anschaffung/Service/Zubehör…)</div>
+      <div class="card-body">
+        <table class="table table-sm" id="tblExtra">
+          <thead><tr><th>Datum</th><th>Kat.</th><th>Beschr.</th><th>€</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="row g-2">
+          <div class="col-3"><input class="form-control form-control-sm" id="ex_date" type="date"></div>
+          <div class="col-3"><select class="form-select form-select-sm" id="ex_cat">
+            <option value="purchase">Anschaffung</option><option value="service">Service</option>
+            <option value="accessory">Zubehör</option><option value="insurance">Versicherung</option>
+            <option value="tax">Steuer</option><option value="other">Sonstiges</option></select></div>
+          <div class="col-3"><input class="form-control form-control-sm" id="ex_desc" placeholder="Beschreibung"></div>
+          <div class="col-3"><input class="form-control form-control-sm" id="ex_amt" type="number" step="0.01" placeholder="Betrag €"></div>
+          <div class="col-12"><button class="btn btn-primary btn-sm w-100" id="addExtra" type="button">Eintragen</button></div>
+          <div id="extraMsg" class="small mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Externe Preise -->
+<div class="card mb-3">
+  <div class="card-header">Externe Ladevorgänge – Preis automatisch aus TeslaMate oder manuell</div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm" id="tblExtPrices">
+        <thead><tr><th>Datum</th><th>Anbieter</th><th>Ort</th><th>kWh</th><th>€ gesamt</th><th>€/kWh</th><th>Quelle</th><th>Aktion</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="form-text">Quelle:
+      <span class="badge bg-secondary">TeslaMate</span> = Kosten automatisch übernommen ·
+      <span class="badge bg-success">manuell</span> = selbst gepflegt ·
+      <span class="badge bg-warning text-dark">fehlt</span> = bitte Preis eingeben
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Externen Eintrag bearbeiten -->
@@ -181,21 +162,46 @@
   </div>
 </div>
 
+<!-- Modal: Preisperiode bearbeiten -->
+<div class="modal fade" id="priceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">Preisperiode bearbeiten</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="pp_id">
+        <div class="mb-2"><label class="form-label small">Art</label>
+          <select class="form-select form-select-sm" id="pp_kind_e">
+            <option value="grid">Netz</option><option value="feedin">Einspeisung</option></select></div>
+        <div class="mb-2"><label class="form-label small">Gültig ab</label>
+          <input class="form-control form-control-sm" id="pp_from_e" type="date"></div>
+        <div class="mb-2"><label class="form-label small">Gültig bis</label>
+          <input class="form-control form-control-sm" id="pp_to_e" type="date"></div>
+        <div class="mb-2"><label class="form-label small">€/kWh</label>
+          <input class="form-control form-control-sm" id="pp_price_e" type="number" step="0.001"></div>
+        <div class="mb-2"><label class="form-label small">Notiz</label>
+          <input class="form-control form-control-sm" id="pp_note_e"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger btn-sm me-auto" id="ppDelete">Löschen</button>
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+        <button class="btn btn-primary btn-sm" id="priceSave">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Script block: alle Admin-Handler. Die Initialisierung (initAdmin) wartet
-     auf DOMContentLoaded, damit alle Elemente (inkl. Modals) existieren.
-     Handler fuer Modal-Buttons (#priceSave/#extSave/#extDelete) nutzen
-     Event-Delegation, damit sie unabhaengig von der DOM-Reihenfolge greifen. -->
 <script>
 const $ = (id) => document.getElementById(id);
 const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 
-// --- CSRF: Token laden + fetch-Helfer, der das Token mitsendet ---
+// --- CSRF: Token laden + fetch-Helfer ---
 let _csrf = "";
 async function ensureCsrf() {
-  // Token IMMER frisch aus /api/csrf holen (Session-Cookie wird mitgesendet).
-  // Ein gecachtes Token kann bei Session-Wechsel (z.B. nach Container-Restart)
-  // ungueltig sein -> alle POST/PUT/DELETE wuerden mit 403 fehlschlagen.
   try { const d = await (await fetch("/api/csrf")).json(); _csrf = d.csrf_token; }
   catch (e) { _csrf = document.querySelector('meta[name="csrf-token"]')?.content || ""; }
   if (_csrf) document.querySelector('meta[name="csrf-token"]').content = _csrf;
@@ -208,7 +214,6 @@ async function csrfFetch(url, opts = {}) {
     "X-CSRFToken": _csrf,
   });
   let res = await fetch(url, opts);
-  // Bei CSRF-403: einmalig Token erneuern und erneut versuchen
   if (res.status === 403 && (await res.clone().json().catch(()=>({}))).error?.includes("CSRF")) {
     _csrf = "";
     await ensureCsrf();
@@ -230,7 +235,6 @@ async function loadCfg() {
   $("vehicle_name").value = c.app?.vehicle_name||"";
   $("mock_mode").checked = !!c.app?.mock_mode;
   $("home_addresses").value = (c.app?.home_addresses || []).join(", ");
-  if (c.app?.mock_mode) $("seedBtn").style.display = "";
 }
 
 $("saveCfg").onclick = async () => {
@@ -258,10 +262,6 @@ async function doSync(url, msg) {
 $("syncAll").onclick = () => doSync("/api/sync/all","Sync alle");
 $("syncEvcc").onclick = () => doSync("/api/sync/evcc","EVCC");
 $("syncTm").onclick = () => doSync("/api/sync/teslamate","TeslaMate");
-// seedBtn entfernt: spielte Testdaten (Beispiel-Extrakosten) ein, die dann
-// fälschlich in der Extra-Kosten-Liste erschienen. Reiner Entwickler-Helfer,
-// im Produktivbetrieb unerwünscht.
-if ($("seedBtn")) { $("seedBtn").style.display = "none"; }
 
 async function loadPrices() {
   const rows = await (await fetch("/api/price-periods")).json();
@@ -282,7 +282,6 @@ $("addPrice").onclick = async () => {
       valid_to:$("pp_to").value||null, price_per_kwh:parseFloat($("pp_price").value)||0})});
   loadPrices();
 };
-
 function openPriceModal(id) {
   fetch("/api/price-periods").then(r=>r.json()).then(rows => {
     const r = rows.find(x => String(x.id) === String(id));
@@ -296,10 +295,6 @@ function openPriceModal(id) {
     new bootstrap.Modal(document.getElementById("priceModal")).show();
   });
 }
-
-// Preisperiode speichern – per Event-Delegation (robust, unabhaengig von
-// DOM-Reihenfolge; vorher $("priceSave").onclick = ... brach ab, weil das
-// Script vor dem priceModal im DOM stand -> null.onclick -> Script-Abbruch).
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("#priceSave");
   if (!btn) return;
@@ -317,7 +312,6 @@ document.addEventListener("click", async (e) => {
   loadPrices();
 });
 
-// Liste der Extra-Kosten laden + Loeschen-Buttons binden
 async function loadExtras() {
   const rows = await (await fetch("/api/extra-costs")).json();
   const lbl = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
@@ -330,9 +324,6 @@ async function loadExtras() {
     loadExtras();
   });
 }
-
-// Extra-Kosten hinzufuegen – per Event-Delegation (robust, unabhaengig
-// vom DOM-Zeitpunkt). Zeigt Fehler/Meldungen sichtbar an, leert das Formular.
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("#addExtra");
   if (!btn) return;
@@ -358,7 +349,6 @@ document.addEventListener("click", async (e) => {
       if (msgEl) { msgEl.textContent = "Fehler: " + (data.error || res.statusText); msgEl.className = "text-danger small mt-2"; }
       return;
     }
-    // Formular leeren + Liste neu laden + Erfolgsmeldung
     $("ex_date").value = "";
     $("ex_desc").value = "";
     $("ex_amt").value = "";
@@ -369,12 +359,11 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-// Alle Daten zuruecksetzen (Reset-Button) – mit Sicherheitsabfrage
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("#resetBtn");
   if (!btn) return;
   e.preventDefault();
-  const ok = confirm("Wirklich ALLE Daten zuruecksetzen?\n\n"
+  const ok = confirm("Wirklich ALLE Daten zurücksetzen?\n\n"
     + "Home-Ladungen, externe Ladungen, Extra-Kosten und Preisperioden werden geloescht.\n"
     + "Die Verbindungs-Einstellungen (IPs) bleiben erhalten.\n\n"
     + "Diese Aktion kann nicht rueckgaengig gemacht werden!");
@@ -387,7 +376,7 @@ document.addEventListener("click", async (e) => {
       if (msgEl) { msgEl.textContent = "Fehler: " + (data.error || res.statusText); msgEl.className = "text-danger small"; }
       return;
     }
-    if (msgEl) { msgEl.textContent = "✅ Alle Daten zurueckgesetzt."; msgEl.className = "text-success small"; }
+    if (msgEl) { msgEl.textContent = "✅ Alle Daten zurückgesetzt."; msgEl.className = "text-success small"; }
     await loadAll();
   } catch (err) {
     if (msgEl) { msgEl.textContent = "Fehler: " + err.message; msgEl.className = "text-danger small"; }
@@ -425,7 +414,6 @@ function openExtModal(id) {
   });
 }
 
-// Externen Eintrag speichern/löschen – per Event-Delegation (robust).
 document.addEventListener("click", async (e) => {
   const saveBtn = e.target.closest("#extSave");
   if (saveBtn) {
@@ -454,7 +442,6 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-// Road Trip MPG CSV-Export – direkter Download (GET-Route, kein CSRF noetig)
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("#rtExport");
   if (!btn) return;
@@ -463,7 +450,6 @@ document.addEventListener("click", async (e) => {
   const full = parseFloat($("rtFull")?.value) || 0.5;
   const msg = document.getElementById("rtMsg");
   try {
-    // Browser startet den Download automatisch wegen Content-Disposition: attachment
     window.location.href = `/api/export/roadtrip-csv?days=${encodeURIComponent(days)}&full_threshold=${encodeURIComponent(full)}`;
     if (msg) { msg.textContent = "✅ Download gestartet."; msg.className = "text-success small mt-2"; }
   } catch (err) {
@@ -471,59 +457,25 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-async function loadAll(){
+async function loadAll() {
   try { await loadPrices(); } catch(e){ console.error("loadPrices", e); }
   try { await loadExtras(); } catch(e){ console.error("loadExtras", e); }
   try { await loadExtPrices(); } catch(e){ console.error("loadExtPrices", e); }
 }
 
-// Beim Laden: Config + Tabellen fuellen. DOMContentLoaded abwarten, damit
-// die Elemente existieren. Retry, falls ein Fetch anfangs fehlschlaegt.
-async function initAdmin(){
+async function initAdmin() {
   try { await loadCfg(); } catch(e){ console.error("loadCfg", e); }
   await loadAll();
-  // Sicherheits-Retry: falls beim ersten Mal noch nichts da war
   setTimeout(async () => {
     const t = $("tblPrices")?.querySelector("tbody");
     if (t && t.children.length === 0) await loadAll();
   }, 800);
 }
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initAdmin);
 } else {
   initAdmin();
 }
 </script>
-
-<!-- Preisperiode bearbeiten -->
-<div class="modal fade" id="priceModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header"><h6 class="modal-title">Preisperiode bearbeiten</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body">
-        <input type="hidden" id="pp_id">
-        <div class="row g-2">
-          <div class="col-6"><label class="form-label small">Art</label>
-            <select class="form-select form-select-sm" id="pp_kind_e">
-              <option value="grid">Netz</option><option value="feedin">Einspeisung</option></select></div>
-          <div class="col-6"><label class="form-label small">€/kWh</label>
-            <input class="form-control form-control-sm" type="number" step="0.001" id="pp_price_e"></div>
-          <div class="col-6"><label class="form-label small">ab</label>
-            <input class="form-control form-control-sm" type="date" id="pp_from_e"></div>
-          <div class="col-6"><label class="form-label small">bis (offen = leer)</label>
-            <input class="form-control form-control-sm" type="date" id="pp_to_e"></div>
-          <div class="col-12"><label class="form-label small">Notiz</label>
-            <input class="form-control form-control-sm" type="text" id="pp_note_e"></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
-        <button class="btn btn-primary btn-sm" id="priceSave">Speichern</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-</body>
-</html>
+{% endblock %}

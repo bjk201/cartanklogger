@@ -31,20 +31,10 @@
       </div>
     </div>
   </div>
-  <div class="col-lg-4">
-    <div class="card h-100">
-      <div class="card-header py-2">⚡ Energie nach Quelle</div>
-      <div class="card-body"><canvas id="chartSource" height="220"></canvas></div>
-    </div>
-  </div>
 </div>
 
 <div class="row g-2 mb-3" id="mergedKpis"></div>
 <div class="row g-2 mb-3" id="tripCards"></div>
-<div class="card mb-3">
-  <div class="card-header py-2">📊 Pro Tag: gefahrene km & geladene kWh</div>
-  <div class="card-body"><canvas id="mergedDayChart" height="260"></canvas></div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/overview.js') }}?v={{ js_version }}"></script>
