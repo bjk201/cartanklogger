@@ -1,6 +1,12 @@
 // teslamate.js - Extern (TeslaMate) Tabelle
 let currentDays = 365;
 
+function updateRangeLabel() {
+  const el = document.getElementById("rangeLabel");
+  if (!el) return;
+  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+}
+
 async function loadTM() {
   try {
     const resp = await fetch(`/api/sessions?days=${currentDays}`);
@@ -13,7 +19,7 @@ async function loadTM() {
 }
 
 function renderTM(rows) {
-  const tb = document.querySelector('#tblExt tbody');
+  const tb = document.querySelector("#tblExt tbody");
   if (!tb) return;
   
   const displayRows = rows.slice(0, 25);
@@ -38,18 +44,39 @@ function renderTM(rows) {
       <td>${r.odometer_start != null ? Number(r.odometer_start).toLocaleString('de-DE') : '–'}</td>
       <td>${badge}</td>
       <td>
-        <button class="btn btn-sm btn-outline-secondary" data-type="external" data-id="${r.id}">✏️</button>
-        <button class="btn btn-sm btn-outline-danger" data-type="external" data-id="${r.id}" title="Löschen">🗑️</button>
+        <button class="btn btn-sm btn-outline-secondary edit-btn" data-type="external" data-id="${r.id}">✏️</button>
+        <button class="btn btn-sm btn-outline-danger delete-btn" data-type="external" data-id="${r.id}" title="Löschen">🗑️</button>
       </td>
     </tr>
   `;
-  }).join('');
-}
-
-function updateRangeLabel() {
-  const el = document.getElementById('rangeLabel');
-  if (!el) return;
-  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  }).join("");
+  
+  // Attach event listeners
+  tb.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      const data = displayRows.find(r => String(r.id) === String(id));
+      if (data && window.SharedModal) {
+        window.SharedModal.open('external', id, data);
+      }
+    });
+  });
+  
+  tb.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      if (!confirm('Wirklich löschen?')) return;
+      try {
+        const resp = await csrfFetch(`/api/external/${id}`, {method: 'DELETE'});
+        if (!resp.ok) throw new Error('Fehler beim Löschen');
+        loadTM();
+      } catch (e) {
+        alert('Fehler: ' + e.message);
+      }
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -63,6 +90,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadTM();
 });
+
+// CSRF fetch helper
+async function csrfFetch(url, opts = {}) {
+  let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  if (!csrf) {
+    try {
+      const resp = await fetch('/api/csrf');
+      const data = await resp.json();
+      csrf = data.csrf_token;
+      document.querySelector('meta[name="csrf-token"]').content = csrf;
+    } catch (e) {}
+  }
+  opts.headers = Object.assign({}, opts.headers, {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrf
+  });
+  return fetch(url, opts);
+}
 
 const fmtEUR = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
 const fmtKwh = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' kWh';

@@ -1,5 +1,12 @@
-// evcc.js - Zuhause (EVCC) Tabelle
+// evcc.js - EVCC Zuhause Tabelle
 let currentDays = 365;
+let displayRows = [];
+
+function updateRangeLabel() {
+  const el = document.getElementById("rangeLabel");
+  if (!el) return;
+  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+}
 
 async function loadEVCC() {
   try {
@@ -13,7 +20,8 @@ async function loadEVCC() {
 }
 
 function renderEVCC(rows) {
-  const tb = document.querySelector('#tblHome tbody');
+  displayRows = rows;
+  const tb = document.querySelector("#tblHome tbody");
   if (!tb) return;
   
   const displayRows = rows.slice(0, 25);
@@ -38,17 +46,37 @@ function renderEVCC(rows) {
       <td>${r.price_per_kwh || ''}</td>
       <td>${r.odometer != null ? Number(r.odometer).toLocaleString('de-DE') : '–'}</td>
       <td>
-        <button class="btn btn-sm btn-outline-secondary" data-type="home" data-id="${r.id}">✏️</button>
-        <button class="btn btn-sm btn-outline-danger" data-type="home" data-id="${r.id}" title="Löschen">🗑️</button>
+        <button class="btn btn-sm btn-outline-secondary edit-btn" data-type="home" data-id="${r.id}">✏️</button>
+        <button class="btn btn-sm btn-outline-danger delete-btn" data-type="home" data-id="${r.id}" title="Löschen">🗑️</button>
       </td>
     </tr>
-  `).join('');
-}
-
-function updateRangeLabel() {
-  const el = document.getElementById('rangeLabel');
-  if (!el) return;
-  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  `).join("");
+  
+  tb.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      const data = displayRows.find(r => String(r.id) === String(id));
+      if (data && window.SharedModal) {
+        window.SharedModal.open('home', id, data);
+      }
+    });
+  });
+  
+  tb.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      if (!confirm('Wirklich löschen?')) return;
+      try {
+        const resp = await csrfFetch(`/api/home-sessions/${id}`, {method: 'DELETE'});
+        if (!resp.ok) throw new Error('Fehler beim Löschen');
+        loadEVCC();
+      } catch (e) {
+        alert('Fehler: ' + e.message);
+      }
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -62,6 +90,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadEVCC();
 });
+
+async function csrfFetch(url, opts = {}) {
+  let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  if (!csrf) {
+    try {
+      const resp = await fetch('/api/csrf');
+      const data = await resp.json();
+      csrf = data.csrf_token;
+      document.querySelector('meta[name="csrf-token"]').content = csrf;
+    } catch (e) {}
+  }
+  opts.headers = Object.assign({}, opts.headers, {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrf
+  });
+  return fetch(url, opts);
+}
 
 const fmtEUR = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
 const fmtKwh = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' kWh';

@@ -24,6 +24,9 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/shared-modal.js') }}?v={{ js_version }}"></script>
 <script src="{{ url_for('static', filename='js/extra.js') }}?v={{ js_version }}"></script>
 {% endblock %}
