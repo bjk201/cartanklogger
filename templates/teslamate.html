@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}CarTankLogger – TeslaMate Extern{% endblock %}
+{% block content %}
+<div class="row mb-3 align-items-center">
+  <div class="col-md-6"><h2 class="h4 mb-0">Extern (TeslaMate)</div>
+  <div class="col-md-6 text-md-end">
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary" data-days="90">90 T</button>
+      <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
+      <button class="btn btn-outline-secondary" data-days="9999">All</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header py-2">Externe Ladungen</div>
+  <div class="card-body p-0">
+    <div class="table-container">
+      <table class="table table-sm table-striped align-middle mb-0" id="tblExt">
+        <thead class="sticky-header"><tr>
+          <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
+          <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/teslamate.js') }}?v={{ js_version }}"></script>
+{% endblock %}

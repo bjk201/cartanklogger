@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}CarTankLogger – Statistik{% endblock %}
+{% block content %}
+<div class="row mb-3 align-items-center">
+  <div class="col-md-6"><small class="text-muted" id="rangeLabel">Letzte 365 Tage</small></div>
+  <div class="col-md-6 text-md-end">
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary" data-days="90">90 T</button>
+      <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
+      <button class="btn btn-outline-secondary" data-days="9999">All</button>
+    </div>
+  </div>
+</div>
+
+<div class="row g-2 mb-3" id="statsKpis"></div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header py-2">⚡ Verbrauch (kWh/100 km)</div>
+      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCons"></span><span class="text-muted small ms-1">Ø</span></div>
+      <canvas id="chartCons" height="180"></canvas></div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header py-2">💶 Energiepreis (€/kWh)</div>
+      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiPrice"></span><span class="text-muted small ms-1">Ø</span></div>
+      <canvas id="chartPrice" height="180"></canvas></div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header py-2">💡 Kosten (€/100 km)</div>
+      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCost100"></span><span class="text-muted small ms-1">Ø</span></div>
+      <canvas id="chartCost100" height="180"></canvas></div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header py-2">🛣️ Gesamtkilometer (kumuliert)</div>
+      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiKm"></span><span class="text-muted small ms-1">km</span></div>
+      <canvas id="chartKm" height="180"></canvas></div></div>
+  </div>
+</div>
+<div class="row g-2 mt-2" id="statsSecondary"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/statistik.js') }}?v={{ js_version }}"></script>
+{% endblock %}

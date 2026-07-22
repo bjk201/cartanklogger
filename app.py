@@ -1556,6 +1556,30 @@ def index():
     return render_template("index.html", mock=mock_mode(), js_version=js_ver)
 
 
+@app.route("/statistik")
+def statistik():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("statistik.html", mock=mock_mode(), js_version=js_ver)
+
+
+@app.route("/evcc")
+def evcc():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("evcc.html", mock=mock_mode(), js_version=js_ver)
+
+
+@app.route("/teslamate")
+def teslamate():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("teslamate.html", mock=mock_mode(), js_version=js_ver)
+
+
+@app.route("/extra")
+def extra():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("extra.html", mock=mock_mode(), js_version=js_ver)
+
+
 @app.route("/api/version")
 def api_version():
     """Sichtbare Versionsinfo, damit der User sofort sieht, welche
