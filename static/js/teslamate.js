@@ -1,5 +1,16 @@
 // teslamate.js - Extern (TeslaMate) Tabelle
 let currentDays = 365;
+let currentFrom = null;
+let currentTo = null;
+let currentPage = 1;
+const PER_PAGE = 25;
+
+function buildApiParams() {
+  if (currentFrom && currentTo) {
+    return `from=${currentFrom}&to=${currentTo}&page=${currentPage}&per_page=${PER_PAGE}`;
+  }
+  return `days=${currentDays}&page=${currentPage}&per_page=${PER_PAGE}`;
+}
 
 function updateRangeLabel() {
   const el = document.getElementById("rangeLabel");
@@ -9,27 +20,27 @@ function updateRangeLabel() {
 
 async function loadTM() {
   try {
-    const resp = await fetch(`/api/sessions?days=${currentDays}`, {credentials: "same-origin"});
+    const params = buildApiParams();
+    const resp = await fetch(`/api/sessions?${params}`, {credentials: "same-origin"});
     const data = await resp.json();
-    renderTM(data.external || []);
+    renderTM(data.external || [], data.pagination?.external_total || 0);
     updateRangeLabel();
   } catch (e) {
     console.error('loadTM failed', e);
   }
 }
 
-function renderTM(rows) {
+function renderTM(rows, total) {
   const tb = document.querySelector("#tblExt tbody");
   if (!tb) return;
   
-  const displayRows = rows.slice(0, 25);
-  
-  if (!displayRows.length) {
+  if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">Keine Daten</td></tr>';
+    renderPagination(1, 1);
     return;
   }
   
-  tb.innerHTML = displayRows.map(r => {
+  tb.innerHTML = rows.map(r => {
     const badge = r.cost_total > 0 && r.manual_price == 1 ? '<span class="badge bg-success">manuell</span>'
                  : r.cost_total > 0 ? '<span class="badge bg-secondary">TeslaMate</span>'
                  : '<span class="badge bg-warning text-dark">fehlt</span>';
@@ -56,7 +67,7 @@ function renderTM(rows) {
     btn.addEventListener('click', () => {
       const row = btn.closest('tr');
       const id = row.dataset.id;
-      const data = displayRows.find(r => String(r.id) === String(id));
+      const data = rows.find(r => String(r.id) === String(id));
       if (data && window.SharedModal) {
         window.SharedModal.open('external', id, data);
       }
@@ -77,6 +88,46 @@ function renderTM(rows) {
       }
     });
   });
+  
+  const totalPages = Math.ceil(total / PER_PAGE);
+  renderPagination(currentPage, totalPages);
+}
+
+function renderPagination(page, totalPages) {
+  const nav = document.getElementById('pagination');
+  if (!nav) return;
+  
+  if (totalPages <= 1) {
+    nav.innerHTML = '';
+    return;
+  }
+  
+  let html = '<ul class="pagination pagination-sm justify-content-center mb-0">';
+  html += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">«</a></li>`;
+  
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+      html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    } else if (i === page - 2 || i === page + 2) {
+      html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+    }
+  }
+  
+  html += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">»</a></li>`;
+  html += '</ul>';
+  
+  nav.innerHTML = html;
+  
+  nav.querySelectorAll('.page-link[data-page]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const p = parseInt(link.getAttribute('data-page'), 10);
+      if (!isNaN(p) && p >= 1 && p <= totalPages && p !== page) {
+        currentPage = p;
+        loadTM();
+      }
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -85,9 +136,31 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentDays = parseInt(btn.getAttribute('data-days'), 10);
+      currentFrom = null;
+      currentTo = null;
+      currentPage = 1;
+      document.getElementById('rangeFrom').value = '';
+      document.getElementById('rangeTo').value = '';
       loadTM();
     });
   });
+  
+  // Date range picker
+  const btnRange = document.getElementById('btnRange');
+  if (btnRange) {
+    btnRange.addEventListener('click', () => {
+      const from = document.getElementById('rangeFrom').value;
+      const to = document.getElementById('rangeTo').value;
+      if (from && to) {
+        currentFrom = from;
+        currentTo = to;
+        currentPage = 1;
+        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+        loadTM();
+      }
+    });
+  }
+  
   loadTM();
 });
 
@@ -96,7 +169,7 @@ async function csrfFetch(url, opts = {}) {
   let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   if (!csrf) {
     try {
-      const resp = await fetch('/api/csrf');
+      const resp = await fetch('/api/csrf', {credentials: "same-origin"});
       const data = await resp.json();
       csrf = data.csrf_token;
       document.querySelector('meta[name="csrf-token"]').content = csrf;
@@ -106,6 +179,7 @@ async function csrfFetch(url, opts = {}) {
     'Content-Type': 'application/json',
     'X-CSRFToken': csrf
   });
+  opts.credentials = 'same-origin';
   return fetch(url, opts);
 }
 

@@ -1,12 +1,22 @@
 // overview.js - Übersichtsseite (merged Tabelle + KPIs + Charts)
 let currentDays = 365;
+let currentFrom = null;
+let currentTo = null;
+
+function buildApiParams() {
+  if (currentFrom && currentTo) {
+    return `from=${currentFrom}&to=${currentTo}`;
+  }
+  return `days=${currentDays}`;
+}
 
 async function loadOverview() {
   try {
+    const params = buildApiParams();
     const [merged, stats, charts] = await Promise.all([
-      fetch(`/api/merged?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/stats?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/charts?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json())
+      fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json())
     ]);
     
     renderMergedTable(merged);
@@ -178,9 +188,29 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentDays = parseInt(btn.getAttribute('data-days'), 10);
+      currentFrom = null;
+      currentTo = null;
+      document.getElementById('rangeFrom').value = '';
+      document.getElementById('rangeTo').value = '';
       loadOverview();
     });
   });
+  
+  // Date range picker
+  const btnRange = document.getElementById('btnRange');
+  if (btnRange) {
+    btnRange.addEventListener('click', () => {
+      const from = document.getElementById('rangeFrom').value;
+      const to = document.getElementById('rangeTo').value;
+      if (from && to) {
+        currentFrom = from;
+        currentTo = to;
+        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+        loadOverview();
+      }
+    });
+  }
+  
   loadOverview();
 });
 

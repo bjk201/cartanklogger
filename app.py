@@ -1820,6 +1820,8 @@ def api_sessions():
     days = request.args.get("days", 365, type=int)
     from_date = request.args.get("from")
     to_date = request.args.get("to")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 100, type=int)
     # Zeitraum-Filter (wie /api/stats) -> Home/Ext-Tabs respektieren die
     # Zeitraum-Auswahl, nicht nur die Summary-Kacheln.
     if from_date and to_date:
@@ -1834,7 +1836,19 @@ def api_sessions():
         ext_q = "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at DESC"
         params = [cutoff]
     db = get_db()
-    home = [dict(r) for r in db.execute(home_q, params).fetchall()]
+    # Get total count for pagination
+    if from_date and to_date:
+        count_params = [cutoff, end]
+    else:
+        count_params = [cutoff]
+    home_count = db.execute(f"SELECT COUNT(*) FROM ({home_q})", count_params).fetchone()[0]
+    ext_count = db.execute(f"SELECT COUNT(*) FROM ({ext_q})", count_params).fetchone()[0]
+    # Apply pagination
+    offset = (page - 1) * per_page
+    home_q += " LIMIT ? OFFSET ?"
+    ext_q += " LIMIT ? OFFSET ?"
+    params_with_limit = params + [per_page, offset]
+    home = [dict(r) for r in db.execute(home_q, params_with_limit).fetchall()]
     # Kosten immer frisch aus den (ggf. geänderten) Preisperioden berechnen
     for r in home:
         c = compute_home_cost_row(r)
@@ -1842,7 +1856,7 @@ def api_sessions():
         # Datenschutz: keine Rohdaten/Payload im JSON
         r["raw"] = None
         r["has_raw"] = bool(r.get("raw"))
-    ext = [dict(r) for r in db.execute(ext_q, params).fetchall()]
+    ext = [dict(r) for r in db.execute(ext_q, params_with_limit).fetchall()]
     for r in ext:
         # Datenschutz: rohe Adresse durch anonymisiertes Label ersetzen,
         # GPS-Koordinaten entfernen, raw nur als Flag belassen.
@@ -1851,7 +1865,18 @@ def api_sessions():
         r["longitude"] = None
         r["has_raw"] = bool(r.get("raw"))
         r.pop("raw", None)
-    return jsonify({"home": home, "external": ext})
+    return jsonify({
+        "home": home, 
+        "external": ext,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "home_total": home_count,
+            "external_total": ext_count,
+            "home_pages": (home_count + per_page - 1) // per_page,
+            "external_pages": (ext_count + per_page - 1) // per_page
+        }
+    })
 
 
 @app.route("/api/charges")
