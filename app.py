@@ -1425,6 +1425,7 @@ def build_stats(days=365, from_date=None, to_date=None):
         price_lookup=get_price_at,
         get_price_at=get_price_at,
         days=days, from_date=from_date, to_date=to_date,
+        db=get_db(),
     )
 
     # Rückgewinnung der Felder für die Tages-Series (von der UI genutzt)

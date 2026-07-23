@@ -133,7 +133,7 @@ def compute_home_energy_split(wall_kwh, solar_percentage):
 
 
 def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
-                          get_price_at, days=365, from_date=None, to_date=None):
+                          get_price_at, days=365, from_date=None, to_date=None, db=None):
     """Berechnet Statistiken aus den (bereits gefilterten) DB-Rows.
 
     home_rows      : home_sessions (EVCC-geführt, gematchte/externe Home)
@@ -141,6 +141,7 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
     extra_rows     : extra_costs
     price_lookup   : Funktion(kind, date) -> float (aus app.get_price_at)
     get_price_at   : s.o.
+    db             : database connection für drives-Abfrage
 
     Liefert ein Dict im bisherigen build_stats-Format (kompatibel zur UI).
     """
@@ -188,7 +189,17 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
     ext = [r for r in ext_all if not _tm_is_home(r)]
     extras = [dict(r) for r in extra_rows if in_range(r.get("date"))]
 
-    # --- Gesamt-km = letzter (neuester) Tachostand ---
+    # --- Distanz: Summe Tageskilometer aus drives-Tabelle (nicht Odometer-Diff!) ---
+    # Hole alle Drives im Zeitraum und summiere distance_km
+    drives_q = "SELECT distance_km FROM drives WHERE start_date >= ?"
+    drives_params = [cutoff] if not end else [cutoff, end]
+    if end:
+        drives_q = "SELECT distance_km FROM drives WHERE start_date >= ? AND start_date <= ?"
+        drives_params = [cutoff, end]
+    drives_rows = db.execute(drives_q, drives_params).fetchall()
+    total_dist = sum(float(r[0] or 0) for r in drives_rows)
+    
+    # Odometer-Wert für Anzeige (letzter bekannter Stand) - NICHT für Berechnungen!
     odo_dated = []
     for e in home:
         try:
@@ -204,7 +215,7 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
     odo_dated.sort(key=lambda x: x[0])
     total_km_odo = odo_dated[-1][1] if odo_dated else 0.0
 
-    # --- Home-Energie + Kosten (EVCC ist führend) ---
+    # --- Energie & Kosten (wie im Original) ---
     home_kwh = sum(float(r.get("charged_kwh") or 0) for r in home)
     home_grid_cost = 0.0
     home_pv_cost = 0.0
@@ -227,21 +238,6 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
     for e in extras:
         extra_by_cat[e.get("category") or "Sonstiges"] = \
             round(extra_by_cat.get(e.get("category") or "Sonstiges", 0) + float(e.get("amount") or 0), 2)
-
-    # --- Distanz (Odometer-Diff) ---
-    rows = []
-    for r in home:
-        rows.append((r.get("created"), r.get("odometer")))
-    for r in ext:
-        rows.append((r.get("started_at"), r.get("odometer_start")))
-    rows = [(d, o) for d, o in rows if o is not None]
-    rows.sort(key=lambda x: x[0] or "")
-    total_dist = 0.0
-    prev = None
-    for _, odo in rows:
-        if prev is not None and odo > prev:
-            total_dist += odo - prev
-        prev = odo
 
     total_kwh = home_kwh + ext_kwh
     total_cost = home_cost + ext_cost + extra_total
@@ -323,6 +319,7 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
             "tco": round(tco, 2),
             "tco_per_100km": round(tco_per_100km, 2),
             "distance_km": round(total_km_odo, 1),
+            "total_km": round(total_dist, 1),  # Summe Tageskilometer aus Drives
             "cost_per_km": round(cost_per_km, 3),
             "consumption_kwh_per_100km": round(consumption_bruto, 2),
             "consumption_net_kwh_per_100km": round(consumption_netto, 2),

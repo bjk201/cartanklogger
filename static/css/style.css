@@ -129,6 +129,17 @@ html[data-theme="dark"] .form-select {
 html[data-theme="dark"] .form-control::placeholder {
   color: var(--input-placeholder-dark) !important;
 }
+html[data-theme="dark"] .form-text {
+  color: var(--form-text-dark) !important;
+  opacity: 0.8;
+}
+html[data-theme="dark"] .form-check-label {
+  color: var(--form-text-dark) !important;
+}
+html[data-theme="dark"] .form-check-input {
+  background-color: var(--form-bg-dark) !important;
+  border-color: var(--form-border-dark) !important;
+}
 html[data-theme="dark"] .form-check-input:checked {
   background-color: var(--sidebar-active-bg) !important;
   border-color: var(--sidebar-active-bg) !important;

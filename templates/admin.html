@@ -268,7 +268,7 @@ async function loadPrices() {
   const rows = await (await fetch("/api/price-periods", {credentials: "same-origin"})).json();
   const lbl = {grid:"Netz", feedin:"Einspeisung"};
   $("tblPrices").querySelector("tbody").innerHTML = rows.map(r => `<tr data-id="${r.id}">
-    <td>${lbl[r.kind]||r.kind}</td><td>${r.valid_from}</td><td>${r.valid_to||"offen"}</td>
+    <td>${lbl[r.kind]||r.kind}</td><td>${(r.valid_from||"").slice(0,10)}</td><td>${(r.valid_to||"").slice(0,10) || "offen"}</td>
     <td>${r.price_per_kwh}</td><td>
       <button class="btn btn-sm btn-outline-secondary edP">✏️</button>
       <button class="btn btn-sm btn-outline-danger delP">✕</button></td></tr>`).join("");
