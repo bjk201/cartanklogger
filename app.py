@@ -1464,6 +1464,24 @@ def build_stats(days=365, from_date=None, to_date=None):
         d = (r.get("started_at") or "")[:10]
         day_map[d]["ext_kwh"] += float(r.get("energy_kwh") or 0)
         day_map[d]["cost"] += float(r.get("cost_total") or 0)
+    
+    # Aggregate daily km from drives table
+    db = get_db()
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+        drives_q = "SELECT start_date, distance_km FROM drives WHERE start_date >= ? AND start_date <= ?"
+        drives_params = [cutoff, end]
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        drives_q = "SELECT start_date, distance_km FROM drives WHERE start_date >= ?"
+        drives_params = [cutoff]
+    drives_rows = [dict(r) for r in db.execute(drives_q, drives_params).fetchall()]
+    for r in drives_rows:
+        d = (r.get("start_date") or "")[:10]
+        km = float(r.get("distance_km") or 0)
+        if km > 0:
+            day_map[d]["km"] += km
 
     series = []
     cum_km = 0.0
@@ -1486,6 +1504,7 @@ def build_stats(days=365, from_date=None, to_date=None):
             "home_kwh": round(agg["home_kwh"], 2),
             "ext_kwh": round(agg["ext_kwh"], 2),
             "cost": round(agg["cost"], 2),
+            "km": round(agg["km"], 1) if agg["km"] > 0 else None,
             "consumption": round(consumption, 2) if consumption else None,
             "price_per_kwh": round(agg["cost"] / day_kwh, 3) if day_kwh else 0,
             "cost_per_100": None,  # wird UI-seitig falls benötigt berechnet

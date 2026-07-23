@@ -100,6 +100,9 @@ function renderCharts(charts) {
   // Setup event listeners for MA toggle buttons
   setupMAToggleButtons();
   setupChartTypeButtons();
+  
+  // Render heatmaps
+  renderHeatmaps(s, kpis);
 }
 
 function movingAverage(data, window) {
@@ -809,3 +812,116 @@ renderKPIs = function(stats) {
   originalRenderKPIs(stats);
   renderDataQualityWarnings(stats);
 }();
+
+/* ============================================================
+   HEATMAPS for Statistik
+   ============================================================ */
+
+function renderHeatmaps(series, kpis) {
+  const container = document.getElementById('statsSecondary');
+  if (!container) return;
+  
+  if (!series || series.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  // 1. Charging Heatmap: Day of week vs Hour (from home_sessions if available)
+  // 2. Consumption Heatmap: Day of week vs Month
+  // 3. Cost Heatmap: Day of week vs Month
+  
+  // We'll create a simplified heatmap using the series data (daily data)
+  // Group by month and day of week
+  
+  const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const daysOfWeek = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  
+  // Prepare data matrices
+  const consumptionMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const costMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const kmMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const countMatrix = Array(7).fill().map(() => Array(12).fill(0));
+  
+  series.forEach(d => {
+    const date = new Date(d.day + 'T00:00:00');
+    const month = date.getMonth(); // 0-11
+    const dayOfWeek = (date.getDay() + 6) % 7; // 0=Mo, 6=So
+    
+    if (d.consumption != null) {
+      consumptionMatrix[dayOfWeek][month] = (consumptionMatrix[dayOfWeek][month] || 0) + d.consumption;
+      countMatrix[dayOfWeek][month]++;
+    }
+    if (d.cost != null) {
+      costMatrix[dayOfWeek][month] = (costMatrix[dayOfWeek][month] || 0) + d.cost;
+    }
+    if (d.km != null) {
+      kmMatrix[dayOfWeek][month] = (kmMatrix[dayOfWeek][month] || 0) + d.km;
+    }
+  });
+  
+  // Average consumption matrix
+  for (let dow = 0; dow < 7; dow++) {
+    for (let m = 0; m < 12; m++) {
+      if (countMatrix[dow][m] > 0) {
+        consumptionMatrix[dow][m] = consumptionMatrix[dow][m] / countMatrix[dow][m];
+      } else {
+        consumptionMatrix[dow][m] = null;
+      }
+    }
+  }
+  
+  // Build heatmap HTML
+  function buildHeatmap(matrix, title, unit, colorScale) {
+    const cells = [];
+    for (let dow = 0; dow < 7; dow++) {
+      for (let m = 0; m < 12; m++) {
+        const val = matrix[dow][m];
+        let style = 'background: #e9ecef;';
+        let text = '–';
+        
+        if (val != null) {
+          // Normalize to 0-1 for color
+          const allVals = matrix.flat().filter(v => v != null);
+          if (allVals.length > 0) {
+            const min = Math.min(...allVals);
+            const max = Math.max(...allVals);
+            const norm = max > min ? (val - min) / (max - min) : 0.5;
+            const r = Math.round(255 * (1 - norm));
+            const g = Math.round(255 * norm);
+            style = `background: rgb(${r}, ${g}, 100);`;
+          }
+          text = val.toFixed(1) + ' ' + unit;
+        }
+        
+        cells.push(`<div class="heatmap-cell" style="${style}" title="${daysOfWeek[dow]} ${months[m]}: ${text}">${text}</div>`);
+      }
+    }
+    
+    return `
+      <div class="col-12 col-lg-6 col-xl-4 mb-3">
+        <div class="card h-100">
+          <div class="card-header py-2">${title}</div>
+          <div class="card-body p-2">
+            <div class="heatmap-grid" style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; font-size: 0.65rem;">
+              <div class="heatmap-header" style="grid-column: span 12; display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin-bottom: 2px; font-weight: 600; font-size: 0.6rem; text-align: center;">
+                ${months.map(m => `<div>${m}</div>`).join('')}
+              </div>
+              ${daysOfWeek.map((dow, i) => `
+                <div class="heatmap-row-label" style="grid-column: 1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.6rem; padding-right: 4px;">${dow}</div>
+                ${cells.slice(i * 12, (i + 1) * 12).join('')}
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = `
+    <div class="row g-2">
+      ${buildHeatmap(consumptionMatrix, '⚡ Verbrauch (kWh/100km) nach Wochentag & Monat', 'kWh', ['#28a745', '#ffc107', '#dc3545'])}
+      ${buildHeatmap(costMatrix, '💶 Kosten (€) nach Wochentag & Monat', '€', ['#28a745', '#ffc107', '#dc3545'])}
+      ${buildHeatmap(kmMatrix, '🛣️ Kilometer nach Wochentag & Monat', 'km', ['#6f42c1', '#0dcaf0', '#fd7e14'])}
+    </div>
+  `;
+}

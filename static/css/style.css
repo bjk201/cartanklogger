@@ -220,15 +220,30 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   
   /* Main content - full width on mobile */
   main { 
-    padding-top: 76px; /* space for fixed header (56px + padding) */
+    padding-top: 86px; /* space for fixed header (56px + padding) + date picker row */
     width: 100%;
-    min-height: calc(100vh - 76px);
+    min-height: calc(100vh - 86px);
   }
   
   /* Ensure first content row has extra space from header */
   main > .row:first-child,
   main > div > .row:first-child {
     margin-top: 0.5rem;
+  }
+  
+  /* Mobile date picker row - ensure visible */
+  main > .row:first-child .btn-group-sm,
+  main > .row:first-child .input-group-sm {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  main > .row:first-child .input-group {
+    flex: 1 1 100%;
+    margin-top: 0.25rem;
+    max-width: 100%;
+  }
+  main > .row:first-child .input-group .form-control {
+    min-width: 0;
   }
   
   /* Mobile sidebar toggle button in header */

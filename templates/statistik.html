@@ -65,6 +65,28 @@
 </div>
 <div class="row g-2 mt-2" id="statsSecondary"></div>
 
+<!-- Heatmaps Section -->
+<div class="row g-2 mt-3" id="heatmapsSection" style="display: none;">
+  <div class="col-12">
+    <div class="card h-100">
+      <div class="card-header py-2">
+        <div class="d-flex align-items-center justify-content-between">
+          <span>🗓️ Heatmaps</span>
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-secondary active" data-hm="heatmapLaden">Laden</button>
+            <button class="btn btn-outline-secondary" data-hm="heatmapVerbrauch">Verbrauch</button>
+            <button class="btn btn-outline-secondary" data-hm="heatmapKosten">Kosten</button>
+            <button class="btn btn-outline-secondary" data-hm="heatmapKm">Kilometer</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-2">
+        <canvas id="chartHeatmap" height="280"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Fahrtenvergleich -->
 <div class="card mt-4" id="driveCompareSection">
   <div class="card-header py-2 d-flex align-items-center justify-content-between">
