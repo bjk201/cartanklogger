@@ -52,11 +52,6 @@ html[data-theme="dark"] body {
   color: var(--text-dark);
 }
 
-html[data-theme="dark"] body {
-  background: var(--bg-dark);
-  color: var(--text-dark);
-}
-
 /* Header */
 .app-header {
   background: var(--bg-header-light);
