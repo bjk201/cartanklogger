@@ -6,6 +6,10 @@ let currentPage = 1;
 const PER_PAGE = 25;
 
 function buildApiParams() {
+  // Use global date range if available
+  if (typeof getGlobalRangeParams === 'function') {
+    return getGlobalRangeParams();
+  }
   if (currentFrom && currentTo) {
     return `from=${currentFrom}&to=${currentTo}&page=${currentPage}&per_page=${PER_PAGE}`;
   }
@@ -15,7 +19,19 @@ function buildApiParams() {
 function updateRangeLabel() {
   const el = document.getElementById("rangeLabel");
   if (!el) return;
-  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  
+  // Try to get global range state
+  if (typeof globalDateRange !== 'undefined') {
+    if (globalDateRange.from && globalDateRange.to) {
+      el.textContent = `${globalDateRange.from} bis ${globalDateRange.to}`;
+    } else if (globalDateRange.days >= 9999) {
+      el.textContent = 'Alle Daten';
+    } else {
+      el.textContent = `Letzte ${globalDateRange.days} Tage`;
+    }
+  } else {
+    el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  }
 }
 
 async function loadTM() {
@@ -160,6 +176,37 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  
+  // Listen for global range changes
+  window.addEventListener('globalRangeChange', (e) => {
+    const params = e.detail;
+    if (params.startsWith('from=')) {
+      const urlParams = new URLSearchParams(params);
+      currentFrom = urlParams.get('from');
+      currentTo = urlParams.get('to');
+      currentDays = 365;
+      currentPage = 1;
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+      if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = currentFrom;
+      if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = currentTo;
+    } else {
+      const urlParams = new URLSearchParams(params);
+      currentDays = parseInt(urlParams.get('days'), 10);
+      currentFrom = null;
+      currentTo = null;
+      currentPage = 1;
+      document.getElementById('rangeFrom').value = '';
+      document.getElementById('rangeTo').value = '';
+      document.querySelectorAll('[data-days]').forEach(b => {
+        if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+    }
+    loadTM();
+  });
   
   loadTM();
 });

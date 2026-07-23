@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}CarTankLogger – Nerd Analytics{% endblock %}
+{% block content %}
+<div class="row mb-3 align-items-center">
+  <div class="col-md-6"><h2 class="mb-0">🧪 Nerd Analytics</h2></div>
+  <div class="col-md-6 text-md-end">
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary" data-days="30">30 T</button>
+      <button class="btn btn-outline-secondary" data-days="90">90 T</button>
+      <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
+      <button class="btn btn-outline-secondary" data-days="9999">All</button>
+    </div>
+    <div class="input-group input-group-sm d-inline-flex ms-2" style="width:auto">
+      <span class="input-group-text">Von</span>
+      <input type="date" id="rangeFrom" class="form-control form-control-sm">
+      <span class="input-group-text">Bis</span>
+      <input type="date" id="rangeTo" class="form-control form-control-sm">
+      <button class="btn btn-outline-primary" id="btnRange" type="button">Anwenden</button>
+    </div>
+  </div>
+</div>
+
+<!-- KPI Cards Row -->
+<div class="row g-3 mb-4" id="nerdKpis"></div>
+
+<!-- Charts Row -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header py-2">
+        📉 Akku-Degradation (Reichweite @ 100% vs. Kilometerstand)
+      </div>
+      <div class="card-body">
+        <canvas id="degChart" height="300"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header py-2">
+        🌡️ Effizienz vs. Temperatur (Wh/km pro Fahrt)
+      </div>
+      <div class="card-body">
+        <canvas id="tempChart" height="300"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Vampire Drain Detail Table -->
+<div class="card mb-4">
+  <div class="card-header py-2">
+    🧛 Vampire Drain – Standverluste (Park-Sessions der letzten 30 Tage)
+  </div>
+  <div class="card-body p-0">
+    <div id="vampireDrainTable"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/analytics.js') }}?v={{ js_version }}"></script>
+{% endblock %}

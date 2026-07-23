@@ -1580,6 +1580,12 @@ def extra():
     return render_template("extra.html", mock=mock_mode(), js_version=js_ver)
 
 
+@app.route("/analytics")
+def analytics():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("analytics.html", mock=mock_mode(), js_version=js_ver)
+
+
 @app.route("/api/version")
 def api_version():
     """Sichtbare Versionsinfo, damit der User sofort sieht, welche
@@ -2249,7 +2255,7 @@ def api_charts():
         end = None
     db = get_db()
     evcc_q = "SELECT created, finished, charged_kwh, total_cost, odometer, price_per_kwh, solar_percentage, loadpoint, raw FROM home_sessions WHERE created >= ?"
-    tm_q = "SELECT started_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, latitude, longitude, address, raw FROM external_sessions WHERE started_at >= ?"
+    tm_q = "SELECT started_at, energy_kwh, energy_used_kwh, cost_total, odometer_start, latitude, longitude, address, raw, price_per_kwh FROM external_sessions WHERE started_at >= ?"
     params = [cutoff]
     if end:
         evcc_q += " AND created <= ?"
@@ -2332,13 +2338,22 @@ def api_charts():
         # TM-Ladungen zaehlen nur zum AC/DC-Anteil, wenn sie EXTERN sind
         # (Supercharger=DC, andere Fremd=AC). TM-Zuhause ist dieselbe Ladung
         # wie EVCC -> NICHT nochmal zaehlen (Doppelzaehlung).
-        if not _is_home_address(t.get("address"), t.get("address")):
+        is_home = _is_home_address(t.get("address"), t.get("address"))
+        if not is_home:
             if is_dc:
                 day_dc_kwh[day] += kwh
                 day_dc_cost[day] += float(t.get("cost_total") or 0)
             else:
                 day_ac_kwh[day] += kwh
                 day_ac_cost[day] += float(t.get("cost_total") or 0)
+            # Auch zur Tages-Gesamtenergie/Kosten hinzufuegen (fuer Charts/Stats)
+            # Extern: Wand-Energie = energy_used_kwh, Kosten = cost_total
+            day_kwh[day] += used
+            day_cost[day] += float(t.get("cost_total") or 0)
+            # price_per_kwh fuer extern (falls vorhanden)
+            ppk = t.get("price_per_kwh")
+            if ppk:
+                day_price[day].append((ppk, used))
         re = _tm_range_end(t.get("raw"))
         if re: day_range_end[day] = max(day_range_end[day], re)
 
@@ -3979,6 +3994,379 @@ def api_debug_teslamate():
             "ist_zuhause": _is_home_address(geo, addr),
         })
     return jsonify(out)
+
+
+# ============================================================
+# NERD ANALYTICS - TeslaMate Special Data
+# ============================================================
+
+@app.route("/api/nerd/kpis")
+def api_nerd_kpis():
+    """4 KPI-Kacheln für Nerd Analytics."""
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+    
+    db = get_db()
+    
+    # 1. Vampire Drain (Standverluste)
+    # Nutze drives Tabelle für Park-Intervalle (Tage ohne Fahrt)
+    # TeslaMate hat keine direkte Park-Session Tabelle, daher approximieren wir
+    # über die Lücken zwischen Fahrten
+    vampire_query = """
+        SELECT 
+            start_date,
+            end_date,
+            soc_start,
+            soc_end,
+            distance_km
+        FROM drives 
+        WHERE start_date >= ?
+    """
+    params = [cutoff]
+    if end:
+        vampire_query += " AND start_date <= ?"
+        params.append(end)
+    vampire_query += " ORDER BY start_date ASC"
+    
+    drives = [dict(r) for r in db.execute(vampire_query, params).fetchall()]
+    
+    vampire_drain_pct_per_day = 0.0
+    vampire_drain_watts_sentry_on = 0.0
+    vampire_drain_watts_sentry_off = 0.0
+    sentry_on_count = 0
+    sentry_off_count = 0
+    
+    if len(drives) >= 2:
+        # Park-Intervalle zwischen Fahrten berechnen
+        park_intervals = []
+        for i in range(len(drives) - 1):
+            current = drives[i]
+            next_drive = drives[i + 1]
+            
+            try:
+                end_soc = float(current.get("soc_end") or 0)
+                start_soc = float(next_drive.get("soc_start") or 0)
+                end_time = datetime.fromisoformat(str(current.get("end_date") or "").replace("Z", "")[:19])
+                start_time = datetime.fromisoformat(str(next_drive.get("start_date") or "").replace("Z", "")[:19])
+                
+                if end_soc > 0 and start_soc > 0 and start_time > end_time:
+                    hours_parked = (start_time - end_time).total_seconds() / 3600.0
+                    if hours_parked > 1 and hours_parked < 168:  # 1h bis 7 Tage
+                        soc_loss = end_soc - start_soc
+                        if soc_loss > 0:
+                            pct_per_day = (soc_loss / hours_parked) * 24
+                            park_intervals.append({
+                                "hours": hours_parked,
+                                "soc_loss": soc_loss,
+                                "pct_per_day": pct_per_day,
+                                "date": start_time.strftime("%Y-%m-%d")
+                            })
+            except Exception:
+                continue
+        
+        if park_intervals:
+            vampire_drain_pct_per_day = sum(p["pct_per_day"] for p in park_intervals) / len(park_intervals)
+            # Ohne Sentry-Modus Daten schätzen wir: ca. 50% der Zeit Sentry an
+            # Typische Werte: Sentry an ~1-2%/Tag, aus ~0.5-1%/Tag
+            vampire_drain_watts_sentry_on = vampire_drain_pct_per_day * 0.75  # grobe Schätzung
+            vampire_drain_watts_sentry_off = vampire_drain_pct_per_day * 0.25
+    
+    # 2. Battery Degradation
+    # Range at 100% = battery_capacity / consumption_per_100km * 100
+    # Use drives table with energy_consumed_kwh and distance_km
+    BATTERY_CAPACITY_KWH = 75.0  # Model Y usable capacity estimate
+    
+    deg_query = """
+        SELECT odometer_start, energy_consumed_kwh, distance_km, start_date
+        FROM drives 
+        WHERE odometer_start > 0 AND energy_consumed_kwh > 0 AND distance_km > 0
+    """
+    if from_date and to_date:
+        deg_query += " AND start_date >= ? AND start_date <= ?"
+        deg_params = [cutoff, end]
+    else:
+        deg_query += " AND start_date >= ?"
+        deg_params = [cutoff]
+    deg_query += " ORDER BY start_date ASC"
+    
+    deg_rows = [dict(r) for r in db.execute(deg_query, deg_params).fetchall()]
+    
+    projected_ranges = []
+    for r in deg_rows:
+        odo = float(r.get("odometer_start") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        dist = float(r.get("distance_km") or 0)
+        if odo > 0 and energy > 0 and dist > 0:
+            wh_per_km = (energy / dist) * 1000
+            if 50 < wh_per_km < 500:  # Plausible consumption
+                range_100 = BATTERY_CAPACITY_KWH * 1000 / wh_per_km
+                if 200 < range_100 < 600:  # Plausible range
+                    projected_ranges.append({
+                        "odo": round(odo, 1),
+                        "range_100": round(range_100, 1),
+                        "date": str(r.get("start_date") or "")[:10]
+                    })
+    
+    first_range = projected_ranges[0]["range_100"] if projected_ranges else 0
+    last_range = projected_ranges[-1]["range_100"] if projected_ranges else 0
+    degradation_pct = ((first_range - last_range) / first_range * 100) if first_range > 0 else 0
+    
+    # 3. Charging Efficiency (AC vs DC)
+    # AC: home_sessions (EVCC) -> charge_energy_used vs charge_energy_added
+    # DC: external_sessions Supercharger
+    eff_query = """
+        SELECT 
+            CASE 
+                WHEN provider = 'Supercharger' OR address LIKE '%supercharger%' THEN 'DC'
+                ELSE 'AC'
+            END as type,
+            energy_kwh,
+            energy_used_kwh
+        FROM external_sessions 
+        WHERE energy_kwh > 0 AND energy_used_kwh > 0
+    """
+    if from_date and to_date:
+        eff_query += " AND started_at >= ? AND started_at <= ?"
+        eff_params = [cutoff, end]
+    else:
+        eff_query += " AND started_at >= ?"
+        eff_params = [cutoff]
+    
+    eff_rows = [dict(r) for r in db.execute(eff_query, eff_params).fetchall()]
+    
+    ac_eff = []
+    dc_eff = []
+    for r in eff_rows:
+        added = float(r.get("energy_kwh") or 0)
+        used = float(r.get("energy_used_kwh") or 0)
+        if added > 0 and used > 0:
+            eff = (added / used) * 100
+            if r.get("type") == "DC":
+                dc_eff.append(eff)
+            else:
+                ac_eff.append(eff)
+    
+    ac_avg = sum(ac_eff) / len(ac_eff) if ac_eff else 0
+    dc_avg = sum(dc_eff) / len(dc_eff) if dc_eff else 0
+    
+    # 4. Temperature Efficiency Factor
+    temp_query = """
+        SELECT outside_temp_avg, energy_consumed_kwh, distance_km
+        FROM drives
+        WHERE outside_temp_avg IS NOT NULL 
+          AND energy_consumed_kwh > 0 
+          AND distance_km > 0
+    """
+    if from_date and to_date:
+        temp_query += " AND start_date >= ? AND start_date <= ?"
+        temp_params = [cutoff, end]
+    else:
+        temp_query += " AND start_date >= ?"
+        temp_params = [cutoff]
+    
+    temp_rows = [dict(r) for r in db.execute(temp_query, temp_params).fetchall()]
+    
+    winter = []  # < 10°C
+    summer = []  # > 15°C
+    for r in temp_rows:
+        temp = float(r.get("outside_temp_avg") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        dist = float(r.get("distance_km") or 0)
+        if dist > 0:
+            wh_per_km = (energy / dist) * 1000
+            if temp < 10:
+                winter.append(wh_per_km)
+            elif temp > 15:
+                summer.append(wh_per_km)
+    
+    winter_avg = sum(winter) / len(winter) if winter else 0
+    summer_avg = sum(summer) / len(summer) if summer else 0
+    temp_diff_pct = ((winter_avg - summer_avg) / summer_avg * 100) if summer_avg > 0 else 0
+    
+    return jsonify({
+        "vampire_drain": {
+            "pct_per_day": round(vampire_drain_pct_per_day, 2),
+            "watts_sentry_on": round(vampire_drain_watts_sentry_on * 10, 0),  # rough
+            "watts_sentry_off": round(vampire_drain_watts_sentry_off * 10, 0),
+            "intervals_count": len(park_intervals) if 'park_intervals' in locals() else 0
+        },
+        "battery_degradation": {
+            "first_range_km": round(first_range, 1),
+            "last_range_km": round(last_range, 1),
+            "degradation_pct": round(degradation_pct, 2),
+            "data_points": len(projected_ranges)
+        },
+        "charging_efficiency": {
+            "ac_avg_pct": round(ac_avg, 1),
+            "dc_avg_pct": round(dc_avg, 1),
+            "ac_sessions": len(ac_eff),
+            "dc_sessions": len(dc_eff)
+        },
+        "temperature_efficiency": {
+            "winter_wh_km": round(winter_avg, 1),
+            "summer_wh_km": round(summer_avg, 1),
+            "diff_pct": round(temp_diff_pct, 1),
+            "winter_drives": len(winter),
+            "summer_drives": len(summer)
+        }
+    })
+
+
+@app.route("/api/nerd/charts")
+def api_nerd_charts():
+    """Chart-Daten für Degradation und Temp-Effizienz."""
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+    
+    db = get_db()
+    
+    # Chart 1: Degradation Scatter (Odometer vs Projected Range at 100%)
+    deg_query = """
+        SELECT odometer_start, energy_consumed_kwh, distance_km, start_date
+        FROM drives 
+        WHERE odometer_start > 0 AND energy_consumed_kwh > 0 AND distance_km > 0
+          AND start_date >= ?
+    """
+    params = [cutoff]
+    if end:
+        deg_query += " AND start_date <= ?"
+        params.append(end)
+    deg_query += " ORDER BY start_date ASC"
+    
+    deg_rows = [dict(r) for r in db.execute(deg_query, params).fetchall()]
+    
+    degradation_data = []
+    # Assume ~75 kWh usable battery capacity for Model Y
+    BATTERY_CAPACITY_KWH = 75.0
+    for r in deg_rows:
+        odo = float(r.get("odometer_start") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        dist = float(r.get("distance_km") or 0)
+        if odo > 0 and energy > 0 and dist > 0:
+            wh_per_km = (energy / dist) * 1000
+            if 50 < wh_per_km < 500:  # Plausible consumption
+                range_100 = BATTERY_CAPACITY_KWH * 1000 / wh_per_km
+                if 200 < range_100 < 600:  # Plausible range
+                    degradation_data.append({
+                        "odo": round(odo, 1),
+                        "range_100": round(range_100, 1),
+                        "date": str(r.get("start_date") or "")[:10]
+                    })
+    
+    # Chart 2: Efficiency vs Temperature Scatter
+    temp_query = """
+        SELECT outside_temp_avg, energy_consumed_kwh, distance_km, start_date
+        FROM drives
+        WHERE outside_temp_avg IS NOT NULL 
+          AND energy_consumed_kwh > 0 
+          AND distance_km > 0
+          AND start_date >= ?
+    """
+    params2 = [cutoff]
+    if end:
+        temp_query += " AND start_date <= ?"
+        params2.append(end)
+    temp_query += " ORDER BY start_date ASC"
+    
+    temp_rows = [dict(r) for r in db.execute(temp_query, params2).fetchall()]
+    
+    temp_efficiency_data = []
+    for r in temp_rows:
+        temp = float(r.get("outside_temp_avg") or 0)
+        energy = float(r.get("energy_consumed_kwh") or 0)
+        dist = float(r.get("distance_km") or 0)
+        if dist > 0:
+            wh_per_km = (energy / dist) * 1000
+            if 50 < wh_per_km < 500:  # Plausibilität
+                temp_efficiency_data.append({
+                    "temp": round(temp, 1),
+                    "wh_km": round(wh_per_km, 1),
+                    "date": str(r.get("start_date") or "")[:10]
+                })
+    
+    return jsonify({
+        "degradation": degradation_data,
+        "temp_efficiency": temp_efficiency_data
+    })
+
+
+@app.route("/api/nerd/vampire-drain")
+def api_nerd_vampire_drain():
+    """Detail-Tabelle für Vampire Drain (Park-Sessions)."""
+    days = request.args.get("days", 30, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+    
+    db = get_db()
+    
+    query = """
+        SELECT start_date, end_date, soc_start, soc_end, distance_km
+        FROM drives 
+        WHERE start_date >= ?
+    """
+    params = [cutoff]
+    if end:
+        query += " AND start_date <= ?"
+        params.append(end)
+    query += " ORDER BY start_date ASC"
+    
+    drives = [dict(r) for r in db.execute(query, params).fetchall()]
+    
+    park_sessions = []
+    for i in range(len(drives) - 1):
+        current = drives[i]
+        next_drive = drives[i + 1]
+        
+        try:
+            end_soc = float(current.get("soc_end") or 0)
+            start_soc = float(next_drive.get("soc_start") or 0)
+            end_time = datetime.fromisoformat(str(current.get("end_date") or "").replace("Z", "")[:19])
+            start_time = datetime.fromisoformat(str(next_drive.get("start_date") or "").replace("Z", "")[:19])
+            
+            if end_soc > 0 and start_soc > 0 and start_time > end_time:
+                hours_parked = (start_time - end_time).total_seconds() / 3600.0
+                if hours_parked > 1 and hours_parked < 168:
+                    soc_loss = end_soc - start_soc
+                    if soc_loss >= 0:
+                        # Geschätzter Verlust in kWh (Model Y ~75kWh nutzbar)
+                        est_kwh = (soc_loss / 100) * 75
+                        park_sessions.append({
+                            "date": start_time.strftime("%Y-%m-%d %H:%M"),
+                            "duration_h": round(hours_parked, 1),
+                            "soc_loss_pct": round(soc_loss, 2),
+                            "est_loss_kwh": round(est_kwh, 2),
+                            "sentry_mode": "Unbekannt"  # TM speichert das nicht direkt
+                        })
+        except Exception:
+            continue
+    
+    # Neueste zuerst
+    park_sessions.reverse()
+    
+    return jsonify({"park_sessions": park_sessions[:50]})  # Top 50
 
 
 if __name__ == "__main__":

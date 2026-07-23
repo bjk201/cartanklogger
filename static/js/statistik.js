@@ -1,9 +1,10 @@
-// statistik.js - Statistik Seite mit 4 Charts + Chart-Type Selector + Moving Average
+// statistik.js - Statistik Seite mit 4 Charts + Chart-Type Selector + Moving Average Toggle
 
 let currentDays = 365;
 let currentFrom = null;
 let currentTo = null;
 let currentChartType = 'line'; // line, bar, pie
+let showMovingAverage = true; // Moving Average Toggle
 const MOVING_AVG_WINDOW = 7;
 
 function buildApiParams() {
@@ -23,6 +24,7 @@ async function loadStats() {
     
     renderKPIs(stats);
     renderCharts(charts);
+    renderDataQualityWarnings(stats);
     updateRangeLabel();
   } catch (e) {
     console.error('loadStats failed', e);
@@ -41,7 +43,7 @@ function renderKPIs(s) {
   const cards = [
     {icon:'💶', t:'Kosten diesen Monat', v:fmtEUR(costThisMonth), s:curMonth ? curMonth.month : '–', c:'success'},
     {icon:'⚡', t:'Geladene Energie', v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:'primary'},
-    {icon:'🛣️', t:'Gefahrene km', v:(t.distance_km||0).toLocaleString('de-DE')+' km', s:'Tacho-Stand (max)', c:'secondary'},
+    {icon:'🛣️', t:'Gefahrene km', v:(t.total_km||0).toLocaleString('de-DE')+' km', s:'Summe Tagesdistanzen', c:'secondary'},
     {icon:'💡', t:'Kosten / 100 km', v:fmtEUR(t.tco_per_100km)+' /100km', s:`TCO ${fmtEUR(t.tco)}`, c:'warning'},
     {icon:'🔋', t:'Verbrauch', v:fmtKwh(t.consumption_kwh_per_100km)+' /100km', s:`Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)} (geschätzt)`, c:'info'},
     {icon:'☀️', t:'PV-Anteil', v:fmtPct(h.pv_share_pct), s:`${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(homeKwh)}`, c:'success'},
@@ -65,41 +67,53 @@ function renderCharts(charts) {
   const s = charts.series || [];
   const kpis = charts.kpis || {};
   
+  // Store globally for pie chart access
+  window.__chartsData = charts;
+  
   // Prepare data arrays
   const labels = s.map(d => d.day);
   const consData = s.map(d => d.consumption);
   const priceData = s.map(d => d.price_per_kwh);
   const cost100Data = s.map(d => d.cost_per_100);
-  const kmData = s.map(d => d.cum_km);
+  // Don't use cumulative km for moving average - use daily km instead
+  const dailyKmData = s.map(d => d.km);
   
   // Calculate moving averages
   const consMA = movingAverage(consData, MOVING_AVG_WINDOW);
   const priceMA = movingAverage(priceData, MOVING_AVG_WINDOW);
   const cost100MA = movingAverage(cost100Data, MOVING_AVG_WINDOW);
-  const kmMA = movingAverage(kmData, MOVING_AVG_WINDOW);
+  // Daily km MA makes sense, cumulative doesn't
+  const dailyKmMA = movingAverage(dailyKmData, MOVING_AVG_WINDOW);
   
   renderChart('chartCons', 'Verbrauch (kWh/100 km)', labels, consData, consMA, kpis.avg_consumption || 0, 'kWh/100km', '#198754');
   renderChart('chartPrice', 'Energiepreis (€/kWh)', labels, priceData, priceMA, kpis.avg_price_kwh || 0, '€/kWh', '#0d6efd');
   renderChart('chartCost100', 'Kosten (€/100 km)', labels, cost100Data, cost100MA, kpis.avg_cost_100 || 0, '€/100km', '#ffc107');
-  renderChart('chartKm', 'Gesamtkilometer (kumuliert)', labels, kmData, kmMA, kpis.total_km || 0, 'km', '#6f42c1');
+  // For km chart, show daily km with MA, but avg = total_km
+  renderChart('chartKm', 'Tageskilometer', labels, dailyKmData, dailyKmMA, kpis.total_km || 0, 'km', '#6f42c1');
   
-  // Add chart type selector to each card
+  // Add chart type selector and MA toggle to each card
   ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(id => {
     addChartTypeSelector(id);
+    addMAToggle(id);
   });
+  
+  // Setup event listeners for MA toggle buttons
+  setupMAToggleButtons();
+  setupChartTypeButtons();
 }
 
 function movingAverage(data, window) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
-    if (data[i] == null || data[i] === 0) {
+    if (data[i] == null) {
       result.push(null);
       continue;
     }
+    // 0 is a valid value, only null/undefined means "no data"
     if (i < window - 1) {
       result.push(null); // Not enough data for full window
     } else {
-      const slice = data.slice(i - window + 1, i + 1).filter(v => v != null && v !== 0);
+      const slice = data.slice(i - window + 1, i + 1).filter(v => v != null);
       result.push(slice.length ? slice.reduce((a, b) => a + b, 0) / slice.length : null);
     }
   }
@@ -119,17 +133,50 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
   const chartType = isPie ? 'doughnut' : (isBar ? 'bar' : 'line');
   
   if (isPie) {
-    // For pie: show distribution of last 30 days
-    const recentData = data.slice(-30).filter(v => v != null && v > 0);
-    const sum = recentData.reduce((a, b) => a + b, 0);
-    const avg = sum / recentData.length || 0;
+    // For pie: show meaningful distribution based on chart type
+    let pieData, pieLabels;
+    
+    if (canvasId === 'chartCons') {
+      // Consumption: AC vs DC split (from ac_kwh, dc_kwh in series)
+      const s = window.__chartsData?.series || [];
+      const acSum = s.reduce((a, d) => a + (d.ac_kwh || 0), 0);
+      const dcSum = s.reduce((a, d) => a + (d.dc_kwh || 0), 0);
+      pieLabels = ['AC Laden', 'DC Laden'];
+      pieData = [acSum, dcSum];
+    } else if (canvasId === 'chartPrice') {
+      // Price: Home vs External weighted
+      const s = window.__chartsData?.series || [];
+      const homeSum = s.reduce((a, d) => a + (d.home_kwh || 0), 0);
+      const extSum = s.reduce((a, d) => a + (d.ext_kwh || 0), 0);
+      pieLabels = ['Zuhause', 'Extern'];
+      pieData = [homeSum, extSum];
+    } else if (canvasId === 'chartCost100') {
+      // Cost: Home vs External
+      const s = window.__chartsData?.series || [];
+      const homeCost = s.reduce((a, d) => a + (d.home_cost || 0), 0);
+      const extCost = s.reduce((a, d) => a + (d.ext_cost || 0), 0);
+      pieLabels = ['Zuhause', 'Extern'];
+      pieData = [homeCost, extCost];
+    } else if (canvasId === 'chartKm') {
+      // KM: don't show pie for cumulative, show line instead
+      return renderChart(canvasId, title, labels, data, maData, avgValue, unit, color);
+    }
+    
+    // Filter out zero/empty
+    const valid = pieData.map((v, i) => ({v, l: pieLabels[i]})).filter(x => x.v > 0);
+    if (valid.length === 0) {
+      // No data, show empty state
+      ctx.innerHTML = '<div class="text-muted small p-2">Keine Daten für Kreisdiagramm</div>';
+      return;
+    }
+    
     window[canvasId + 'Chart'] = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Durchschnitt', 'Rest'],
+        labels: valid.map(x => x.l),
         datasets: [{
-          data: [avg, sum - avg],
-          backgroundColor: [color, '#e9ecef'],
+          data: valid.map(x => x.v),
+          backgroundColor: [color, '#0dcaf0', '#ffc107', '#6f42c1', '#fd7e14', '#20c997'],
           borderWidth: 0
         }]
       },
@@ -138,7 +185,7 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
         maintainAspectRatio: true,
         plugins: {
           legend: { position: 'bottom' },
-          title: { display: true, text: `${title} (Ø ${avg.toFixed(2)} ${unit})` }
+          title: { display: true, text: `${title} (Summe: ${valid.reduce((a,x)=>a+x.v,0).toFixed(1)} ${unit})` }
         }
       }
     });
@@ -161,8 +208,8 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
     }
   ];
   
-  // Add moving average line (only for line charts)
-  if (!isBar && maData.some(v => v != null)) {
+  // Add moving average line (only for line charts, and only if enabled)
+  if (!isBar && showMovingAverage && maData.some(v => v != null)) {
     datasets.push({
       label: `Ø ${MOVING_AVG_WINDOW}T`,
       data: maData,
@@ -175,6 +222,34 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
       yAxisID: 'y',
       order: 1
     });
+  }
+  
+  // Add overall average line (horizontal) for both line and bar charts
+  if (avgValue != null && avgValue !== 0) {
+    const avgLinePlugin = {
+      id: 'avgLine',
+      beforeDraw: (chart) => {
+        const ctx = chart.ctx;
+        const yScale = chart.scales.y;
+        const y = yScale.getPixelForValue(avgValue);
+        
+        ctx.save();
+        ctx.strokeStyle = '#6c757d';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(chart.chartArea.left, y);
+        ctx.lineTo(chart.chartArea.right, y);
+        ctx.stroke();
+        
+        // Label
+        ctx.fillStyle = '#6c757d';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Ø ${Number(avgValue).toFixed(2)} ${unit}`, chart.chartArea.left + 5, y - 3);
+        ctx.restore();
+      }
+    };
   }
   
   window[canvasId + 'Chart'] = new Chart(ctx, {
@@ -203,7 +278,8 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
           ticks: { font: { size: 9 } },
           beginAtZero: true
         }
-      }
+      },
+      plugins: avgValue != null && avgValue !== 0 ? [avgLinePlugin] : []
     }
   });
 }
@@ -232,10 +308,96 @@ function addChartTypeSelector(canvasId) {
   header.style.alignItems = 'center';
   header.style.justifyContent = 'space-between';
   header.appendChild(selector);
+}
+
+function addMAToggle(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
   
-  selector.querySelector('select').addEventListener('change', (e) => {
-    currentChartType = e.target.value;
-    loadStats(); // Re-render all charts
+  const card = canvas.closest('.card');
+  if (!card || card.querySelector('.ma-toggle')) return;
+  
+  const header = card.querySelector('.card-header');
+  if (!header) return;
+  
+  // Check if MA toggle button already exists (added in template)
+  const existingBtn = header.querySelector('[id^="ma"]');
+  if (existingBtn) {
+    existingBtn.classList.add('ma-toggle');
+    existingBtn.classList.toggle('active', showMovingAverage);
+    existingBtn.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
+    existingBtn.textContent = showMovingAverage ? '📈' : '📉';
+    return;
+  }
+  
+  const toggle = document.createElement('button');
+  toggle.className = 'btn btn-outline-secondary btn-sm ma-toggle';
+  toggle.style.minWidth = '32px';
+  toggle.dataset.chart = canvasId;
+  toggle.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
+  toggle.textContent = showMovingAverage ? '📈' : '📉';
+  toggle.classList.toggle('active', showMovingAverage);
+  
+  header.appendChild(toggle);
+}
+
+function setupMAToggleButtons() {
+  document.querySelectorAll('.ma-toggle, [id^="ma"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showMovingAverage = !showMovingAverage;
+      
+      // Update all MA toggle buttons
+      document.querySelectorAll('.ma-toggle, [id^="ma"]').forEach(b => {
+        b.classList.toggle('active', showMovingAverage);
+        b.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
+        b.textContent = showMovingAverage ? '📈' : '📉';
+      });
+      
+      loadStats(); // Re-render all charts
+    });
+  });
+}
+
+function setupChartTypeButtons() {
+  document.querySelectorAll('[id^="ct"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const types = ['line', 'bar', 'pie'];
+      const currentIndex = types.indexOf(currentChartType);
+      const nextIndex = (currentIndex + 1) % types.length;
+      currentChartType = types[nextIndex];
+      
+      // Update all chart type buttons
+      document.querySelectorAll('[id^="ct"]').forEach(b => {
+        const icons = { line: '📈', bar: '📊', pie: '🥧' };
+        b.textContent = icons[currentChartType];
+        b.title = `Diagrammtyp: ${currentChartType}`;
+      });
+      
+      // Also update any dropdown selectors
+      document.querySelectorAll('.chart-type-selector select').forEach(sel => {
+        sel.value = currentChartType;
+      });
+      
+      loadStats(); // Re-render all charts
+    });
+  });
+  
+  // Also handle dropdown selectors
+  document.querySelectorAll('.chart-type-selector select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      currentChartType = e.target.value;
+      // Update all dropdowns
+      document.querySelectorAll('.chart-type-selector select').forEach(s => s.value = currentChartType);
+      // Update icon buttons
+      const icons = { line: '📈', bar: '📊', pie: '🥧' };
+      document.querySelectorAll('[id^="ct"]').forEach(b => {
+        b.textContent = icons[currentChartType];
+        b.title = `Diagrammtyp: ${currentChartType}`;
+      });
+      loadStats();
+    });
   });
 }
 
@@ -274,9 +436,376 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
+  // Listen to global date range changes
+  window.addEventListener('globalRangeChange', (e) => {
+    const params = e.detail;
+    if (params.startsWith('from=')) {
+      const urlParams = new URLSearchParams(params);
+      currentFrom = urlParams.get('from');
+      currentTo = urlParams.get('to');
+      currentDays = 365; // fallback
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+      if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = currentFrom;
+      if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = currentTo;
+    } else {
+      const urlParams = new URLSearchParams(params);
+      currentDays = parseInt(urlParams.get('days'), 10);
+      currentFrom = null;
+      currentTo = null;
+      document.getElementById('rangeFrom').value = '';
+      document.getElementById('rangeTo').value = '';
+      document.querySelectorAll('[data-days]').forEach(b => {
+        if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+    }
+    loadStats();
+  });
+  
   loadStats();
 });
 
 const fmtEUR = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
 const fmtKwh = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' kWh';
 const fmtPct = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {maximumFractionDigits:1}) + ' %';
+
+/* ============================================================
+   FAHRTENVERGLEICH (Drive Comparison)
+   ============================================================ */
+
+let driveCompareData = [];
+
+async function initDriveCompare() {
+  const loadBtn = document.getElementById('driveCompareLoad');
+  const runBtn = document.getElementById('driveCompareRun');
+  const selectAll = document.getElementById('driveSelectAll');
+  const tbody = document.querySelector('#tblDrives tbody');
+  const resultDiv = document.getElementById('driveCompareResult');
+  const fromEl = document.getElementById('driveCompareFrom');
+  const toEl = document.getElementById('driveCompareTo');
+  const searchEl = document.getElementById('driveCompareSearch');
+  
+  if (!loadBtn || !tbody) return; // Not on statistik page
+
+  // Set default date range (last 90 days)
+  const today = new Date();
+  const ago90 = new Date(today.getTime() - 90 * 86400000);
+  fromEl.value = ago90.toISOString().slice(0, 10);
+  toEl.value = today.toISOString().slice(0, 10);
+
+  loadBtn.addEventListener('click', async () => {
+    const from = fromEl.value || null;
+    const to = toEl.value || null;
+    const days = from && to ? null : 90;
+    
+    try {
+      const params = new URLSearchParams();
+      if (days) params.set('days', days);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      
+      loadBtn.disabled = true;
+      loadBtn.textContent = 'Lädt...';
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Lädt Fahrten...</td></tr>';
+      
+      const resp = await fetch(`/api/drives?${params.toString()}`, {credentials: 'same-origin'});
+      const data = await resp.json();
+      
+      driveCompareData = data.drives || [];
+      renderDriveTable(driveCompareData);
+      
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Laden';
+    } catch (e) {
+      console.error('Drive compare load failed', e);
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Fehler beim Laden</td></tr>';
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Laden';
+    }
+  });
+
+  searchEl.addEventListener('input', () => {
+    const q = searchEl.value.toLowerCase();
+    renderDriveTable(driveCompareData.filter(d => 
+      (d.route || '').toLowerCase().includes(q)
+    ));
+  });
+
+  selectAll.addEventListener('change', () => {
+    tbody.querySelectorAll('input[type="checkbox"][data-drive-id]').forEach(cb => {
+      cb.checked = selectAll.checked;
+    });
+    updateCompareButton();
+  });
+
+  tbody.addEventListener('change', (e) => {
+    if (e.target.matches('input[type="checkbox"][data-drive-id]')) {
+      updateCompareButton();
+    }
+  });
+
+  runBtn.addEventListener('click', async () => {
+    const selected = Array.from(tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked'))
+      .map(cb => parseInt(cb.dataset.driveId, 10));
+    
+    if (selected.length < 2) {
+      alert('Bitte mindestens 2 Fahrten auswählen');
+      return;
+    }
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Vergleicht...';
+    resultDiv.style.display = 'none';
+    resultDiv.innerHTML = '';
+
+    try {
+      const resp = await fetch(`/api/drives/compare?ids=${selected.join(',')}`, {credentials: 'same-origin'});
+      const data = await resp.json();
+      renderDriveCompareResult(data);
+      resultDiv.style.display = 'block';
+    } catch (e) {
+      console.error('Compare failed', e);
+      resultDiv.innerHTML = '<div class="alert alert-danger">Vergleich fehlgeschlagen</div>';
+      resultDiv.style.display = 'block';
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Vergleichen';
+    }
+  });
+}
+
+function renderDriveTable(drives) {
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selectAll = document.getElementById('driveSelectAll');
+  if (!tbody) return;
+  
+  selectAll.checked = false;
+  
+  if (!drives.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Keine Fahrten im Zeitraum</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = drives.map(d => `
+    <tr>
+      <td><input type="checkbox" data-drive-id="${d.id}" class="form-check-input"></td>
+      <td>${d.start_date ? d.start_date.slice(0,10) : '–'}</td>
+      <td>${d.route || '–'}</td>
+      <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+      <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) + ' min' : '–'}</td>
+      <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+      <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+      <td class="text-end">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+      <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
+      <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
+    </tr>
+  `).join('');
+}
+
+function updateCompareButton() {
+  const runBtn = document.getElementById('driveCompareRun');
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selected = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked').length;
+  runBtn.disabled = selected < 2;
+  runBtn.textContent = `Vergleichen (${selected})`;
+}
+
+function renderDriveCompareResult(data) {
+  const resultDiv = document.getElementById('driveCompareResult');
+  if (!resultDiv) return;
+  
+  const drives = data.drives || [];
+  const averages = data.averages || {};
+  const best = data.best_consumption_id;
+  const worst = data.worst_consumption_id;
+
+  let html = `
+    <h6>Vergleichsergebnis</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-3">
+        <thead class="table-light">
+          <tr>
+            <th>Kennzahl</th>
+            <th>Ø</th>
+            ${drives.map(d => `
+              <th class="${d.is_best ? 'bg-success-subtle' : ''} ${d.is_worst ? 'bg-danger-subtle' : ''}">
+                ${d.start_date ? d.start_date.slice(0,10) : ''}
+                ${d.is_best ? ' 🏆' : ''}
+                ${d.is_worst ? ' ⚠️' : ''}
+              </th>
+            `).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Datum</td><td>–</td>${drives.map(d => `<td>${d.start_date ? d.start_date.slice(0,10) : ''}</td>`).join('')}</tr>
+          <tr><td>Route</td><td>–</td>${drives.map(d => `<td>${d.route || '–'}</td>`).join('')}</tr>
+          <tr><td>km</td><td>${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>Dauer (min)</td><td>${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>${drives.map(d => `<td>${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>`).join('')}</tr>
+          <tr><td>Ø km/h</td><td>${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>kWh</td><td>${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td><strong>kWh/100km</strong></td><td><strong>${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</strong></td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle fw-bold' : ''} ${d.id === worst ? 'bg-danger-subtle fw-bold' : ''}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>SoC Δ</td><td>${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>${drives.map(d => `<td>${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>`).join('')}</tr>
+          <tr><td>Temp °C</td><td>${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>${drives.map(d => `<td>${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    `;
+
+  // Add bar chart for consumption comparison
+  if (drives.length > 0) {
+    html += `
+      <div class="card mb-3">
+        <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
+        <div class="card-body">
+          <canvas id="driveConsChart" height="120"></canvas>
+        </div>
+      </div>
+    `;
+
+    resultDiv.innerHTML = html;
+
+    // Render bar chart
+    const ctx = document.getElementById('driveConsChart');
+    if (ctx && window.Chart) {
+      const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
+      const consData = drives.map(d => d.cons_per_100);
+      const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
+      
+      if (window.driveConsChart) window.driveConsChart.destroy();
+      window.driveConsChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh/100km' } } }
+        }
+      });
+    }
+  } else {
+    resultDiv.innerHTML = '<div class="alert alert-warning">Keine Vergleichsdaten</div>';
+  }
+}
+
+// Initialize drive compare when on statistik page
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.getElementById('driveCompareSection')) {
+    initDriveCompare();
+  }
+});
+
+/* ============================================================
+   DATA QUALITY & EXPORT FEATURES
+   ============================================================ */
+
+// Show data quality warnings
+function renderDataQualityWarnings(stats) {
+  const warnings = [];
+  const t = stats.totals || {};
+  const h = stats.home || {};
+  const e = stats.external || {};
+  
+  // Sessions without price
+  const homeNoPrice = (h.count || 0) > 0 && (h.grid_cost || 0) === 0 && (h.pv_cost || 0) === 0;
+  const extNoPrice = (e.count || 0) > 0 && (e.cost || 0) === 0;
+  if (homeNoPrice || extNoPrice) {
+    warnings.push({type: 'warning', text: 'Einige Ladevorgänge haben keine Preisdaten – Kosten werden geschätzt.'});
+  }
+  
+  // Unmatched home charges
+  if (h.count && t.ext_kwh > 0 && t.home_kwh === 0) {
+    warnings.push({type: 'info', text: 'Keine Home-Ladungen (EVCC) im Zeitraum – Extern-Daten evtl. unvollständig.'});
+  }
+  
+  // Missing km data
+  if (t.distance_km === 0 && (t.kwh || 0) > 0) {
+    warnings.push({type: 'warning', text: 'Keine Kilometerdaten – Verbrauch/Kosten pro 100km können nicht berechnet werden.'});
+  }
+  
+  // Implausible consumption
+  if (t.consumption_kwh_per_100km && (t.consumption_kwh_per_100km > 50 || t.consumption_kwh_per_100km < 5)) {
+    warnings.push({type: 'warning', text: `Verbrauch ${t.consumption_kwh_per_100km.toFixed(1)} kWh/100km wirkt unplausibel – Odometer-Daten prüfen.`});
+  }
+  
+  if (!warnings.length) return;
+  
+  const container = document.getElementById('dataQualityWarnings') || createWarningsContainer();
+  container.innerHTML = warnings.map(w => `
+    <div class="alert alert-${w.type === 'error' ? 'danger' : w.type} alert-dismissible fade show py-2 mb-2" role="alert">
+      ${w.text}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `).join('');
+  container.style.display = 'block';
+}
+
+function createWarningsContainer() {
+  const container = document.createElement('div');
+  container.id = 'dataQualityWarnings';
+  container.style.display = 'none';
+  // Insert after statsKpis
+  const statsKpis = document.getElementById('statsKpis');
+  if (statsKpis && statsKpis.parentNode) {
+    statsKpis.parentNode.insertBefore(container, statsKpis.nextSibling);
+  }
+  return container;
+}
+
+// CSV Export
+function exportSessionsCSV(type) {
+  // type: 'home', 'external', 'all', 'drives'
+  let url = `/api/export/csv?type=${type}`;
+  if (currentFrom && currentTo) {
+    url += `&from=${encodeURIComponent(currentFrom)}&to=${encodeURIComponent(currentTo)}`;
+  } else {
+    url += `&days=${currentDays}`;
+  }
+  window.location.href = url;
+}
+
+function addExportButtons() {
+  const header = document.querySelector('.page-header, .card-header:has(#rangeLabel)');
+  if (!header || document.getElementById('exportBtnGroup')) return;
+  
+  const btnGroup = document.createElement('div');
+  btnGroup.id = 'exportBtnGroup';
+  btnGroup.className = 'btn-group btn-group-sm ms-2';
+  btnGroup.innerHTML = `
+    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Export CSV
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" href="#" data-export="home">Zuhause (EVCC)</a></li>
+      <li><a class="dropdown-item" href="#" data-export="external">Extern (TeslaMate)</a></li>
+      <li><a class="dropdown-item" href="#" data-export="all">Alle Ladevorgänge</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="#" data-export="drives">Fahrten</a></li>
+    </ul>
+  `;
+  header.appendChild(btnGroup);
+  
+  btnGroup.querySelectorAll('[data-export]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      exportSessionsCSV(e.target.dataset.export);
+    });
+  });
+}
+
+// Initialize on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+  // Add export buttons to pages that have stats
+  if (document.getElementById('statsKpis') || document.getElementById('summaryCards')) {
+    addExportButtons();
+  }
+});
+
+// Update renderKPIs to also show data quality warnings
+const originalRenderKPIs = renderKPIs;
+renderKPIs = function(stats) {
+  originalRenderKPIs(stats);
+  renderDataQualityWarnings(stats);
+}();

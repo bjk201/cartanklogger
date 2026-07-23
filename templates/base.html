@@ -15,6 +15,8 @@
             var saved = localStorage.getItem('theme');
             if (saved === 'dark') {
                 document.documentElement.setAttribute('data-theme', 'dark');
+            } else if (saved === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
             }
         } catch (e) {}
     })();
@@ -22,7 +24,7 @@
 </head>
 <body>
 
-<header class="app-header sticky-top">
+<header class="app-header fixed-top">
   <div class="container-fluid px-3">
     <div class="d-flex align-items-center justify-content-between py-2">
       <!-- Mobile sidebar toggle -->
@@ -37,27 +39,28 @@
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
 
-<div class="container-fluid">
+<div class="container-fluid pt-4">
   <div class="row g-0">
     <!-- SIDEBAR -->
-    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar vh-100" id="sidebar" style="position: sticky; top: 0; height: calc(100vh - 56px); overflow-y: auto;">
-      <ul class="nav flex-column">
-        <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">📋 Übersicht</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">📊 Statistik</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">Zuhause (EVCC)</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">Extern (TeslaMate)</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">⚙️ Verwaltung</a></li>
-      </ul>
-      
-      <!-- Theme Toggle at bottom of sidebar -->
-      <div class="theme-toggle mt-auto pt-3 border-top">
-        <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggle">
-          <i class="bi bi-moon-fill me-2" id="themeIcon"></i>
-          <span id="themeLabel">Dark Mode</span>
-        </button>
-      </div>
-    </nav>
+    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar vh-100" id="sidebar" style="position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;">
+          <ul class="nav flex-column">
+            <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">📋 Übersicht</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">📊 Statistik</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/analytics' %}active{% endif %}" href="/analytics">🧪 Nerd Analytics</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">Zuhause (EVCC)</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">Extern (TeslaMate)</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a></li>
+            <li class="nav-item"><a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">⚙️ Verwaltung</a></li>
+          </ul>
+     
+          <!-- Theme Toggle at bottom of sidebar -->
+          <div class="theme-toggle mt-auto pt-3 border-top">
+            <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggle">
+              <i class="bi bi-moon-fill me-2" id="themeIcon"></i>
+              <span id="themeLabel">Dark Mode</span>
+            </button>
+          </div>
+        </nav>
 
     <!-- MAIN CONTENT -->
     <main class="col-md-9 col-lg-10 col-xl-10 py-3">
@@ -141,7 +144,117 @@ function initSidebar() {
 document.addEventListener('DOMContentLoaded', function() {
   initTheme();
   initSidebar();
+  initGlobalDateRange();
 });
+
+// Global shared date range state
+let globalDateRange = {
+  days: 365,
+  from: null,
+  to: null
+};
+
+function getGlobalRangeParams() {
+  if (globalDateRange.from && globalDateRange.to) {
+    return `from=${encodeURIComponent(globalDateRange.from)}&to=${encodeURIComponent(globalDateRange.to)}`;
+  }
+  return `days=${globalDateRange.days}`;
+}
+
+function updateGlobalRangeLabel() {
+  const el = document.getElementById('globalRangeLabel');
+  if (!el) return;
+  if (globalDateRange.from && globalDateRange.to) {
+    el.textContent = `${globalDateRange.from} bis ${globalDateRange.to}`;
+  } else if (globalDateRange.days >= 9999) {
+    el.textContent = 'Alle Daten';
+  } else {
+    el.textContent = `Letzte ${globalDateRange.days} Tage`;
+  }
+}
+
+function initGlobalDateRange() {
+  // Load saved state
+  try {
+    const saved = localStorage.getItem('globalDateRange');
+    if (saved) {
+      globalDateRange = JSON.parse(saved);
+    }
+  } catch (e) {}
+  
+  // Update button states
+  document.querySelectorAll('[data-days]').forEach(btn => {
+    const days = parseInt(btn.getAttribute('data-days'), 10);
+    if (globalDateRange.from && globalDateRange.to) {
+      btn.classList.remove('active');
+    } else if (days === globalDateRange.days) {
+      btn.classList.add('active');
+    }
+  });
+  
+  // Update date inputs
+  const fromEl = document.getElementById('globalRangeFrom');
+  const toEl = document.getElementById('globalRangeTo');
+  if (fromEl && globalDateRange.from) fromEl.value = globalDateRange.from;
+  if (toEl && globalDateRange.to) toEl.value = globalDateRange.to;
+  
+  updateGlobalRangeLabel();
+  
+  // Day buttons
+  document.querySelectorAll('[data-days]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      globalDateRange.days = parseInt(btn.getAttribute('data-days'), 10);
+      globalDateRange.from = null;
+      globalDateRange.to = null;
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      saveGlobalRange();
+      updateGlobalRangeLabel();
+      notifyRangeChange();
+    });
+  });
+  
+  // Apply custom range
+  const applyBtn = document.getElementById('globalRangeApply');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', () => {
+      const from = fromEl?.value;
+      const to = toEl?.value;
+      if (!from || !to) {
+        alert('Bitte Von- und Bis-Datum wählen.');
+        return;
+      }
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+      globalDateRange.from = from;
+      globalDateRange.to = to;
+      saveGlobalRange();
+      updateGlobalRangeLabel();
+      notifyRangeChange();
+    });
+  }
+}
+
+function saveGlobalRange() {
+  try {
+    localStorage.setItem('globalDateRange', JSON.stringify(globalDateRange));
+  } catch (e) {}
+}
+
+// Notify all pages about range change
+function notifyRangeChange() {
+  // Dispatch custom event that pages can listen to
+  window.dispatchEvent(new CustomEvent('globalRangeChange', { detail: getGlobalRangeParams() }));
+  
+  // Also trigger reload on current page if it has load function
+  if (typeof loadAll === 'function') loadAll();
+  if (typeof loadOverview === 'function') loadOverview();
+  if (typeof loadStats === 'function') loadStats();
+  if (typeof loadEVCC === 'function') loadEVCC();
+  if (typeof loadTM === 'function') loadTM();
+  if (typeof loadExtra === 'function') loadExtra();
+}
 </script>
 {% block scripts %}{% endblock %}
 </body>

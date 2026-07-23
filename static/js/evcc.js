@@ -6,6 +6,10 @@ let currentPage = 1;
 const PAGE_SIZE = 25;
 
 function buildApiParams() {
+  // Use global date range if available
+  if (typeof getGlobalRangeParams === 'function') {
+    return getGlobalRangeParams();
+  }
   if (currentFrom && currentTo) {
     return `from=${currentFrom}&to=${currentTo}&page=${currentPage}&per_page=${PAGE_SIZE}`;
   }
@@ -118,7 +122,19 @@ function renderPagination(totalRows) {
 function updateRangeLabel() {
   const el = document.getElementById("rangeLabel");
   if (!el) return;
-  el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  
+  // Try to get global range state
+  if (typeof globalDateRange !== 'undefined') {
+    if (globalDateRange.from && globalDateRange.to) {
+      el.textContent = `${globalDateRange.from} bis ${globalDateRange.to}`;
+    } else if (globalDateRange.days >= 9999) {
+      el.textContent = 'Alle Daten';
+    } else {
+      el.textContent = `Letzte ${globalDateRange.days} Tage`;
+    }
+  } else {
+    el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -151,6 +167,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  
+  // Listen for global range changes
+  window.addEventListener('globalRangeChange', () => {
+    loadEVCC();
+  });
   
   loadEVCC();
 });
