@@ -9,7 +9,7 @@ function updateRangeLabel() {
 
 async function loadTM() {
   try {
-    const resp = await fetch(`/api/sessions?days=${currentDays}`);
+    const resp = await fetch(`/api/sessions?days=${currentDays}`, {credentials: "same-origin"});
     const data = await resp.json();
     renderTM(data.external || []);
     updateRangeLabel();

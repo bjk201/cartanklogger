@@ -9,7 +9,7 @@ function updateRangeLabel() {
 
 async function loadExtra() {
   try {
-    const resp = await fetch('/api/extra-costs');
+    const resp = await fetch('/api/extra-costs', {credentials: "same-origin"});
     const data = await resp.json();
     renderExtra(data || []);
     updateRangeLabel();

@@ -10,7 +10,7 @@ function updateRangeLabel() {
 
 async function loadEVCC() {
   try {
-    const resp = await fetch(`/api/sessions?days=${currentDays}`);
+    const resp = await fetch(`/api/sessions?days=${currentDays}`, {credentials: "same-origin"});
     const data = await resp.json();
     renderEVCC(data.home || []);
     updateRangeLabel();

@@ -4,9 +4,9 @@ let currentDays = 365;
 async function loadOverview() {
   try {
     const [merged, stats, charts] = await Promise.all([
-      fetch(`/api/merged?days=${currentDays}`).then(r => r.json()),
-      fetch(`/api/stats?days=${currentDays}`).then(r => r.json()),
-      fetch(`/api/charts?days=${currentDays}`).then(r => r.json())
+      fetch(`/api/merged?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/stats?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/charts?days=${currentDays}`, {credentials: "same-origin"}).then(r => r.json())
     ]);
     
     renderMergedTable(merged);

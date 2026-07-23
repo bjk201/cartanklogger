@@ -202,7 +202,7 @@ const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",curr
 // --- CSRF: Token laden + fetch-Helfer ---
 let _csrf = "";
 async function ensureCsrf() {
-  try { const d = await (await fetch("/api/csrf")).json(); _csrf = d.csrf_token; }
+  try { const d = await (await fetch("/api/csrf", {credentials: "same-origin"})).json(); _csrf = d.csrf_token; }
   catch (e) { _csrf = document.querySelector('meta[name="csrf-token"]')?.content || ""; }
   if (_csrf) document.querySelector('meta[name="csrf-token"]').content = _csrf;
   return _csrf;
@@ -213,6 +213,7 @@ async function csrfFetch(url, opts = {}) {
     "Content-Type": "application/json",
     "X-CSRFToken": _csrf,
   });
+  opts.credentials = "same-origin";
   let res = await fetch(url, opts);
   if (res.status === 403 && (await res.clone().json().catch(()=>({}))).error?.includes("CSRF")) {
     _csrf = "";
@@ -224,7 +225,7 @@ async function csrfFetch(url, opts = {}) {
 }
 
 async function loadCfg() {
-  const c = await (await fetch("/api/config")).json();
+  const c = await (await fetch("/api/config", {credentials: "same-origin"})).json();
   $("evcc_host").value = c.evcc?.host||"";
   $("evcc_port").value = c.evcc?.port||"";
   $("evcc_password").value = "";
@@ -264,7 +265,7 @@ $("syncEvcc").onclick = () => doSync("/api/sync/evcc","EVCC");
 $("syncTm").onclick = () => doSync("/api/sync/teslamate","TeslaMate");
 
 async function loadPrices() {
-  const rows = await (await fetch("/api/price-periods")).json();
+  const rows = await (await fetch("/api/price-periods", {credentials: "same-origin"})).json();
   const lbl = {grid:"Netz", feedin:"Einspeisung"};
   $("tblPrices").querySelector("tbody").innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${lbl[r.kind]||r.kind}</td><td>${r.valid_from}</td><td>${r.valid_to||"offen"}</td>
@@ -313,7 +314,7 @@ document.addEventListener("click", async (e) => {
 });
 
 async function loadExtras() {
-  const rows = await (await fetch("/api/extra-costs")).json();
+  const rows = await (await fetch("/api/extra-costs", {credentials: "same-origin"})).json();
   const lbl = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
   const tbody = $("tblExtra").querySelector("tbody");
   tbody.innerHTML = rows.map(r => `<tr data-id="${r.id}">
@@ -390,7 +391,7 @@ function srcBadge(r) {
 }
 
 async function loadExtPrices() {
-  const j = await (await fetch("/api/sessions")).json();
+  const j = await (await fetch("/api/sessions", {credentials: "same-origin"})).json();
   $("tblExtPrices").querySelector("tbody").innerHTML = j.external.map(r => `<tr data-id="${r.id}">
     <td>${r.started_at?r.started_at.slice(0,10):""}</td>
     <td>${r.provider||""}</td><td>${r.location_name||r.address||""}</td>
