@@ -39,10 +39,10 @@
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
 
-<div class="container-fluid pt-2">
+<div class="container-fluid pt-0">
   <div class="row g-0">
     <!-- SIDEBAR -->
-    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar vh-100" id="sidebar" style="position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;">
+    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar vh-100 d-none d-md-block" id="sidebar" style="position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;">
           <ul class="nav flex-column">
             <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">📋 Übersicht</a></li>
             <li class="nav-item"><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">📊 Statistik</a></li>

@@ -41,6 +41,11 @@ html[data-theme="dark"] {
   color: var(--text-dark);
 }
 
+html[data-theme="dark"] body {
+  background: var(--bg-dark);
+  color: var(--text-dark);
+}
+
 /* Header */
 .app-header {
   background: var(--bg-header-light);
@@ -181,8 +186,9 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   .app-header { padding: 0.5rem 1rem; }
   .app-header .navbar-brand { font-size: 1.1rem; }
   
-  /* Sidebar - offcanvas on mobile */
+  /* Sidebar - offcanvas on mobile, hidden by default */
   .sidebar { 
+    display: none !important;
     position: fixed;
     top: 56px;
     left: 0;
@@ -201,18 +207,16 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
     background: var(--card-dark);
     border-right-color: var(--border-dark);
   }
-  .sidebar.show { transform: translateX(0); }
+  .sidebar.show {
+    display: block !important;
+    transform: translateX(0);
+  }
   
   /* Main content - full width on mobile */
   main { 
     padding-top: 60px; /* space for fixed header (56px + small gap) */
     width: 100%;
     min-height: calc(100vh - 60px);
-  }
-  
-  /* Ensure content is visible without excessive scrolling */
-  .container-fluid > .row > main {
-    padding-bottom: 1rem;
   }
   
   /* Mobile sidebar toggle button in header */
