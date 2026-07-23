@@ -518,7 +518,8 @@ async function initDriveCompare() {
       const data = await resp.json();
       
       driveCompareData = data.drives || [];
-      renderDriveTable(driveCompareData);
+      window._allDriveCompareData = driveCompareData;
+      renderDriveTablePage(1);
       
       loadBtn.disabled = false;
       loadBtn.textContent = 'Laden';
@@ -532,15 +533,20 @@ async function initDriveCompare() {
 
   searchEl.addEventListener('input', () => {
     const q = searchEl.value.toLowerCase();
-    renderDriveTable(driveCompareData.filter(d => 
+    const filtered = driveCompareData.filter(d => 
       (d.route || '').toLowerCase().includes(q)
-    ));
+    );
+    window._allDriveCompareData = filtered;
+    renderDriveTablePage(1);
   });
 
   selectAll.addEventListener('change', () => {
-    tbody.querySelectorAll('input[type="checkbox"][data-drive-id]').forEach(cb => {
+    const allCheckboxes = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]');
+    allCheckboxes.forEach(cb => {
       cb.checked = selectAll.checked;
     });
+    // Also update checkboxes on other pages by storing the selection state
+    window._driveCompareSelectAll = selectAll.checked;
     updateCompareButton();
   });
 
@@ -587,25 +593,97 @@ function renderDriveTable(drives) {
   
   selectAll.checked = false;
   
-  if (!drives.length) {
+  // Store all drives for pagination
+  window._allDriveCompareData = drives || [];
+  renderDriveTablePage(1);
+}
+
+function renderDriveTablePage(page) {
+  const drives = window._allDriveCompareData || [];
+  const perPage = 10;
+  const totalPages = Math.ceil(drives.length / perPage);
+  const start = (page - 1) * perPage;
+  const end = start + perPage;
+  const pageDrives = drives.slice(start, end);
+  
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selectAll = document.getElementById('driveSelectAll');
+  if (!tbody) return;
+  
+  // Apply global select-all state if set
+  const globalSelectAll = window._driveCompareSelectAll === true;
+  selectAll.checked = globalSelectAll;
+  
+  if (!pageDrives.length) {
     tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Keine Fahrten im Zeitraum</td></tr>';
+  } else {
+    tbody.innerHTML = pageDrives.map(d => `
+      <tr>
+        <td><input type="checkbox" data-drive-id="${d.id}" class="form-check-input" ${globalSelectAll ? 'checked' : ''}></td>
+        <td>${d.start_date ? d.start_date.slice(0,10) : '–'}</td>
+        <td>${d.route || '–'}</td>
+        <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) + ' min' : '–'}</td>
+        <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
+      </tr>
+    `).join('');
+  }
+  
+  // Render pagination
+  renderDrivePagination(page, totalPages);
+}
+
+function renderDrivePagination(currentPage, totalPages) {
+  const pagination = document.getElementById('driveComparePagination');
+  if (!pagination) return;
+  
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
     return;
   }
-
-  tbody.innerHTML = drives.map(d => `
-    <tr>
-      <td><input type="checkbox" data-drive-id="${d.id}" class="form-check-input"></td>
-      <td>${d.start_date ? d.start_date.slice(0,10) : '–'}</td>
-      <td>${d.route || '–'}</td>
-      <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-      <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) + ' min' : '–'}</td>
-      <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-      <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-      <td class="text-end">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-      <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
-      <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
-    </tr>
-  `).join('');
+  
+  let html = '';
+  
+  // Previous button
+  html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+    <a class="page-link" href="#" data-page="${currentPage - 1}" aria-label="Previous">
+      <span aria-hidden="true">&laquo;</span>
+    </a></li>`;
+  
+  // Page numbers
+  let startPage = Math.max(1, currentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+      <a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+  }
+  
+  // Next button
+  html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+    <a class="page-link" href="#" data-page="${currentPage + 1}" aria-label="Next">
+      <span aria-hidden="true">&raquo;</span>
+    </a></li>`;
+  
+  pagination.innerHTML = html;
+  
+  // Add click handlers
+  pagination.querySelectorAll('.page-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = parseInt(link.dataset.page, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages && page !== currentPage) {
+        renderDriveTablePage(page);
+      }
+    });
+  });
 }
 
 function updateCompareButton() {
