@@ -220,9 +220,15 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   
   /* Main content - full width on mobile */
   main { 
-    padding-top: 60px; /* space for fixed header (56px + small gap) */
+    padding-top: 76px; /* space for fixed header (56px + padding) */
     width: 100%;
-    min-height: calc(100vh - 60px);
+    min-height: calc(100vh - 76px);
+  }
+  
+  /* Ensure first content row has extra space from header */
+  main > .row:first-child,
+  main > div > .row:first-child {
+    margin-top: 0.5rem;
   }
   
   /* Mobile sidebar toggle button in header */
