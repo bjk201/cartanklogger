@@ -205,9 +205,9 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   
   /* Main content - full width on mobile */
   main { 
-    padding-top: 70px; /* space for fixed header (56px + small gap) */
+    padding-top: 60px; /* space for fixed header (56px + small gap) */
     width: 100%;
-    min-height: calc(100vh - 70px);
+    min-height: calc(100vh - 60px);
   }
   
   /* Ensure content is visible without excessive scrolling */
