@@ -2364,7 +2364,7 @@ def api_vehicle_vampire_drain():
         data = []
         for i in range(days):
             d = (datetime.now() - timedelta(days=days-i)).strftime("%Y-%m-%d")
-            # Typisch 0.5-2% pro Tag, höher bei kalt/Sentry/Preconditioning
+            # Typisch 0.5-2% pro Tag, höher bei kalt/Preconditioning
             drain = round(random.uniform(0.3, 1.8), 1)
             data.append({"day": d, "drain_pct_per_day": drain, "drain_km": round(drain * 5.5, 1)})  # ~5.5km per %
         return jsonify({"available": True, "mock": True, "data": data, "avg_drain_pct": 1.1})
@@ -4600,10 +4600,7 @@ def api_nerd_kpis():
     drives = [dict(r) for r in db.execute(vampire_query, params).fetchall()]
     
     vampire_drain_pct_per_day = 0.0
-    vampire_drain_watts_sentry_on = 0.0
-    vampire_drain_watts_sentry_off = 0.0
-    sentry_on_count = 0
-    sentry_off_count = 0
+    vampire_intervals_count = 0
     
     if len(drives) >= 2:
         # Park-Intervalle zwischen Fahrten berechnen
@@ -4635,10 +4632,7 @@ def api_nerd_kpis():
         
         if park_intervals:
             vampire_drain_pct_per_day = sum(p["pct_per_day"] for p in park_intervals) / len(park_intervals)
-            # Ohne Sentry-Modus Daten schätzen wir: ca. 50% der Zeit Sentry an
-            # Typische Werte: Sentry an ~1-2%/Tag, aus ~0.5-1%/Tag
-            vampire_drain_watts_sentry_on = vampire_drain_pct_per_day * 0.75  # grobe Schätzung
-            vampire_drain_watts_sentry_off = vampire_drain_pct_per_day * 0.25
+            vampire_intervals_count = len(park_intervals)
     
     # 2. Battery Degradation
     # Range at 100% = battery_capacity / consumption_per_100km * 100
@@ -4755,8 +4749,6 @@ def api_nerd_kpis():
     return jsonify({
         "vampire_drain": {
             "pct_per_day": round(vampire_drain_pct_per_day, 2),
-            "watts_sentry_on": round(vampire_drain_watts_sentry_on * 10, 0),  # rough
-            "watts_sentry_off": round(vampire_drain_watts_sentry_off * 10, 0),
             "intervals_count": len(park_intervals) if 'park_intervals' in locals() else 0
         },
         "battery_degradation": {
