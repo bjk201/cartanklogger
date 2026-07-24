@@ -507,7 +507,7 @@ function renderBatteryHealthChart(data) {
   const health = data.series.map(d => d.health_pct);
   const capacity = data.series.map(d => d.capacity_kwh);
   
-  if (window.chartBatteryHealth) window.chartBatteryHealth.destroy();
+  if (window.chartBatteryHealthChart) window.chartBatteryHealthChart.destroy();
   
   window.chartBatteryHealthChart = new Chart(canvas, {
     type: 'line',
@@ -640,7 +640,7 @@ function renderVampireDrainChart(data) {
   const drainPct = data.data.map(d => d.drain_pct_per_day);
   const drainKm = data.data.map(d => d.drain_km);
   
-  if (window.chartVampireDrain) window.chartVampireDrain.destroy();
+  if (window.chartVampireDrainChart) window.chartVampireDrainChart.destroy();
   
   window.chartVampireDrainChart = new Chart(canvas, {
     type: 'bar',
@@ -698,7 +698,7 @@ function renderRangeProjectionChart(data) {
   const projectedRange = data.data.map(d => d.projected_range_100pct_km);
   const temp = data.data.map(d => d.outside_temp_c);
   
-  if (window.chartRangeProjection) window.chartRangeProjection.destroy();
+  if (window.chartRangeProjectionChart) window.chartRangeProjectionChart.destroy();
   
   window.chartRangeProjectionChart = new Chart(canvas, {
     type: 'line',
