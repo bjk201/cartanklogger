@@ -40,6 +40,57 @@
   </div>
 </div>
 
+<!-- Live Vehicle Status Widget -->
+<div class="row g-2 mb-3" id="vehicleLiveSection" style="display: none;">
+  <div class="col-12">
+    <div class="card h-100">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span>🚗 Live Vehicle Status</span>
+        <span class="badge bg-success" id="liveStatusBadge">Verbunden</span>
+      </div>
+      <div class="card-body py-2" id="vehicleLiveContent">
+        <div class="row g-2">
+          <div class="col-6 col-md-3 text-center">
+            <div class="fs-4 fw-bold" id="liveSoc">--%</div>
+            <div class="text-muted small">Batterie</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="fs-4 fw-bold" id="liveRange">-- km</div>
+            <div class="text-muted small">Reichweite</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="fs-4 fw-bold" id="liveOdo">-- km</div>
+            <div class="text-muted small">Tacho</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="fs-4 fw-bold" id="liveHealth">--%</div>
+            <div class="text-muted small">Battery Health</div>
+          </div>
+        </div>
+        <hr class="my-2">
+        <div class="row g-2">
+          <div class="col-6 col-md-3">
+            <div class="small text-muted">Außen/Innen</div>
+            <div class="fw-bold" id="liveTemp">--° / --°</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="small text-muted">Reifendruck</div>
+            <div class="fw-bold small" id="liveTires">FL -- FR --<br>RL -- RR --</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="small text-muted">Ladezustand</div>
+            <div class="fw-bold" id="liveCharging">--</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="small text-muted">Türen/Klima</div>
+            <div class="fw-bold small" id="liveDoors">🔒 / 🌡️ --</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-2 mb-3" id="mergedKpis"></div>
 <div class="row g-2 mb-3" id="tripCards"></div>
 

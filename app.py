@@ -747,6 +747,55 @@ class TeslaMateClient:
             app.logger.warning(f"TeslaMate /status Fehler: {e}")
             return {}
 
+    def get_battery_health(self, car_id=None):
+        """Battery Health aus teslamateapi (GET /cars/:CarID/battery-health).
+        
+        Liefert SOH (State of Health), Degradation, Rated Range vs. Odometer.
+        """
+        if car_id is None:
+            car_ids = self._cars() or [1]
+            car_id = car_ids[0] if car_ids else 1
+        try:
+            r = requests.get(f"{self.base}/cars/{car_id}/battery-health", timeout=15)
+            if r.status_code != 200:
+                return {}
+            d = r.json().get("data", r.json())
+            return {
+                "car_id": car_id,
+                "soh_percent": d.get("soh") or d.get("battery_health"),
+                "rated_range_km": d.get("rated_range"),
+                "degradation_percent": d.get("degradation"),
+                "current_range_100": d.get("current_range_100"),
+                "odometer": d.get("odometer"),
+                "charge_cycles": d.get("charge_cycles"),
+            }
+        except Exception as e:
+            app.logger.warning(f"TeslaMate /battery-health Fehler: {e}")
+            return {}
+
+    def get_charges_detail(self, car_id=None, limit=100):
+        """Detail-Ladevorgänge aus teslamateapi (GET /cars/:CarID/charges).
+        
+        Liefert pro Charge: power, voltage, current, phases, charger_power, 
+        duration, start/end SoC, odometer, cost, location, fast_charger_brand/type.
+        """
+        if car_id is None:
+            car_ids = self._cars() or [1]
+            car_id = car_ids[0] if car_ids else 1
+        try:
+            r = requests.get(
+                f"{self.base}/cars/{car_id}/charges",
+                params={"limit": limit},
+                timeout=30,
+            )
+            if r.status_code != 200:
+                return []
+            charges = r.json().get("data", {}).get("charges", [])
+            return charges
+        except Exception as e:
+            app.logger.warning(f"TeslaMate /charges detail Fehler: {e}")
+            return []
+
     def update_charging_process_cost(self, charge_id, cost):
         """Schreibt die berechnete Home-Kosten zurueck in TeslaMate.
 
@@ -2015,6 +2064,498 @@ def api_status_live():
         return jsonify(status)
     except Exception as e:
         return jsonify({"plugged_in": False, "charging_state": "", "available": False, "error": str(e)})
+
+
+# ============================================================
+# Quick Wins: Extended Vehicle API endpoints (teslamateapi)
+# ============================================================
+
+@app.route("/api/vehicle/live")
+def api_vehicle_live():
+    """Erweiterter Live-Status aus teslamateapi (GET /cars/:id/status).
+    
+    Liefert: SoC, Odometer, Range, Inside/Outside Temp, Tire Pressure, 
+    Doors, Climate, GPS, PluggedIn, ChargingState, Battery Health (falls verfügbar)."""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    if not url:
+        return jsonify({"available": False, "error": "TeslaMate URL nicht konfiguriert"})
+    if mock_mode():
+        return jsonify({
+            "available": True, "mock": True,
+            "battery_level": 72, "odometer_km": 45230, "ideal_range_km": 420,
+            "outside_temp": 18.5, "inside_temp": 21.0,
+            "tire_pressure_fl": 2.5, "tire_pressure_fr": 2.5, "tire_pressure_rl": 2.6, "tire_pressure_rr": 2.6,
+            "door_fl": False, "door_fr": False, "door_rl": False, "door_rr": False,
+            "trunk_front": False, "trunk_rear": False,
+            "climate_on": False, "climate_temp": 20.0,
+            "gps_lat": 52.52, "gps_lon": 13.40,
+            "plugged_in": True, "charging_state": "charging",
+            "battery_health_pct": 96, "battery_capacity_kwh": 75.0,
+        })
+    try:
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        car_ids = client._cars() or [1]
+        car_id = car_ids[0]
+        
+        # Status holen (MQTT Live-Daten)
+        r = requests.get(f"{client.base}/cars/{car_id}/status", timeout=15)
+        if r.status_code != 200:
+            return jsonify({"available": False, "error": f"Status {r.status_code}"})
+        d = r.json().get("data", r.json())
+        
+        # Battery Health holen (separater Endpoint)
+        health = {}
+        try:
+            rh = requests.get(f"{client.base}/cars/{car_id}/battery-health", timeout=15)
+            if rh.status_code == 200:
+                health = rh.json().get("data", rh.json())
+        except Exception:
+            pass
+        
+        return jsonify({
+            "available": True,
+            "car_id": car_id,
+            "battery_level": d.get("MQTTDataBatteryLevel"),
+            "odometer_km": d.get("MQTTDataOdometer"),
+            "ideal_range_km": d.get("MQTTDataIdealBatteryRangeKm") or d.get("MQTTDataRatedBatteryRangeKm"),
+            "outside_temp": d.get("MQTTDataOutsideTemp"),
+            "inside_temp": d.get("MQTTDataInsideTemp"),
+            "tire_pressure_fl": d.get("MQTTDataTirePressureFL"),
+            "tire_pressure_fr": d.get("MQTTDataTirePressureFR"),
+            "tire_pressure_rl": d.get("MQTTDataTirePressureRL"),
+            "tire_pressure_rr": d.get("MQTTDataTirePressureRR"),
+            "door_fl": d.get("MQTTDataDoorFL") == "open",
+            "door_fr": d.get("MQTTDataDoorFR") == "open",
+            "door_rl": d.get("MQTTDataDoorRL") == "open",
+            "door_rr": d.get("MQTTDataDoorRR") == "open",
+            "trunk_front": d.get("MQTTDataTrunkFront") == "open",
+            "trunk_rear": d.get("MQTTDataTrunkRear") == "open",
+            "climate_on": d.get("MQTTDataClimateOn") == True,
+            "climate_temp": d.get("MQTTDataClimateTemp"),
+            "gps_lat": d.get("MQTTDataLatitude"),
+            "gps_lon": d.get("MQTTDataLongitude"),
+            "plugged_in": bool(d.get("MQTTDataPluggedIn", False)),
+            "charging_state": (d.get("MQTTDataChargingState") or "").lower(),
+            "battery_health_pct": health.get("battery_health") or health.get("health"),
+            "battery_capacity_kwh": health.get("battery_capacity") or health.get("capacity_kwh"),
+            "raw": d,
+        })
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route("/api/vehicle/battery-health")
+def api_vehicle_battery_health():
+    """Battery Health Zeitreihen-Daten für Chart (GET /cars/:id/battery-health + Historisches).
+    
+    Nutzt: TeslaMate battery-health endpoint + charges für Degradation-Trend."""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    
+    if not url:
+        return jsonify({"available": False, "error": "TeslaMate URL nicht konfiguriert"})
+    
+    if mock_mode():
+        # Mock-Daten für Battery Health Chart
+        import random
+        from datetime import datetime, timedelta
+        data = []
+        base = 98.5
+        for i in range(days):
+            d = (datetime.now() - timedelta(days=days-i)).strftime("%Y-%m-%d")
+            # Langsamer Abfall + Noise
+            val = max(90, base - (i * 0.0015) + random.uniform(-0.1, 0.1))
+            data.append({"day": d, "health_pct": round(val, 1), "capacity_kwh": round(75.0 * val / 100, 1)})
+        return jsonify({"available": True, "mock": True, "data": data})
+    
+    try:
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        car_ids = client._cars() or [1]
+        car_id = car_ids[0]
+        
+        # Battery Health Endpoint
+        r = requests.get(f"{client.base}/cars/{car_id}/battery-health", timeout=15)
+        if r.status_code != 200:
+            return jsonify({"available": False, "error": f"Battery Health {r.status_code}"})
+        
+        health_data = r.json().get("data", r.json())
+        
+        # Zusätzlich: Charges für Degradation-Trend (rated range über Zeit)
+        params = {"limit": 1000}
+        if from_date and to_date:
+            params["startDate"] = from_date + "T00:00:00Z"
+            params["endDate"] = to_date + "T23:59:59Z"
+        rc = requests.get(f"{client.base}/cars/{car_id}/charges", params=params, timeout=30)
+        charges = []
+        if rc.status_code == 200:
+            charges = rc.json().get("data", {}).get("charges", [])
+        
+        # Zeitreihen bauen: pro Tag letzte rated_range / ideal_range
+        from collections import defaultdict
+        daily = defaultdict(list)
+        for c in charges:
+            if not c.get("date"):
+                continue
+            day = c["date"][:10]
+            # rated_range_end oder ideal_battery_range_end
+            rr = c.get("rated_range_end") or c.get("ideal_battery_range_end")
+            if rr:
+                daily[day].append(float(rr))
+        
+        series = []
+        for day in sorted(daily.keys()):
+            vals = daily[day]
+            if vals:
+                series.append({
+                    "day": day,
+                    "rated_range_km": round(sum(vals) / len(vals), 0),
+                    "min_range_km": round(min(vals), 0),
+                    "max_range_km": round(max(vals), 0),
+                    "health_pct": health_data.get("battery_health"),
+                    "capacity_kwh": health_data.get("battery_capacity"),
+                })
+        
+        return jsonify({
+            "available": True,
+            "car_id": car_id,
+            "current_health_pct": health_data.get("battery_health"),
+            "current_capacity_kwh": health_data.get("battery_capacity"),
+            "series": series,
+            "raw_health": health_data,
+        })
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route("/api/vehicle/charging-curve")
+def api_vehicle_charging_curve():
+    """Ladekurve: Power (kW) über SoC (%) für letzte N Charges.
+    
+    Nutzt TeslaMate charges endpoint mit energy_used_kwh, charger_power, 
+    charger_voltage, charger_actual_current, charger_phases, start/end_soc."""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    limit = request.args.get("limit", 50, type=int)
+    
+    if not url:
+        return jsonify({"available": False, "error": "TeslaMate URL nicht konfiguriert"})
+    
+    if mock_mode():
+        # Mock Ladekurve: typische Tesla Kurve (hoch bei niedrigem SoC, abfallend ab ~60%)
+        import random
+        from datetime import datetime, timedelta
+        curves = []
+        for i in range(3):
+            soc = list(range(10, 95, 5))
+            power = []
+            for s in soc:
+                if s < 20:
+                    p = 11 + random.uniform(-1, 1)  # AC 11kW
+                elif s < 50:
+                    p = min(150, 11 + (s - 10) * 3) + random.uniform(-3, 3)  # DC ramp up
+                elif s < 80:
+                    p = max(50, 150 - (s - 50) * 2) + random.uniform(-5, 5)  # DC taper
+                else:
+                    p = max(10, 50 - (s - 80) * 1.5) + random.uniform(-2, 2)  # taper end
+                power.append(round(max(0, p), 1))
+            curves.append({
+                "charge_id": f"mock_{i}",
+                "date": (datetime.now() - timedelta(days=i*7)).strftime("%Y-%m-%d"),
+                "soc_start": 10, "soc_end": 90,
+                "points": list(zip(soc, power)),
+                "max_power_kw": max(power),
+                "avg_power_kw": round(sum(power)/len(power), 1),
+                "duration_min": 45 + i*5,
+                "location": "Supercharger" if i % 2 == 0 else "Wallbox",
+                "is_dc": i % 2 == 0,
+            })
+        return jsonify({"available": True, "mock": True, "curves": curves})
+    
+    try:
+        from datetime import datetime, timedelta
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        car_ids = client._cars() or [1]
+        car_id = car_ids[0]
+        
+        r = requests.get(f"{client.base}/cars/{car_id}/charges", params={"limit": limit}, timeout=30)
+        if r.status_code != 200:
+            return jsonify({"available": False, "error": f"Charges {r.status_code}"})
+        
+        charges = r.json().get("data", {}).get("charges", [])
+        
+        curves = []
+        for c in charges:
+            # Brauchen: start_soc, end_soc, charger_power, charger_voltage, charger_actual_current, charger_phases
+            # ODER energy_used_kwh + duration für avg power
+            soc_start = c.get("battery_level_start") or c.get("soc_start")
+            soc_end = c.get("battery_level_end") or c.get("soc_end")
+            power = c.get("charger_power") or c.get("charger_actual_current") * c.get("charger_voltage") / 1000 * c.get("charger_phases", 1) if c.get("charger_actual_current") and c.get("charger_voltage") else None
+            energy = c.get("energy_used_kwh") or c.get("energy_kwh")
+            duration = c.get("duration_min")
+            is_dc = c.get("fast_charger_present") == True
+            location = c.get("location_name") or c.get("address") or "Unbekannt"
+            
+            if soc_start is not None and soc_end is not None and soc_end > soc_start:
+                # Punkte interpolieren: annahme linearer Power-Verlauf
+                # Besser: wir nutzen die raw daten falls vorhanden
+                points = []
+                steps = 10
+                for i in range(steps + 1):
+                    s = soc_start + (soc_end - soc_start) * i / steps
+                    # steps
+                    if power:
+                        # Power nimmt typisch ab bei DC
+                        if is_dc and s > 50:
+                            p = power * max(0.3, 1 - (s - 50) / 100)
+                        else:
+                            p = power
+                    else:
+                        # Schätzen aus Energie/Dauer
+                        if energy and duration and duration > 0:
+                            p = energy / (duration / 60)
+                        else:
+                            p = 11 if not is_dc else 100
+                    points.append({"soc": round(s, 1), "power_kw": round(p, 1)})
+                
+                curves.append({
+                    "charge_id": c.get("id"),
+                    "date": c.get("date")[:10] if c.get("date") else None,
+                    "soc_start": soc_start,
+                    "soc_end": soc_end,
+                    "points": points,
+                    "max_power_kw": max(p["power_kw"] for p in points) if points else 0,
+                    "avg_power_kw": round(sum(p["power_kw"] for p in points) / len(points), 1) if points else 0,
+                    "duration_min": duration,
+                    "energy_kwh": energy,
+                    "location": location,
+                    "is_dc": is_dc,
+                    "phases": c.get("charger_phases"),
+                })
+        
+        return jsonify({
+            "available": True,
+            "car_id": car_id,
+            "curves": curves,
+        })
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route("/api/vehicle/vampire-drain")
+def api_vehicle_vampire_drain():
+    """Vampire Drain: Standby-Verbrauch pro Tag (SoC-Verlust während geparkt).
+    
+    Berechnung: Aus Drives + States - wann war Auto geparkt (>30min stillstand),
+    wie viel SoC-Verlust pro 24h."""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    days = request.args.get("days", 30, type=int)
+    
+    if not url:
+        return jsonify({"available": False, "error": "TeslaMate URL nicht konfiguriert"})
+    
+    if mock_mode():
+        import random
+        from datetime import datetime, timedelta
+        data = []
+        for i in range(days):
+            d = (datetime.now() - timedelta(days=days-i)).strftime("%Y-%m-%d")
+            # Typisch 0.5-2% pro Tag, höher bei kalt/Sentry/Preconditioning
+            drain = round(random.uniform(0.3, 1.8), 1)
+            data.append({"day": d, "drain_pct_per_day": drain, "drain_km": round(drain * 5.5, 1)})  # ~5.5km per %
+        return jsonify({"available": True, "mock": True, "data": data, "avg_drain_pct": 1.1})
+    
+    try:
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        car_ids = client._cars() or [1]
+        car_id = car_ids[0]
+        
+        # Drives holen für Tages-km und Park-Zeiten
+        params = {"limit": 1000}
+        rc = requests.get(f"{client.base}/cars/{car_id}/drives", params=params, timeout=30)
+        drives = []
+        if rc.status_code == 200:
+            drives = rc.json().get("data", {}).get("drives", [])
+        
+        # States holen für geparkte Zeiten (falls verfügbar)
+        # Alternative: aus charges + drives ableiten
+        from collections import defaultdict
+        from datetime import datetime, timedelta
+        
+        # Einfache Heuristik: Tage ohne Drive = geparkt, SoC-Diff aus Charges
+        rc2 = requests.get(f"{client.base}/cars/{car_id}/charges", params=params, timeout=30)
+        charges = []
+        if rc2.status_code == 200:
+            charges = rc2.json().get("data", {}).get("charges", [])
+        
+        # Pro Tag: letzte Charge SoC - erste Charge nächsten Tag SoC = Drain
+        daily_charges = defaultdict(list)
+        for c in charges:
+            if not c.get("date"):
+                continue
+            day = c["date"][:10]
+            soc = c.get("battery_level_end") or c.get("soc_end")
+            if soc is not None:
+                daily_charges[day].append(float(soc))
+        
+        data = []
+        sorted_days = sorted(daily_charges.keys())
+        for i, day in enumerate(sorted_days[:-1]):
+            next_day = sorted_days[i + 1] if i + 1 < len(sorted_days) else None
+            if not next_day:
+                continue
+            # Letzter SoC heute - erster SoC morgen
+            today_soc = daily_charges[day]
+            tomorrow_soc = daily_charges.get(next_day, [])
+            if today_soc and tomorrow_soc:
+                drain = today_soc[-1] - tomorrow_soc[0]  # SoC Ende heute - Start morgen
+                if 0 <= drain <= 10:  # Plausibilität
+                    data.append({
+                        "day": day,
+                        "drain_pct_per_day": round(drain, 1),
+                        "drain_km": round(drain * 5.5, 1),  # ca. 5.5km per % bei Model 3
+                        "soc_evening": today_soc[-1],
+                        "soc_morning": tomorrow_soc[0],
+                    })
+        
+        avg_drain = round(sum(d["drain_pct_per_day"] for d in data) / len(data), 1) if data else 0
+        
+        return jsonify({
+            "available": True,
+            "car_id": car_id,
+            "data": data,
+            "avg_drain_pct": avg_drain,
+            "avg_drain_km": round(avg_drain * 5.5, 1),
+        })
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route("/api/vehicle/range-projection")
+def api_vehicle_range_projection():
+    """Projected Range bei 100% SoC mit Temperatur-Korrektur.
+    
+    Basis: TeslaMate rated_range / ideal_range + Außentemperatur-Korrektur.
+    Formel: Range@100% = Rated_Range * (1 + temp_coeff * (ref_temp - outside_temp))"""
+    tm_cfg = config.get("teslamate", {})
+    url = tm_cfg.get("url", "")
+    days = request.args.get("days", 30, type=int)
+    
+    if not url:
+        return jsonify({"available": False, "error": "TeslaMate URL nicht konfiguriert"})
+    
+    if mock_mode():
+        import random
+        from datetime import datetime, timedelta
+        data = []
+        base_range = 450  # km bei 100%
+        for i in range(days):
+            d = (datetime.now() - timedelta(days=days-i)).strftime("%Y-%m-%d")
+            temp = random.uniform(-5, 25)
+            # Tesla: ~1% pro Grad unter 20°C, ~0.5% über 25°C
+            if temp < 20:
+                factor = 1 + (20 - temp) * 0.01
+            elif temp > 25:
+                factor = 1 - (temp - 25) * 0.005
+            else:
+                factor = 1.0
+            projected = round(base_range * factor)
+            data.append({
+                "day": d,
+                "rated_range_km": base_range + random.randint(-20, 20),
+                "outside_temp_c": round(temp, 1),
+                "projected_range_100pct_km": projected,
+                "temp_factor": round(factor, 3),
+            })
+        return jsonify({"available": True, "mock": True, "data": data, "base_rated_range_km": base_range})
+    
+    try:
+        client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
+        car_ids = client._cars() or [1]
+        car_id = car_ids[0]
+        
+        # Charges für rated_range_end + outside_temp
+        params = {"limit": 1000}
+        rc = requests.get(f"{client.base}/cars/{car_id}/charges", params=params, timeout=30)
+        charges = []
+        if rc.status_code == 200:
+            charges = rc.json().get("data", {}).get("charges", [])
+        
+        from collections import defaultdict
+        from datetime import datetime
+        
+        daily = defaultdict(list)
+        for c in charges:
+            if not c.get("date"):
+                continue
+            day = c["date"][:10]
+            rr = c.get("rated_range_end") or c.get("ideal_battery_range_end")
+            temp = c.get("outside_temp")
+            if rr is not None:
+                daily[day].append({"rated_range": float(rr), "outside_temp": float(temp) if temp is not None else None})
+        
+        data = []
+        for day in sorted(daily.keys()):
+            vals = daily[day]
+            if not vals:
+                continue
+            avg_rated = sum(v["rated_range"] for v in vals) / len(vals)
+            temps = [v["outside_temp"] for v in vals if v["outside_temp"] is not None]
+            avg_temp = sum(temps) / len(temps) if temps else 20
+            
+            # Temperatur-Korrektur (Tesla-typisch)
+            if avg_temp < 20:
+                factor = 1 + (20 - avg_temp) * 0.01  # 1% pro Grad unter 20°C
+            elif avg_temp > 25:
+                factor = 1 - (avg_temp - 25) * 0.005  # 0.5% pro Grad über 25°C
+            else:
+                factor = 1.0
+            
+            projected = round(avg_rated * factor)
+            
+            data.append({
+                "day": day,
+                "rated_range_km": round(avg_rated),
+                "outside_temp_c": round(avg_temp, 1),
+                "projected_range_100pct_km": projected,
+                "temp_factor": round(factor, 3),
+            })
+        
+        # Aktueller Live-Wert
+        rs = requests.get(f"{client.base}/cars/{car_id}/status", timeout=15)
+        live_range = None
+        live_temp = None
+        if rs.status_code == 200:
+            d = rs.json().get("data", rs.json())
+            live_range = d.get("MQTTDataRatedBatteryRangeKm") or d.get("MQTTDataIdealBatteryRangeKm")
+            live_temp = d.get("MQTTDataOutsideTemp")
+            if live_range and live_temp is not None:
+                if live_temp < 20:
+                    live_factor = 1 + (20 - live_temp) * 0.01
+                elif live_temp > 25:
+                    live_factor = 1 - (live_temp - 25) * 0.005
+                else:
+                    live_factor = 1.0
+                live_projected = round(live_range * live_factor)
+            else:
+                live_projected = None
+        
+        return jsonify({
+            "available": True,
+            "car_id": car_id,
+            "data": data,
+            "live": {
+                "rated_range_km": live_range,
+                "outside_temp_c": live_temp,
+                "projected_range_100pct_km": live_projected,
+            } if live_range else None,
+        })
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
 
 
 

@@ -17,13 +17,18 @@ function buildApiParams() {
 async function loadStats() {
   try {
     const params = buildApiParams();
-    const [stats, charts] = await Promise.all([
+    const [stats, charts, batteryHealth, chargingCurve, vampireDrain, rangeProjection] = await Promise.all([
       fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json())
+      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/vehicle/battery-health?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
+      fetch(`/api/vehicle/charging-curve?limit=20`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
+      fetch(`/api/vehicle/vampire-drain?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
+      fetch(`/api/vehicle/range-projection?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false}))
     ]);
     
     renderKPIs(stats);
     renderCharts(charts);
+    renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangeProjection);
     renderDataQualityWarnings(stats);
     updateRangeLabel();
   } catch (e) {
@@ -100,6 +105,12 @@ function renderCharts(charts) {
   // Setup event listeners for MA toggle buttons
   setupMAToggleButtons();
   setupChartTypeButtons();
+  
+  // Load additional quick-win data (async, non-blocking)
+  loadBatteryHealth();
+  loadChargingCurve();
+  loadVampireDrain();
+  loadRangeProjection();
   
   // Render heatmaps
   renderHeatmaps(s, kpis);
@@ -1002,4 +1013,324 @@ function renderHeatmaps(series, kpis) {
       ${buildHeatmap(kmMatrix, '🛣️ Kilometer nach Wochentag & Monat', 'km', ['#6f42c1', '#0dcaf0', '#fd7e14'])}
     </div>
   `;
+}
+
+/**
+ * Battery Health Chart
+ */
+function renderBatteryHealthChart(data) {
+  const canvas = document.getElementById('chartBatteryHealth');
+  if (!canvas || !window.Chart) return;
+  
+  if (!data || !data.available || !data.series || data.series.length === 0) {
+    canvas.innerHTML = '<div class="text-muted small p-2">Keine Battery Health Daten</div>';
+    return;
+  }
+  
+  const labels = data.series.map(d => d.day);
+  const health = data.series.map(d => d.health_pct);
+  const capacity = data.series.map(d => d.capacity_kwh);
+  
+  if (window.chartBatteryHealth) window.chartBatteryHealth.destroy();
+  
+  window.chartBatteryHealth = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Health (%)',
+          data: health,
+          borderColor: '#198754',
+          backgroundColor: '#19875420',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Capacity (kWh)',
+          data: capacity,
+          borderColor: '#6f42c1',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 2,
+          borderDash: [4, 4],
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 10 } } },
+        title: { display: true, text: `Battery Health (Current: ${data.current_health_pct || '–'}%, ${data.current_capacity_kwh || '–'} kWh)`, font: { size: 12 } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 9 } }, grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: 'Health (%)' }, ticks: { font: { size: 9 } }, suggestedMin: 90, suggestedMax: 100 },
+        y1: { position: 'right', title: { display: true, text: 'Capacity (kWh)' }, ticks: { font: { size: 9 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+/**
+ * Charging Curve Chart
+ */
+function renderChargingCurveChart(data) {
+  const container = document.getElementById('chargingCurveContainer');
+  if (!container) return;
+  
+  if (!data || !data.available || !data.curves || data.curves.length === 0) {
+    container.innerHTML = '<div class="text-muted small p-2">Keine Ladekurven-Daten</div>';
+    return;
+  }
+  
+  // Render each curve as a small chart
+  const curvesHtml = data.curves.map((curve, i) => `
+    <div class="col-12 col-md-6 mb-2">
+      <div class="card h-100">
+        <div class="card-header py-1 small">
+          ${curve.location} (${curve.is_dc ? 'DC' : 'AC'}) · ${curve.date}
+          <span class="float-end">${curve.max_power_kw} kW max · ${curve.avg_power_kw} kW Ø</span>
+        </div>
+        <div class="card-body p-1">
+          <canvas id="chargingCurve${i}" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  
+  container.innerHTML = `<div class="row g-2">${curvesHtml}</div>`;
+  
+  // Render each chart
+  data.curves.forEach((curve, i) => {
+    const canvas = document.getElementById(`chargingCurve${i}`);
+    if (!canvas || !window.Chart) return;
+    
+    const points = curve.points || [];
+    const labels = points.map(p => p.soc + '%');
+    const powerData = points.map(p => p.power_kw);
+    
+    if (window[`chargingCurveChart${i}`]) window[`chargingCurveChart${i}`].destroy();
+    
+    window[`chargingCurveChart${i}`] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Power (kW)',
+          data: powerData,
+          borderColor: curve.is_dc ? '#dc3545' : '#0d6efd',
+          backgroundColor: (curve.is_dc ? '#dc3545' : '#0d6efd') + '20',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          title: { display: false }
+        },
+        scales: {
+          x: { title: { display: true, text: 'SoC (%)' }, ticks: { maxTicksLimit: 10, font: { size: 9 } } },
+          y: { title: { display: true, text: 'Power (kW)' }, ticks: { font: { size: 9 } }, beginAtZero: true }
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Vampire Drain Chart
+ */
+function renderVampireDrainChart(data) {
+  const canvas = document.getElementById('chartVampireDrain');
+  if (!canvas || !window.Chart) return;
+  
+  if (!data || !data.available || !data.data || data.data.length === 0) {
+    canvas.innerHTML = '<div class="text-muted small p-2">Keine Vampire Drain Daten</div>';
+    return;
+  }
+  
+  const labels = data.data.map(d => d.day);
+  const drainPct = data.data.map(d => d.drain_pct_per_day);
+  const drainKm = data.data.map(d => d.drain_km);
+  
+  if (window.chartVampireDrain) window.chartVampireDrain.destroy();
+  
+  window.chartVampireDrain = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Drain (%/Tag)',
+          data: drainPct,
+          backgroundColor: '#dc354580',
+          borderColor: '#dc3545',
+          borderWidth: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Drain (km/Tag)',
+          data: drainKm,
+          backgroundColor: '#fd7e1480',
+          borderColor: '#fd7e14',
+          borderWidth: 1,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 10 } } },
+        title: { display: true, text: `Vampire Drain (Ø ${data.avg_drain_pct || 0}% / ${data.avg_drain_km || 0} km pro Tag)`, font: { size: 12 } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 9 } }, grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: '%/Tag' }, ticks: { font: { size: 9 } }, beginAtZero: true, max: 5 },
+        y1: { position: 'right', title: { display: true, text: 'km/Tag' }, ticks: { font: { size: 9 } }, grid: { drawOnChartArea: false }, beginAtZero: true, max: 30 }
+      }
+    }
+  });
+}
+
+/**
+ * Range Projection Chart
+ */
+function renderRangeProjectionChart(data) {
+  const canvas = document.getElementById('chartRangeProjection');
+  if (!canvas || !window.Chart) return;
+  
+  if (!data || !data.available || !data.data || data.data.length === 0) {
+    canvas.innerHTML = '<div class="text-muted small p-2">Keine Range Projection Daten</div>';
+    return;
+  }
+  
+  const labels = data.data.map(d => d.day);
+  const ratedRange = data.data.map(d => d.rated_range_km);
+  const projectedRange = data.data.map(d => d.projected_range_100pct_km);
+  const temp = data.data.map(d => d.outside_temp_c);
+  
+  if (window.chartRangeProjection) window.chartRangeProjection.destroy();
+  
+  window.chartRangeProjection = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Rated Range @100% (km)',
+          data: ratedRange,
+          borderColor: '#6f42c1',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Projizierte Range @100% (temp. korrigiert)',
+          data: projectedRange,
+          borderColor: '#198754',
+          backgroundColor: '#19875420',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Außen-Temp (°C)',
+          data: temp,
+          borderColor: '#ffc107',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 1,
+          borderDash: [4, 4],
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 10 } } },
+        title: { display: true, text: `Range Projection @100% (Basis: ${data.base_rated_range_km || '–'} km)`, font: { size: 12 } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 9 } }, grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: 'Range (km)' }, ticks: { font: { size: 9 } }, beginAtZero: false },
+        y1: { position: 'right', title: { display: true, text: 'Temp (°C)' }, ticks: { font: { size: 9 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+  
+  // Show live value if available
+  if (data.live && data.live.projected_range_100pct_km) {
+    const liveDiv = document.getElementById('rangeLiveValue');
+    if (liveDiv) {
+      liveDiv.innerHTML = `<small class="text-success">Live: ${data.live.rated_range_km} km @ ${data.live.outside_temp_c}°C → <strong>${data.live.projected_range_100pct_km} km</strong> bei 100%</small>`;
+    }
+  }
+}
+
+/**
+ * Render all vehicle charts container
+ */
+function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangeProjection) {
+  const container = document.getElementById('vehicleChartsSection');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="row g-2 mt-3" id="vehicleChartsSectionContent">
+      <div class="col-12">
+        <h6 class="mb-2">🚗 Fahrzeug-Analysen (TeslaMate)</h6>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-header py-2">🔋 Battery Health & Capacity</div>
+          <div class="card-body p-2"><canvas id="chartBatteryHealth" height="180"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-header py-2">⚡ Ladekurven (Power über SoC)</div>
+          <div class="card-body p-2" id="chargingCurveContainer"></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-header py-2">🧛 Vampire Drain (Standby-Verlust)</div>
+          <div class="card-body p-2"><canvas id="chartVampireDrain" height="180"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-header py-2">📏 Range Projection @100% (Temperatur-korrigiert)
+            <div id="rangeLiveValue" class="small"></div>
+          </div>
+          <div class="card-body p-2"><canvas id="chartRangeProjection" height="180"></canvas></div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Trigger chart rendering
+  if (batteryHealth) renderBatteryHealthChart(batteryHealth);
+  if (chargingCurve) renderChargingCurveChart(chargingCurve);
+  if (vampireDrain) renderVampireDrainChart(vampireDrain);
+  if (rangeProjection) renderRangeProjectionChart(rangeProjection);
 }

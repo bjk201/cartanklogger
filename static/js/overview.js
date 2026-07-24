@@ -17,10 +17,11 @@ function buildApiParams() {
 async function loadOverview() {
   try {
     const params = buildApiParams();
-    const [merged, stats, charts] = await Promise.all([
+    const [merged, stats, charts, vehicleLive] = await Promise.all([
       fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()),
       fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json())
+      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/vehicle/live`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false}))
     ]);
     
     renderMergedTable(merged);
@@ -28,8 +29,72 @@ async function loadOverview() {
     renderSourceChart(stats);
     renderMergedDayChart(charts);
     updateRangeLabel();
+    renderVehicleLive(vehicleLive);
   } catch (e) {
     console.error('loadOverview failed', e);
+  }
+}
+
+function renderVehicleLive(data) {
+  const section = document.getElementById('vehicleLiveSection');
+  const badge = document.getElementById('liveStatusBadge');
+  
+  if (!data || !data.available) {
+    if (section) section.style.display = 'none';
+    return;
+  }
+  
+  if (section) section.style.display = 'block';
+  if (badge) {
+    badge.textContent = data.mock ? 'Demo' : 'Live';
+    badge.className = data.mock ? 'badge bg-warning text-dark' : 'badge bg-success';
+  }
+  
+  // Main values
+  const setText = (id, val, suffix = '') => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val != null ? val + suffix : '–';
+  };
+  
+  setText('liveSoc', data.battery_level, '%');
+  setText('liveRange', data.ideal_range_km ? Math.round(data.ideal_range_km) : '–');
+  setText('liveOdo', data.odometer_km ? data.odometer_km.toLocaleString('de-DE') : '–');
+  setText('liveHealth', data.battery_health_pct ? data.battery_health_pct : '–', '%');
+  
+  // Temps
+  const tempEl = document.getElementById('liveTemp');
+  if (tempEl) {
+    const out = data.outside_temp != null ? data.outside_temp.toFixed(1) : '–';
+    const inn = data.inside_temp != null ? data.inside_temp.toFixed(1) : '–';
+    tempEl.textContent = `${out}° / ${inn}°`;
+  }
+  
+  // Tires
+  const tiresEl = document.getElementById('liveTires');
+  if (tiresEl) {
+    const fl = data.tire_pressure_fl?.toFixed(1) || '–';
+    const fr = data.tire_pressure_fr?.toFixed(1) || '–';
+    const rl = data.tire_pressure_rl?.toFixed(1) || '–';
+    const rr = data.tire_pressure_rr?.toFixed(1) || '–';
+    tiresEl.innerHTML = `FL ${fl} FR ${fr}<br>RL ${rl} RR ${rr}`;
+  }
+  
+  // Charging
+  const chgEl = document.getElementById('liveCharging');
+  if (chgEl) {
+    const plugged = data.plugged_in ? '🔌 Angesteckt' : '🔋 Nicht angesteckt';
+    const state = data.charging_state ? ` (${data.charging_state})` : '';
+    chgEl.textContent = plugged + state;
+  }
+  
+  // Doors/Climate
+  const doorsEl = document.getElementById('liveDoors');
+  if (doorsEl) {
+    const doors = [data.door_fl, data.door_fr, data.door_rl, data.door_rr].filter(Boolean).length;
+    const trunks = [data.trunk_front, data.trunk_rear].filter(Boolean).length;
+    const open = doors + trunks;
+    const climate = data.climate_on ? `🌡️ ${data.climate_temp?.toFixed(1) || 'on'}°` : '🌡️ aus';
+    doorsEl.textContent = open > 0 ? `🚪 ${open} offen / ${climate}` : `🔒 zu / ${climate}`;
   }
 }
 
