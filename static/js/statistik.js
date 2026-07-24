@@ -108,12 +108,6 @@ function renderCharts(charts) {
   setupMAToggleButtons();
   setupChartTypeButtons();
   
-  // Load additional quick-win data (async, non-blocking)
-  loadBatteryHealth();
-  loadChargingCurve();
-  loadVampireDrain();
-  loadRangeProjection();
-  
   // Render heatmaps
   renderHeatmaps(s, kpis);
 }
@@ -410,9 +404,9 @@ function setupChartTypeButtons() {
       const icons = { line: '📈', bar: '📊', pie: '🥧' };
       document.querySelectorAll('[id^="ct"]').forEach(b => {
         b.textContent = icons[currentChartType];
-        b.title = `Diagrammtyp: ${currentChartType}`;
       });
-      loadStats();
+      
+      loadStats(); // Re-render all charts
     });
   });
 }
@@ -482,6 +476,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   loadStats();
+  
+  // Initialize drive comparison if on statistik page
+  if (document.getElementById('driveCompareSection')) {
+    initDriveCompare();
+  }
 });
 
 const fmtEUR = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
@@ -489,533 +488,8 @@ const fmtKwh = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {minim
 const fmtPct = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {maximumFractionDigits:1}) + ' %';
 
 /* ============================================================
-   FAHRTENVERGLEICH (Drive Comparison)
+   VEHICLE CHARTS (TeslaMate Quick Wins)
    ============================================================ */
-
-let driveCompareData = [];
-
-async function initDriveCompare() {
-  const loadBtn = document.getElementById('driveCompareLoad');
-  const runBtn = document.getElementById('driveCompareRun');
-  const selectAll = document.getElementById('driveSelectAll');
-  const tbody = document.querySelector('#tblDrives tbody');
-  const resultDiv = document.getElementById('driveCompareResult');
-  const fromEl = document.getElementById('driveCompareFrom');
-  const toEl = document.getElementById('driveCompareTo');
-  const searchEl = document.getElementById('driveCompareSearch');
-  
-  if (!loadBtn || !tbody) return; // Not on statistik page
-
-  // Set default date range (last 90 days)
-  const today = new Date();
-  const ago90 = new Date(today.getTime() - 90 * 86400000);
-  fromEl.value = ago90.toISOString().slice(0, 10);
-  toEl.value = today.toISOString().slice(0, 10);
-
-  loadBtn.addEventListener('click', async () => {
-    const from = fromEl.value || null;
-    const to = toEl.value || null;
-    const days = from && to ? null : 90;
-    
-    try {
-      const params = new URLSearchParams();
-      if (days) params.set('days', days);
-      if (from) params.set('from', from);
-      if (to) params.set('to', to);
-      
-      loadBtn.disabled = true;
-      loadBtn.textContent = 'Lädt...';
-      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Lädt Fahrten...</td></tr>';
-      
-      const resp = await fetch(`/api/drives?${params.toString()}`, {credentials: 'same-origin'});
-      const data = await resp.json();
-      
-      driveCompareData = data.drives || [];
-      window._allDriveCompareData = driveCompareData;
-      renderDriveTablePage(1);
-      
-      loadBtn.disabled = false;
-      loadBtn.textContent = 'Laden';
-    } catch (e) {
-      console.error('Drive compare load failed', e);
-      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Fehler beim Laden</td></tr>';
-      loadBtn.disabled = false;
-      loadBtn.textContent = 'Laden';
-    }
-  });
-
-  searchEl.addEventListener('input', () => {
-    const q = searchEl.value.toLowerCase();
-    const filtered = driveCompareData.filter(d => 
-      (d.route || '').toLowerCase().includes(q)
-    );
-    window._allDriveCompareData = filtered;
-    renderDriveTablePage(1);
-  });
-
-  selectAll.addEventListener('change', () => {
-    const allCheckboxes = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]');
-    allCheckboxes.forEach(cb => {
-      cb.checked = selectAll.checked;
-    });
-    // Also update checkboxes on other pages by storing the selection state
-    window._driveCompareSelectAll = selectAll.checked;
-    updateCompareButton();
-  });
-
-  tbody.addEventListener('change', (e) => {
-    if (e.target.matches('input[type="checkbox"][data-drive-id]')) {
-      updateCompareButton();
-    }
-  });
-
-  runBtn.addEventListener('click', async () => {
-    const selected = Array.from(tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked'))
-      .map(cb => parseInt(cb.dataset.driveId, 10));
-    
-    if (selected.length < 2) {
-      alert('Bitte mindestens 2 Fahrten auswählen');
-      return;
-    }
-
-    runBtn.disabled = true;
-    runBtn.textContent = 'Vergleicht...';
-    resultDiv.style.display = 'none';
-    resultDiv.innerHTML = '';
-
-    try {
-      const resp = await fetch(`/api/drives/compare?ids=${selected.join(',')}`, {credentials: 'same-origin'});
-      const data = await resp.json();
-      renderDriveCompareResult(data);
-      resultDiv.style.display = 'block';
-    } catch (e) {
-      console.error('Compare failed', e);
-      resultDiv.innerHTML = '<div class="alert alert-danger">Vergleich fehlgeschlagen</div>';
-      resultDiv.style.display = 'block';
-    } finally {
-      runBtn.disabled = false;
-      runBtn.textContent = 'Vergleichen';
-    }
-  });
-}
-
-function renderDriveTable(drives) {
-  const tbody = document.querySelector('#tblDrives tbody');
-  const selectAll = document.getElementById('driveSelectAll');
-  if (!tbody) return;
-  
-  selectAll.checked = false;
-  
-  // Store all drives for pagination
-  window._allDriveCompareData = drives || [];
-  renderDriveTablePage(1);
-}
-
-function renderDriveTablePage(page) {
-  const drives = window._allDriveCompareData || [];
-  const perPage = 10;
-  const totalPages = Math.ceil(drives.length / perPage);
-  const start = (page - 1) * perPage;
-  const end = start + perPage;
-  const pageDrives = drives.slice(start, end);
-  
-  const tbody = document.querySelector('#tblDrives tbody');
-  const selectAll = document.getElementById('driveSelectAll');
-  if (!tbody) return;
-  
-  // Apply global select-all state if set
-  const globalSelectAll = window._driveCompareSelectAll === true;
-  selectAll.checked = globalSelectAll;
-  
-  if (!pageDrives.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Keine Fahrten im Zeitraum</td></tr>';
-  } else {
-    tbody.innerHTML = pageDrives.map(d => `
-      <tr>
-        <td><input type="checkbox" data-drive-id="${d.id}" class="form-check-input" ${globalSelectAll ? 'checked' : ''}></td>
-        <td>${d.start_date ? d.start_date.slice(0,10) : '–'}</td>
-        <td>${d.route || '–'}</td>
-        <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-        <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) + ' min' : '–'}</td>
-        <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-        <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-        <td class="text-end">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
-        <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
-        <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
-      </tr>
-    `).join('');
-  }
-  
-  // Render pagination
-  renderDrivePagination(page, totalPages);
-}
-
-function renderDrivePagination(currentPage, totalPages) {
-  const pagination = document.getElementById('driveComparePagination');
-  if (!pagination) return;
-  
-  if (totalPages <= 1) {
-    pagination.innerHTML = '';
-    return;
-  }
-  
-  let html = '';
-  
-  // Previous button
-  html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-    <a class="page-link" href="#" data-page="${currentPage - 1}" aria-label="Previous">
-      <span aria-hidden="true">&laquo;</span>
-    </a></li>`;
-  
-  // Page numbers
-  let startPage = Math.max(1, currentPage - 2);
-  let endPage = Math.min(totalPages, startPage + 4);
-  if (endPage - startPage < 4) {
-    startPage = Math.max(1, endPage - 4);
-  }
-  
-  for (let i = startPage; i <= endPage; i++) {
-    html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
-      <a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
-  }
-  
-  // Next button
-  html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-    <a class="page-link" href="#" data-page="${currentPage + 1}" aria-label="Next">
-      <span aria-hidden="true">&raquo;</span>
-    </a></li>`;
-  
-  pagination.innerHTML = html;
-  
-  // Add click handlers
-  pagination.querySelectorAll('.page-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const page = parseInt(link.dataset.page, 10);
-      if (!isNaN(page) && page >= 1 && page <= totalPages && page !== currentPage) {
-        renderDriveTablePage(page);
-      }
-    });
-  });
-}
-
-function updateCompareButton() {
-  const runBtn = document.getElementById('driveCompareRun');
-  const tbody = document.querySelector('#tblDrives tbody');
-  const selected = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked').length;
-  runBtn.disabled = selected < 2;
-  runBtn.textContent = `Vergleichen (${selected})`;
-}
-
-function renderDriveCompareResult(data) {
-  const resultDiv = document.getElementById('driveCompareResult');
-  if (!resultDiv) return;
-  
-  const drives = data.drives || [];
-  const averages = data.averages || {};
-  const best = data.best_consumption_id;
-  const worst = data.worst_consumption_id;
-
-  let html = `
-    <h6>Vergleichsergebnis</h6>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered align-middle mb-3">
-        <thead class="table-light">
-          <tr>
-            <th>Kennzahl</th>
-            <th>Ø</th>
-            ${drives.map(d => `
-              <th class="${d.is_best ? 'bg-success-subtle' : ''} ${d.is_worst ? 'bg-danger-subtle' : ''}">
-                ${d.start_date ? d.start_date.slice(0,10) : ''}
-                ${d.is_best ? ' 🏆' : ''}
-                ${d.is_worst ? ' ⚠️' : ''}
-              </th>
-            `).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Datum</td><td>–</td>${drives.map(d => `<td>${d.start_date ? d.start_date.slice(0,10) : ''}</td>`).join('')}</tr>
-          <tr><td>Route</td><td>–</td>${drives.map(d => `<td>${d.route || '–'}</td>`).join('')}</tr>
-          <tr><td>km</td><td>${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>Dauer (min)</td><td>${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>${drives.map(d => `<td>${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>`).join('')}</tr>
-          <tr><td>Ø km/h</td><td>${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>kWh</td><td>${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td><strong>kWh/100km</strong></td><td><strong>${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</strong></td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle fw-bold' : ''} ${d.id === worst ? 'bg-danger-subtle fw-bold' : ''}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>SoC Δ</td><td>${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>${drives.map(d => `<td>${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>`).join('')}</tr>
-          <tr><td>Temp °C</td><td>${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>${drives.map(d => `<td>${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>`).join('')}</tr>
-        </tbody>
-      </table>
-    `;
-
-  // Add bar chart for consumption comparison
-  if (drives.length > 0) {
-    html += `
-      <div class="card mb-3">
-        <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
-        <div class="card-body">
-          <canvas id="driveConsChart" height="120"></canvas>
-        </div>
-      </div>
-    `;
-
-    resultDiv.innerHTML = html;
-
-    // Render bar chart
-    const ctx = document.getElementById('driveConsChart');
-    if (ctx && window.Chart) {
-      const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
-      const consData = drives.map(d => d.cons_per_100);
-      const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
-      
-      if (window.driveConsChart) window.driveConsChart.destroy();
-      window.driveConsChart = new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh/100km' } } }
-        }
-      });
-    }
-  } else {
-    resultDiv.innerHTML = '<div class="alert alert-warning">Keine Vergleichsdaten</div>';
-  }
-}
-
-// Initialize drive compare when on statistik page
-document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('driveCompareSection')) {
-    initDriveCompare();
-  }
-});
-
-/* ============================================================
-   DATA QUALITY & EXPORT FEATURES
-   ============================================================ */
-
-// Show data quality warnings
-function renderDataQualityWarnings(stats) {
-  const warnings = [];
-  const t = stats.totals || {};
-  const h = stats.home || {};
-  const e = stats.external || {};
-  
-  // Sessions without price
-  const homeNoPrice = (h.count || 0) > 0 && (h.grid_cost || 0) === 0 && (h.pv_cost || 0) === 0;
-  const extNoPrice = (e.count || 0) > 0 && (e.cost || 0) === 0;
-  if (homeNoPrice || extNoPrice) {
-    warnings.push({type: 'warning', text: 'Einige Ladevorgänge haben keine Preisdaten – Kosten werden geschätzt.'});
-  }
-  
-  // Unmatched home charges
-  if (h.count && t.ext_kwh > 0 && t.home_kwh === 0) {
-    warnings.push({type: 'info', text: 'Keine Home-Ladungen (EVCC) im Zeitraum – Extern-Daten evtl. unvollständig.'});
-  }
-  
-  // Missing km data
-  if (t.distance_km === 0 && (t.kwh || 0) > 0) {
-    warnings.push({type: 'warning', text: 'Keine Kilometerdaten – Verbrauch/Kosten pro 100km können nicht berechnet werden.'});
-  }
-  
-  // Implausible consumption
-  if (t.consumption_kwh_per_100km && (t.consumption_kwh_per_100km > 50 || t.consumption_kwh_per_100km < 5)) {
-    warnings.push({type: 'warning', text: `Verbrauch ${t.consumption_kwh_per_100km.toFixed(1)} kWh/100km wirkt unplausibel – Odometer-Daten prüfen.`});
-  }
-  
-  if (!warnings.length) return;
-  
-  const container = document.getElementById('dataQualityWarnings') || createWarningsContainer();
-  container.innerHTML = warnings.map(w => `
-    <div class="alert alert-${w.type === 'error' ? 'danger' : w.type} alert-dismissible fade show py-2 mb-2" role="alert">
-      ${w.text}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  `).join('');
-  container.style.display = 'block';
-}
-
-function createWarningsContainer() {
-  const container = document.createElement('div');
-  container.id = 'dataQualityWarnings';
-  container.style.display = 'none';
-  // Insert after statsKpis
-  const statsKpis = document.getElementById('statsKpis');
-  if (statsKpis && statsKpis.parentNode) {
-    statsKpis.parentNode.insertBefore(container, statsKpis.nextSibling);
-  }
-  return container;
-}
-
-// CSV Export
-function exportSessionsCSV(type) {
-  // type: 'home', 'external', 'all', 'drives'
-  let url = `/api/export/csv?type=${type}`;
-  if (currentFrom && currentTo) {
-    url += `&from=${encodeURIComponent(currentFrom)}&to=${encodeURIComponent(currentTo)}`;
-  } else {
-    url += `&days=${currentDays}`;
-  }
-  window.location.href = url;
-}
-
-function addExportButtons() {
-  const header = document.querySelector('.page-header, .card-header:has(#rangeLabel)');
-  if (!header || document.getElementById('exportBtnGroup')) return;
-  
-  const btnGroup = document.createElement('div');
-  btnGroup.id = 'exportBtnGroup';
-  btnGroup.className = 'btn-group btn-group-sm ms-2';
-  btnGroup.innerHTML = `
-    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-      Export CSV
-    </button>
-    <ul class="dropdown-menu dropdown-menu-end">
-      <li><a class="dropdown-item" href="#" data-export="home">Zuhause (EVCC)</a></li>
-      <li><a class="dropdown-item" href="#" data-export="external">Extern (TeslaMate)</a></li>
-      <li><a class="dropdown-item" href="#" data-export="all">Alle Ladevorgänge</a></li>
-      <li><hr class="dropdown-divider"></li>
-      <li><a class="dropdown-item" href="#" data-export="drives">Fahrten</a></li>
-    </ul>
-  `;
-  header.appendChild(btnGroup);
-  
-  btnGroup.querySelectorAll('[data-export]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      exportSessionsCSV(e.target.dataset.export);
-    });
-  });
-}
-
-// Initialize on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => {
-  // Add export buttons to pages that have stats
-  if (document.getElementById('statsKpis') || document.getElementById('summaryCards')) {
-    addExportButtons();
-  }
-});
-
-// Update renderKPIs to also show data quality warnings
-const originalRenderKPIs = renderKPIs;
-renderKPIs = function(stats) {
-  originalRenderKPIs(stats);
-  renderDataQualityWarnings(stats);
-}();
-
-/* ============================================================
-   HEATMAPS for Statistik
-   ============================================================ */
-
-function renderHeatmaps(series, kpis) {
-  const container = document.getElementById('statsSecondary');
-  if (!container) return;
-  
-  if (!series || series.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-  
-  // 1. Charging Heatmap: Day of week vs Hour (from home_sessions if available)
-  // 2. Consumption Heatmap: Day of week vs Month
-  // 3. Cost Heatmap: Day of week vs Month
-  
-  // We'll create a simplified heatmap using the series data (daily data)
-  // Group by month and day of week
-  
-  const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-  const daysOfWeek = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-  
-  // Prepare data matrices
-  const consumptionMatrix = Array(7).fill().map(() => Array(12).fill(null));
-  const costMatrix = Array(7).fill().map(() => Array(12).fill(null));
-  const kmMatrix = Array(7).fill().map(() => Array(12).fill(null));
-  const countMatrix = Array(7).fill().map(() => Array(12).fill(0));
-  
-  series.forEach(d => {
-    const date = new Date(d.day + 'T00:00:00');
-    const month = date.getMonth(); // 0-11
-    const dayOfWeek = (date.getDay() + 6) % 7; // 0=Mo, 6=So
-    
-    if (d.consumption != null) {
-      consumptionMatrix[dayOfWeek][month] = (consumptionMatrix[dayOfWeek][month] || 0) + d.consumption;
-      countMatrix[dayOfWeek][month]++;
-    }
-    if (d.cost != null) {
-      costMatrix[dayOfWeek][month] = (costMatrix[dayOfWeek][month] || 0) + d.cost;
-    }
-    if (d.km != null) {
-      kmMatrix[dayOfWeek][month] = (kmMatrix[dayOfWeek][month] || 0) + d.km;
-    }
-  });
-  
-  // Average consumption matrix
-  for (let dow = 0; dow < 7; dow++) {
-    for (let m = 0; m < 12; m++) {
-      if (countMatrix[dow][m] > 0) {
-        consumptionMatrix[dow][m] = consumptionMatrix[dow][m] / countMatrix[dow][m];
-      } else {
-        consumptionMatrix[dow][m] = null;
-      }
-    }
-  }
-  
-  // Build heatmap HTML
-  function buildHeatmap(matrix, title, unit, colorScale) {
-    const cells = [];
-    for (let dow = 0; dow < 7; dow++) {
-      for (let m = 0; m < 12; m++) {
-        const val = matrix[dow][m];
-        let style = 'background: #e9ecef;';
-        let text = '–';
-        
-        if (val != null) {
-          // Normalize to 0-1 for color
-          const allVals = matrix.flat().filter(v => v != null);
-          if (allVals.length > 0) {
-            const min = Math.min(...allVals);
-            const max = Math.max(...allVals);
-            const norm = max > min ? (val - min) / (max - min) : 0.5;
-            const r = Math.round(255 * (1 - norm));
-            const g = Math.round(255 * norm);
-            style = `background: rgb(${r}, ${g}, 100);`;
-          }
-          text = val.toFixed(1) + ' ' + unit;
-        }
-        
-        cells.push(`<div class="heatmap-cell" style="${style}" title="${daysOfWeek[dow]} ${months[m]}: ${text}">${text}</div>`);
-      }
-    }
-    
-    return `
-      <div class="col-12 col-lg-6 col-xl-4 mb-3">
-        <div class="card h-100">
-          <div class="card-header py-2">${title}</div>
-          <div class="card-body p-2">
-            <div class="heatmap-grid" style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; font-size: 0.65rem;">
-              <div class="heatmap-header" style="grid-column: span 12; display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin-bottom: 2px; font-weight: 600; font-size: 0.6rem; text-align: center;">
-                ${months.map(m => `<div>${m}</div>`).join('')}
-              </div>
-              ${daysOfWeek.map((dow, i) => `
-                <div class="heatmap-row-label" style="grid-column: 1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.6rem; padding-right: 4px;">${dow}</div>
-                ${cells.slice(i * 12, (i + 1) * 12).join('')}
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-  
-  container.innerHTML = `
-    <div class="row g-2">
-      ${buildHeatmap(consumptionMatrix, '⚡ Verbrauch (kWh/100km) nach Wochentag & Monat', 'kWh', ['#28a745', '#ffc107', '#dc3545'])}
-      ${buildHeatmap(costMatrix, '💶 Kosten (€) nach Wochentag & Monat', '€', ['#28a745', '#ffc107', '#dc3545'])}
-      ${buildHeatmap(kmMatrix, '🛣️ Kilometer nach Wochentag & Monat', 'km', ['#6f42c1', '#0dcaf0', '#fd7e14'])}
-    </div>
-  `;
-}
 
 /**
  * Battery Health Chart
@@ -1335,4 +809,517 @@ function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangePr
   if (chargingCurve) renderChargingCurveChart(chargingCurve);
   if (vampireDrain) renderVampireDrainChart(vampireDrain);
   if (rangeProjection) renderRangeProjectionChart(rangeProjection);
+}
+
+/* ============================================================
+   FAHRTENVERGLEICH (Drive Comparison)
+   ============================================================ */
+
+let driveCompareData = [];
+
+async function initDriveCompare() {
+  const loadBtn = document.getElementById('driveCompareLoad');
+  const runBtn = document.getElementById('driveCompareRun');
+  const selectAll = document.getElementById('driveSelectAll');
+  const tbody = document.querySelector('#tblDrives tbody');
+  const resultDiv = document.getElementById('driveCompareResult');
+  const fromEl = document.getElementById('driveCompareFrom');
+  const toEl = document.getElementById('driveCompareTo');
+  const searchEl = document.getElementById('driveCompareSearch');
+  
+  if (!loadBtn || !tbody) return; // Not on statistik page
+
+  // Set default date range (last 90 days)
+  const today = new Date();
+  const ago90 = new Date(today.getTime() - 90 * 86400000);
+  fromEl.value = ago90.toISOString().slice(0, 10);
+  toEl.value = today.toISOString().slice(0, 10);
+
+  loadBtn.addEventListener('click', async () => {
+    const from = fromEl.value || null;
+    const to = toEl.value || null;
+    const days = from && to ? null : 90;
+    
+    try {
+      const params = new URLSearchParams();
+      if (days) params.set('days', days);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      
+      loadBtn.disabled = true;
+      loadBtn.textContent = 'Lädt...';
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Lädt Fahrten...</td></tr>';
+      
+      const resp = await fetch(`/api/drives?${params.toString()}`, {credentials: 'same-origin'});
+      const data = await resp.json();
+      
+      driveCompareData = data.drives || [];
+      window._allDriveCompareData = driveCompareData;
+      renderDriveTablePage(1);
+      
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Laden';
+    } catch (e) {
+      console.error('Drive compare load failed', e);
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Fehler beim Laden</td></tr>';
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Laden';
+    }
+  });
+
+  searchEl.addEventListener('input', () => {
+    const q = searchEl.value.toLowerCase();
+    const filtered = driveCompareData.filter(d => 
+      (d.route || '').toLowerCase().includes(q)
+    );
+    window._allDriveCompareData = filtered;
+    renderDriveTablePage(1);
+  });
+
+  selectAll.addEventListener('change', () => {
+    const allCheckboxes = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]');
+    allCheckboxes.forEach(cb => {
+      cb.checked = selectAll.checked;
+    });
+    // Also update checkboxes on other pages by storing the selection state
+    window._driveCompareSelectAll = selectAll.checked;
+    updateCompareButton();
+  });
+
+  tbody.addEventListener('change', (e) => {
+    if (e.target.matches('input[type="checkbox"][data-drive-id]')) {
+      updateCompareButton();
+    }
+  });
+
+  runBtn.addEventListener('click', async () => {
+    const selected = Array.from(tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked'))
+      .map(cb => parseInt(cb.dataset.driveId, 10));
+    
+    if (selected.length < 2) {
+      alert('Bitte mindestens 2 Fahrten auswählen');
+      return;
+    }
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Vergleicht...';
+    resultDiv.style.display = 'none';
+    resultDiv.innerHTML = '';
+
+    try {
+      const resp = await fetch(`/api/drives/compare?ids=${selected.join(',')}`, {credentials: 'same-origin'});
+      const data = await resp.json();
+      renderDriveCompareResult(data);
+      resultDiv.style.display = 'block';
+    } catch (e) {
+      console.error('Compare failed', e);
+      resultDiv.innerHTML = '<div class="alert alert-danger">Vergleich fehlgeschlagen</div>';
+      resultDiv.style.display = 'block';
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Vergleichen';
+    }
+  });
+}
+
+function renderDriveTable(drives) {
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selectAll = document.getElementById('driveSelectAll');
+  if (!tbody) return;
+  
+  selectAll.checked = false;
+  
+  // Store all drives for pagination
+  window._allDriveCompareData = drives || [];
+  renderDriveTablePage(1);
+}
+
+function renderDriveTablePage(page) {
+  const drives = window._allDriveCompareData || [];
+  const perPage = 10;
+  const totalPages = Math.ceil(drives.length / perPage);
+  const start = (page - 1) * perPage;
+  const end = start + perPage;
+  const pageDrives = drives.slice(start, end);
+  
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selectAll = document.getElementById('driveSelectAll');
+  if (!tbody) return;
+  
+  // Apply global select-all state if set
+  const globalSelectAll = window._driveCompareSelectAll === true;
+  selectAll.checked = globalSelectAll;
+  
+  if (!pageDrives.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Keine Fahrten im Zeitraum</td></tr>';
+  } else {
+    tbody.innerHTML = pageDrives.map(d => `
+      <tr>
+        <td><input type="checkbox" data-drive-id="${d.id}" class="form-check-input" ${globalSelectAll ? 'checked' : ''}></td>
+        <td>${d.start_date ? d.start_date.slice(0,10) : '–'}</td>
+        <td>${d.route || '–'}</td>
+        <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) + ' min' : '–'}</td>
+        <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
+      </tr>
+    `).join('');
+  }
+  
+  // Render pagination
+  renderDrivePagination(page, totalPages);
+}
+
+function renderDrivePagination(currentPage, totalPages) {
+  const pagination = document.getElementById('driveComparePagination');
+  if (!pagination) return;
+  
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+  
+  let html = '';
+  
+  // Previous button
+  html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+    <a class="page-link" href="#" data-page="${currentPage - 1}" aria-label="Previous">
+      <span aria-hidden="true">&laquo;</span>
+    </a></li>`;
+  
+  // Page numbers
+  let startPage = Math.max(1, currentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+      <a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+  }
+  
+  // Next button
+  html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+    <a class="page-link" href="#" data-page="${currentPage + 1}" aria-label="Next">
+      <span aria-hidden="true">&raquo;</span>
+    </a></li>`;
+  
+  pagination.innerHTML = html;
+  
+  // Add click handlers
+  pagination.querySelectorAll('.page-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = parseInt(link.dataset.page, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages && page !== currentPage) {
+        renderDriveTablePage(page);
+      }
+    });
+  });
+}
+
+function updateCompareButton() {
+  const runBtn = document.getElementById('driveCompareRun');
+  const tbody = document.querySelector('#tblDrives tbody');
+  const selected = tbody.querySelectorAll('input[type="checkbox"][data-drive-id]:checked').length;
+  runBtn.disabled = selected < 2;
+  runBtn.textContent = `Vergleichen (${selected})`;
+}
+
+function renderDriveCompareResult(data) {
+  const resultDiv = document.getElementById('driveCompareResult');
+  if (!resultDiv) return;
+  
+  const drives = data.drives || [];
+  const averages = data.averages || {};
+  const best = data.best_consumption_id;
+  const worst = data.worst_consumption_id;
+
+  let html = `
+    <h6>Vergleichsergebnis</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-3">
+        <thead class="table-light">
+          <tr>
+            <th>Kennzahl</th>
+            <th>Ø</th>
+            ${drives.map(d => `
+              <th class="${d.is_best ? 'bg-success-subtle' : ''} ${d.is_worst ? 'bg-danger-subtle' : ''}">
+                ${d.start_date ? d.start_date.slice(0,10) : ''}
+                ${d.is_best ? ' 🏆' : ''}
+                ${d.is_worst ? ' ⚠️' : ''}
+              </th>
+            `).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Datum</td><td>–</td>${drives.map(d => `<td>${d.start_date ? d.start_date.slice(0,10) : ''}</td>`).join('')}</tr>
+          <tr><td>Route</td><td>–</td>${drives.map(d => `<td>${d.route || '–'}</td>`).join('')}</tr>
+          <tr><td>km</td><td>${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>Dauer (min)</td><td>${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>${drives.map(d => `<td>${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>`).join('')}</tr>
+          <tr><td>Ø km/h</td><td>${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>kWh</td><td>${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td><strong>kWh/100km</strong></td><td><strong>${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</strong></td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle fw-bold' : ''} ${d.id === worst ? 'bg-danger-subtle fw-bold' : ''}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
+          <tr><td>SoC Δ</td><td>${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>${drives.map(d => `<td>${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>`).join('')}</tr>
+          <tr><td>Temp °C</td><td>${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>${drives.map(d => `<td>${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    `;
+
+  // Add bar chart for consumption comparison
+  if (drives.length > 0) {
+    html += `
+      <div class="card mb-3">
+        <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
+        <div class="card-body">
+          <canvas id="driveConsChart" height="120"></canvas>
+        </div>
+      </div>
+    `;
+
+    resultDiv.innerHTML = html;
+
+    // Render bar chart
+    const ctx = document.getElementById('driveConsChart');
+    if (ctx && window.Chart) {
+      const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
+      const consData = drives.map(d => d.cons_per_100);
+      const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
+      
+      if (window.driveConsChart) window.driveConsChart.destroy();
+      window.driveConsChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh/100km' } } }
+        }
+      });
+    }
+  } else {
+    resultDiv.innerHTML = '<div class="alert alert-warning">Keine Vergleichsdaten</div>';
+  }
+}
+
+/* ============================================================
+   DATA QUALITY & EXPORT FEATURES
+   ============================================================ */
+
+// Show data quality warnings
+function renderDataQualityWarnings(stats) {
+  const warnings = [];
+  const t = stats.totals || {};
+  const h = stats.home || {};
+  const e = stats.external || {};
+  
+  // Sessions without price
+  const homeNoPrice = (h.count || 0) > 0 && (h.grid_cost || 0) === 0 && (h.pv_cost || 0) === 0;
+  const extNoPrice = (e.count || 0) > 0 && (e.cost || 0) === 0;
+  if (homeNoPrice || extNoPrice) {
+    warnings.push({type: 'warning', text: 'Einige Ladevorgänge haben keine Preisdaten – Kosten werden geschätzt.'});
+  }
+  
+  // Unmatched home charges
+  if (h.count && t.ext_kwh > 0 && t.home_kwh === 0) {
+    warnings.push({type: 'info', text: 'Keine Home-Ladungen (EVCC) im Zeitraum – Extern-Daten evtl. unvollständig.'});
+  }
+  
+  // Missing km data
+  if (t.distance_km === 0 && (t.kwh || 0) > 0) {
+    warnings.push({type: 'warning', text: 'Keine Kilometerdaten – Verbrauch/Kosten pro 100km können nicht berechnet werden.'});
+  }
+  
+  // Implausible consumption
+  if (t.consumption_kwh_per_100km && (t.consumption_kwh_per_100km > 50 || t.consumption_kwh_per_100km < 5)) {
+    warnings.push({type: 'warning', text: `Verbrauch ${t.consumption_kwh_per_100km.toFixed(1)} kWh/100km wirkt unplausibel – Odometer-Daten prüfen.`});
+  }
+  
+  if (!warnings.length) return;
+  
+  const container = document.getElementById('dataQualityWarnings') || createWarningsContainer();
+  container.innerHTML = warnings.map(w => `
+    <div class="alert alert-${w.type === 'error' ? 'danger' : w.type} alert-dismissible fade show py-2 mb-2" role="alert">
+      ${w.text}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `).join('');
+  container.style.display = 'block';
+}
+
+function createWarningsContainer() {
+  const container = document.createElement('div');
+  container.id = 'dataQualityWarnings';
+  container.style.display = 'none';
+  // Insert after statsKpis
+  const statsKpis = document.getElementById('statsKpis');
+  if (statsKpis && statsKpis.parentNode) {
+    statsKpis.parentNode.insertBefore(container, statsKpis.nextSibling);
+  }
+  return container;
+}
+
+// CSV Export
+function exportSessionsCSV(type) {
+  // type: 'home', 'external', 'all', 'drives'
+  let url = `/api/export/csv?type=${type}`;
+  if (currentFrom && currentTo) {
+    url += `&from=${encodeURIComponent(currentFrom)}&to=${encodeURIComponent(currentTo)}`;
+  } else {
+    url += `&days=${currentDays}`;
+  }
+  window.location.href = url;
+}
+
+function addExportButtons() {
+  const header = document.querySelector('.page-header, .card-header:has(#rangeLabel)');
+  if (!header || document.getElementById('exportBtnGroup')) return;
+  
+  const btnGroup = document.createElement('div');
+  btnGroup.id = 'exportBtnGroup';
+  btnGroup.className = 'btn-group btn-group-sm ms-2';
+  btnGroup.innerHTML = `
+    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Export CSV
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" href="#" data-export="home">Zuhause (EVCC)</a></li>
+      <li><a class="dropdown-item" href="#" data-export="external">Extern (TeslaMate)</a></li>
+      <li><a class="dropdown-item" href="#" data-export="all">Alle Ladevorgänge</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="#" data-export="drives">Fahrten</a></li>
+    </ul>
+  `;
+  header.appendChild(btnGroup);
+  
+  btnGroup.querySelectorAll('[data-export]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      exportSessionsCSV(e.target.dataset.export);
+    });
+  });
+}
+
+/* ============================================================
+   HEATMAPS for Statistik
+   ============================================================ */
+
+function renderHeatmaps(series, kpis) {
+  const container = document.getElementById('statsSecondary');
+  if (!container) return;
+  
+  if (!series || series.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  // 1. Charging Heatmap: Day of week vs Hour (from home_sessions if available)
+  // 2. Consumption Heatmap: Day of week vs Month
+  // 3. Cost Heatmap: Day of week vs Month
+  
+  // We'll create a simplified heatmap using the series data (daily data)
+  // Group by month and day of week
+  
+  const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const daysOfWeek = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  
+  // Prepare data matrices
+  const consumptionMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const costMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const kmMatrix = Array(7).fill().map(() => Array(12).fill(null));
+  const countMatrix = Array(7).fill().map(() => Array(12).fill(0));
+  
+  series.forEach(d => {
+    const date = new Date(d.day + 'T00:00:00');
+    const month = date.getMonth(); // 0-11
+    const dayOfWeek = (date.getDay() + 6) % 7; // 0=Mo, 6=So
+    
+    if (d.consumption != null) {
+      consumptionMatrix[dayOfWeek][month] = (consumptionMatrix[dayOfWeek][month] || 0) + d.consumption;
+      countMatrix[dayOfWeek][month]++;
+    }
+    if (d.cost != null) {
+      costMatrix[dayOfWeek][month] = (costMatrix[dayOfWeek][month] || 0) + d.cost;
+    }
+    if (d.km != null) {
+      kmMatrix[dayOfWeek][month] = (kmMatrix[dayOfWeek][month] || 0) + d.km;
+    }
+  });
+  
+  // Average consumption matrix
+  for (let dow = 0; dow < 7; dow++) {
+    for (let m = 0; m < 12; m++) {
+      if (countMatrix[dow][m] > 0) {
+        consumptionMatrix[dow][m] = consumptionMatrix[dow][m] / countMatrix[dow][m];
+      } else {
+        consumptionMatrix[dow][m] = null;
+      }
+    }
+  }
+  
+  // Build heatmap HTML
+  function buildHeatmap(matrix, title, unit, colorScale) {
+    const cells = [];
+    for (let dow = 0; dow < 7; dow++) {
+      for (let m = 0; m < 12; m++) {
+        const val = matrix[dow][m];
+        let style = 'background: #e9ecef;';
+        let text = '–';
+        
+        if (val != null) {
+          // Normalize to 0-1 for color
+          const allVals = matrix.flat().filter(v => v != null);
+          if (allVals.length > 0) {
+            const min = Math.min(...allVals);
+            const max = Math.max(...allVals);
+            const norm = max > min ? (val - min) / (max - min) : 0.5;
+            const r = Math.round(255 * (1 - norm));
+            const g = Math.round(255 * norm);
+            style = `background: rgb(${r}, ${g}, 100);`;
+          }
+          text = val.toFixed(1) + ' ' + unit;
+        }
+        
+        cells.push(`<div class="heatmap-cell" style="${style}" title="${daysOfWeek[dow]} ${months[m]}: ${text}">${text}</div>`);
+      }
+    }
+    
+    return `
+      <div class="col-12 col-lg-6 col-xl-4 mb-3">
+        <div class="card h-100">
+          <div class="card-header py-2">${title}</div>
+          <div class="card-body p-2">
+            <div class="heatmap-grid" style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; font-size: 0.65rem;">
+              <div class="heatmap-header" style="grid-column: span 12; display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin-bottom: 2px; font-weight: 600; font-size: 0.6rem; text-align: center;">
+                ${months.map(m => `<div>${m}</div>`).join('')}
+              </div>
+              ${daysOfWeek.map((dow, i) => `
+                <div class="heatmap-row-label" style="grid-column: 1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.6rem; padding-right: 4px;">${dow}</div>
+                ${cells.slice(i * 12, (i + 1) * 12).join('')}
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = `
+    <div class="row g-2">
+      ${buildHeatmap(consumptionMatrix, '⚡ Verbrauch (kWh/100km) nach Wochentag & Monat', 'kWh/100km', ['#198754', '#0dcaf0', '#ffc107'])}
+      ${buildHeatmap(costMatrix, '💰 Kosten (€/100km) nach Wochentag & Monat', '€/100km', ['#0d6efd', '#6f42c1', '#fd7e14'])}
+      ${buildHeatmap(kmMatrix, '🛣️ Kilometer nach Wochentag & Monat', 'km', ['#6f42c1', '#0dcaf0', '#fd7e14'])}
+    </div>
+  `;
+  
+  // Show heatmaps section
+  const heatmapsSection = document.getElementById('heatmapsSection');
+  if (heatmapsSection) {
+    heatmapsSection.style.display = 'block';
+  }
 }
