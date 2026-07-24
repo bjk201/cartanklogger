@@ -17,19 +17,21 @@ function buildApiParams() {
 async function loadStats() {
   try {
     const params = buildApiParams();
-    const [stats, charts, batteryHealth, chargingCurve, vampireDrain, rangeProjection] = await Promise.all([
-      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+    
+    // Fetch all data with individual error handling so one failure doesn't break everything
+    const [statsRes, chartsRes, batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes] = await Promise.all([
+      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({totals: {}, home: {}, external: {}, monthly: []})),
+      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({series: [], kpis: {}})),
       fetch(`/api/vehicle/battery-health?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
       fetch(`/api/vehicle/charging-curve?limit=20`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
       fetch(`/api/vehicle/vampire-drain?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
       fetch(`/api/vehicle/range-projection?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false}))
     ]);
     
-    renderKPIs(stats);
-    renderCharts(charts);
-    renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangeProjection);
-    renderDataQualityWarnings(stats);
+    renderKPIs(statsRes);
+    renderCharts(chartsRes);
+    renderVehicleCharts(batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes);
+    renderDataQualityWarnings(statsRes);
     updateRangeLabel();
   } catch (e) {
     console.error('loadStats failed', e);
