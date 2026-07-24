@@ -481,9 +481,9 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   
   /* Main content - full width on mobile */
   main { 
-    padding-top: 86px; /* space for fixed header (56px + padding) + date picker row */
+    padding-top: 56px; /* space for fixed header (~36px) + date picker row (~20px) */
     width: 100%;
-    min-height: calc(100vh - 86px);
+    min-height: calc(100vh - 56px);
   }
   
   /* Ensure first content row has extra space from header */
