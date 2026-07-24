@@ -509,7 +509,7 @@ function renderBatteryHealthChart(data) {
   
   if (window.chartBatteryHealth) window.chartBatteryHealth.destroy();
   
-  window.chartBatteryHealth = new Chart(canvas, {
+  window.chartBatteryHealthChart = new Chart(canvas, {
     type: 'line',
     data: {
       labels,
@@ -642,7 +642,7 @@ function renderVampireDrainChart(data) {
   
   if (window.chartVampireDrain) window.chartVampireDrain.destroy();
   
-  window.chartVampireDrain = new Chart(canvas, {
+  window.chartVampireDrainChart = new Chart(canvas, {
     type: 'bar',
     data: {
       labels,
@@ -700,7 +700,7 @@ function renderRangeProjectionChart(data) {
   
   if (window.chartRangeProjection) window.chartRangeProjection.destroy();
   
-  window.chartRangeProjection = new Chart(canvas, {
+  window.chartRangeProjectionChart = new Chart(canvas, {
     type: 'line',
     data: {
       labels,
