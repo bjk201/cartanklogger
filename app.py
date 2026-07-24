@@ -2163,14 +2163,14 @@ def api_vehicle_battery_health():
         # Mock-Daten für Battery Health Chart
         import random
         from datetime import datetime, timedelta
-        data = []
+        series = []
         base = 98.5
         for i in range(days):
             d = (datetime.now() - timedelta(days=days-i)).strftime("%Y-%m-%d")
             # Langsamer Abfall + Noise
             val = max(90, base - (i * 0.0015) + random.uniform(-0.1, 0.1))
-            data.append({"day": d, "health_pct": round(val, 1), "capacity_kwh": round(75.0 * val / 100, 1)})
-        return jsonify({"available": True, "mock": True, "data": data})
+            series.append({"day": d, "health_pct": round(val, 1), "capacity_kwh": round(75.0 * val / 100, 1)})
+        return jsonify({"available": True, "mock": True, "series": series})
     
     try:
         client = TeslaMateClient(url, tm_cfg.get("api_token", ""))
@@ -4918,8 +4918,7 @@ def api_nerd_vampire_drain():
                             "date": start_time.strftime("%Y-%m-%d %H:%M"),
                             "duration_h": round(hours_parked, 1),
                             "soc_loss_pct": round(soc_loss, 2),
-                            "est_loss_kwh": round(est_kwh, 2),
-                            "sentry_mode": "Unbekannt"  # TM speichert das nicht direkt
+                            "est_loss_kwh": round(est_kwh, 2)
                         })
         except Exception:
             continue

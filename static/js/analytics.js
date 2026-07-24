@@ -37,7 +37,7 @@ function renderKPIs(kpis) {
       icon: '🧛',
       title: 'Vampire Drain',
       value: kpis.vampire_drain?.pct_per_day !== undefined ? kpis.vampire_drain.pct_per_day.toFixed(2) + ' %/Tag' : '–',
-      subtitle: `${kpis.vampire_drain?.intervals_count || 0} Intervalle | Sentry: ~${Math.round(kpis.vampire_drain?.watts_sentry_on || 0)}W an / ~${Math.round(kpis.vampire_drain?.watts_sentry_off || 0)}W aus`,
+      subtitle: `${kpis.vampire_drain?.intervals_count || 0} Intervalle`,
       color: 'warning'
     },
     {
@@ -197,7 +197,6 @@ function renderVampireDrain(vampire) {
             <th>Dauer (h)</th>
             <th>SoC Verlust (%)</th>
             <th>Gesch. Verlust (kWh)</th>
-            <th>Wächtermodus</th>
           </tr>
         </thead>
         <tbody>
@@ -207,7 +206,6 @@ function renderVampireDrain(vampire) {
               <td>${s.duration_h.toFixed(1)}</td>
               <td>${s.soc_loss_pct.toFixed(2)}</td>
               <td>${s.est_loss_kwh.toFixed(2)}</td>
-              <td><span class="badge bg-secondary">${s.sentry_mode}</span></td>
             </tr>
           `).join('')}
         </tbody>
