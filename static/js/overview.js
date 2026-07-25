@@ -18,9 +18,9 @@ async function loadOverview() {
   try {
     const params = buildApiParams();
     const [merged, stats, charts, vehicleLive] = await Promise.all([
-      fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()),
+      fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => []),
+      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({totals: {}, home: {}, external: {}, monthly: []})),
+      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({series: [], kpis: {}})),
       fetch(`/api/vehicle/live`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false}))
     ]);
     
@@ -149,6 +149,7 @@ function buildDetail(r) {
 }
 
 function renderKPIs(s, mergedRows = []) {
+  s = s || {};
   const t = s.totals || {}, h = s.home || {}, e = s.external || {};
   const monthly = s.monthly || [];
   const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
@@ -181,18 +182,17 @@ function renderKPIs(s, mergedRows = []) {
   
   // mergedKpis - use passed mergedRows
   const rows = mergedRows || [];
-  const days = rows.length;
   const totKwh = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
   const totCost = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
   const extKwhM = rows.reduce((a, r) => a + (r.ext_kwh || 0), 0);
   const homeLossM = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
-  const cons = totKwh > 0 && t.distance_km > 0 ? totKwh / (t.distance_km / 100) : 0;
+  const cons = t.distance_km > 0 ? t.kwh / (t.distance_km / 100.0) : 0;
   const consNet = cons * 0.85;
   const tco = (t.tco) || 0;
   const tco100 = (t.tco_per_100km) || 0;
   
   document.getElementById('mergedKpis').innerHTML = [
-    kpiStat('🛣️ Gefahrene km', Math.round(totKwh).toLocaleString('de-DE')+' km'),
+    kpiStat('🛣️ Gefahrene km', (t.distance_km||0).toLocaleString('de-DE')+' km'),
     kpiStat('⚡ Geladene kWh', totKwh.toLocaleString('de-DE', {minimumFractionDigits:1})+' kWh'),
     kpiStat('💶 Ausgaben (Energie)', fmtEUR(totCost)),
     kpiStat('💰 TCO gesamt', fmtEUR(tco), 'inkl. Anschaffung/Versicherung/Steuer'),

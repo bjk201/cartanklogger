@@ -490,11 +490,21 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   }
   
   /* Ensure first content row has extra space from header */
-  main > .row:first-child,
-  main > div > .row:first-child {
-    margin-top: 1rem;
-    padding-top: 0.5rem;
+  /* ── ZEITRAUM-UI: Content below fixed header ── */
+.content-wrapper {
+  padding-top: 1rem;
+}
+@media (min-width: 768px) {
+  .content-wrapper {
+    padding-top: 1.5rem;
   }
+}
+
+main > .row:first-child,
+main > div > .row:first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
   
   /* Mobile date picker row - ensure visible and not cut off */
   main > .row:first-child .btn-group-sm,

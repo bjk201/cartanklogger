@@ -1,10 +1,17 @@
 // statistik.js - Statistik Seite mit 4 Charts + Chart-Type Selector + Moving Average Toggle
 
+// Per-chart state (not global) — each chart has independent type & MA toggle
+const chartInstances = {};
+const chartStates = {
+  chartCons:    { type: 'line', showMA: true },
+  chartPrice:   { type: 'line', showMA: true },
+  chartCost100: { type: 'line', showMA: true },
+  chartKm:      { type: 'line', showMA: true }
+};
+
 let currentDays = 365;
 let currentFrom = null;
 let currentTo = null;
-let currentChartType = 'line'; // line, bar, pie
-let showMovingAverage = true; // Moving Average Toggle
 const MOVING_AVG_WINDOW = 7;
 
 function buildApiParams() {
@@ -71,44 +78,43 @@ function renderKPIs(s) {
     </div>`).join('');
 }
 
+// ── Render all 4 stat charts ──────────────────────────────────
 function renderCharts(charts) {
   const s = charts.series || [];
   const kpis = charts.kpis || {};
-  
-  // Store globally for pie chart access
   window.__chartsData = charts;
-  
-  // Prepare data arrays
+
   const labels = s.map(d => d.day);
-  const consData = s.map(d => d.consumption);
-  const priceData = s.map(d => d.price_per_kwh);
-  const cost100Data = s.map(d => d.cost_per_100);
-  // Don't use cumulative km for moving average - use daily km instead
-  const dailyKmData = s.map(d => d.km);
-  
-  // Calculate moving averages
-  const consMA = movingAverage(consData, MOVING_AVG_WINDOW);
-  const priceMA = movingAverage(priceData, MOVING_AVG_WINDOW);
-  const cost100MA = movingAverage(cost100Data, MOVING_AVG_WINDOW);
-  // Daily km MA makes sense, cumulative doesn't
-  const dailyKmMA = movingAverage(dailyKmData, MOVING_AVG_WINDOW);
-  
-  renderChart('chartCons', 'Verbrauch (kWh/100 km)', labels, consData, consMA, kpis.avg_consumption || 0, 'kWh/100km', '#198754');
-  renderChart('chartPrice', 'Energiepreis (€/kWh)', labels, priceData, priceMA, kpis.avg_price_kwh || 0, '€/kWh', '#0d6efd');
-  renderChart('chartCost100', 'Kosten (€/100 km)', labels, cost100Data, cost100MA, kpis.avg_cost_100 || 0, '€/100km', '#ffc107');
-  // For km chart, show daily km with MA, but avg = total_km
-  renderChart('chartKm', 'Tageskilometer', labels, dailyKmData, dailyKmMA, kpis.total_km || 0, 'km', '#6f42c1');
-  
-  // Add chart type selector and MA toggle to each card
-  ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(id => {
+  const consData   = s.map(d => d.consumption);
+  const priceData  = s.map(d => d.price_per_kwh);
+  const cost100Data= s.map(d => d.cost_per_100);
+  const dailyKmData= s.map(d => d.km);
+
+  // Period average over the selected date range (not fixed 7T MA)
+  const rangeAvg = arr => {
+    const valid = arr.filter(v => v != null);
+    return valid.length ? valid.reduce((a,b) => a+b, 0) / valid.length : null;
+  };
+  const avgCons    = rangeAvg(consData);
+  const avgPrice   = rangeAvg(priceData);
+  const avgCost100 = rangeAvg(cost100Data);
+  const avgKm      = rangeAvg(dailyKmData);
+
+  renderChart('chartCons',    'Verbrauch (kWh/100 km)', labels, consData,   avgCons,   'kWh/100km', '#198754', 'consumption');
+  renderChart('chartPrice',   'Energiepreis (€/kWh)',   labels, priceData,   avgPrice,  '€/kWh',     '#0d6efd', 'price');
+  renderChart('chartCost100', 'Kosten (€/100 km)',      labels, cost100Data, avgCost100,'€/100km',   '#ffc107', 'cost');
+  renderChart('chartKm',      'Tageskilometer',         labels, dailyKmData, avgKm,     'km',        '#6f42c1', 'km');
+
+  // Per-chart type selector dropdowns + MA toggles
+  ['chartCons','chartPrice','chartCost100','chartKm'].forEach(id => {
     addChartTypeSelector(id);
     addMAToggle(id);
+    updateChartTypeUI(id);
   });
-  
-  // Setup event listeners for MA toggle buttons
-  setupMAToggleButtons();
-  setupChartTypeButtons();
-  
+
+  setupChartTypeDropdowns();
+  setupMATogglers();
+
   // Render heatmaps
   renderHeatmaps(s, kpis);
 }
@@ -131,85 +137,27 @@ function movingAverage(data, window) {
   return result;
 }
 
-function renderChart(canvasId, title, labels, data, maData, avgValue, unit, color) {
+// ── Core chart renderer (per-chart-type, safe destroy) ──────────
+function renderChart(canvasId, title, labels, data, avgValue, unit, color, dataType) {
   const ctx = document.getElementById(canvasId);
   if (!ctx || !window.Chart) return;
-  
-  if (window[canvasId + 'Chart']) {
-    window[canvasId + 'Chart'].destroy();
+
+  // Destroy only THIS canvas's previous chart instance
+  if (chartInstances[canvasId]) {
+    try { chartInstances[canvasId].destroy(); } catch(e) {}
+    chartInstances[canvasId] = null;
   }
-  
-  const isPie = currentChartType === 'pie';
-  const isBar = currentChartType === 'bar';
-  const chartType = isPie ? 'doughnut' : (isBar ? 'bar' : 'line');
-  
-  if (isPie) {
-    // For pie: show meaningful distribution based on chart type
-    let pieData, pieLabels;
-    
-    if (canvasId === 'chartCons') {
-      // Consumption: AC vs DC split (from ac_kwh, dc_kwh in series)
-      const s = window.__chartsData?.series || [];
-      const acSum = s.reduce((a, d) => a + (d.ac_kwh || 0), 0);
-      const dcSum = s.reduce((a, d) => a + (d.dc_kwh || 0), 0);
-      pieLabels = ['AC Laden', 'DC Laden'];
-      pieData = [acSum, dcSum];
-    } else if (canvasId === 'chartPrice') {
-      // Price: Home vs External weighted
-      const s = window.__chartsData?.series || [];
-      const homeSum = s.reduce((a, d) => a + (d.home_kwh || 0), 0);
-      const extSum = s.reduce((a, d) => a + (d.ext_kwh || 0), 0);
-      pieLabels = ['Zuhause', 'Extern'];
-      pieData = [homeSum, extSum];
-    } else if (canvasId === 'chartCost100') {
-      // Cost: Home vs External
-      const s = window.__chartsData?.series || [];
-      const homeCost = s.reduce((a, d) => a + (d.home_cost || 0), 0);
-      const extCost = s.reduce((a, d) => a + (d.ext_cost || 0), 0);
-      pieLabels = ['Zuhause', 'Extern'];
-      pieData = [homeCost, extCost];
-    } else if (canvasId === 'chartKm') {
-      // KM: don't show pie for cumulative, show line instead
-      return renderChart(canvasId, title, labels, data, maData, avgValue, unit, color);
-    }
-    
-    // Filter out zero/empty
-    const valid = pieData.map((v, i) => ({v, l: pieLabels[i]})).filter(x => x.v > 0);
-    if (valid.length === 0) {
-      // No data, show empty state
-      ctx.innerHTML = '<div class="text-muted small p-2">Keine Daten für Kreisdiagramm</div>';
-      return;
-    }
-    
-    window[canvasId + 'Chart'] = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: valid.map(x => x.l),
-        datasets: [{
-          data: valid.map(x => x.v),
-          backgroundColor: [color, '#0dcaf0', '#ffc107', '#6f42c1', '#fd7e14', '#20c997'],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: { position: 'bottom' },
-          title: { display: true, text: `${title} (Summe: ${valid.reduce((a,x)=>a+x.v,0).toFixed(1)} ${unit})` }
-        }
-      }
-    });
-    return;
-  }
-  
-  // Line or Bar chart
+
+  const state = chartStates[canvasId] || { type: 'line', showMA: true };
+  const chartType = state.type;
+
+  // ── Build datasets ──
   const datasets = [
     {
       label: 'Tageswert',
       data: data,
       borderColor: color,
-      backgroundColor: isBar ? color + '80' : 'transparent',
+      backgroundColor: chartType === 'bar' ? color + '80' : 'transparent',
       fill: false,
       tension: 0.2,
       pointRadius: 3,
@@ -218,12 +166,12 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
       order: 2
     }
   ];
-  
-  // Add moving average line (only for line charts, and only if enabled)
-  if (!isBar && showMovingAverage && maData.some(v => v != null)) {
+
+  // Period average line
+  if (state.showMA && avgValue != null) {
     datasets.push({
-      label: `Ø ${MOVING_AVG_WINDOW}T`,
-      data: maData,
+      label: 'Ø Zeitraum',
+      data: data.map(v => v == null ? null : avgValue),
       borderColor: '#dc3545',
       borderDash: [5, 5],
       borderWidth: 2,
@@ -234,183 +182,149 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
       order: 1
     });
   }
-  
-  // Add overall average line (horizontal) for both line and bar charts
-  let avgLinePlugin = null;
-  if (avgValue != null && avgValue !== 0) {
-    avgLinePlugin = {
-      id: 'avgLine',
-      beforeDraw: (chart) => {
-        const ctx = chart.ctx;
-        const yScale = chart.scales.y;
-        const y = yScale.getPixelForValue(avgValue);
-        
-        ctx.save();
-        ctx.strokeStyle = '#6c757d';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(chart.chartArea.left, y);
-        ctx.lineTo(chart.chartArea.right, y);
-        ctx.stroke();
-        
-        // Label
-        ctx.fillStyle = '#6c757d';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`Ø ${Number(avgValue).toFixed(2)} ${unit}`, chart.chartArea.left + 5, y - 3);
-        ctx.restore();
-      }
-    };
+
+  // ── Pie / Doughnut ──
+  if (chartType === 'pie') {
+    let pieData, pieLabels;
+    if (dataType === 'consumption') {
+      const ser = window.__chartsData?.series || [];
+      pieLabels = ['AC Laden', 'DC Laden'];
+      pieData = [ser.reduce((a,d) => a+(d.ac_kwh||0), 0), ser.reduce((a,d) => a+(d.dc_kwh||0), 0)];
+    } else if (dataType === 'price') {
+      const ser = window.__chartsData?.series || [];
+      pieLabels = ['Zuhause', 'Extern'];
+      pieData = [ser.reduce((a,d) => a+(d.home_kwh||0), 0), ser.reduce((a,d) => a+(d.ext_kwh||0), 0)];
+    } else if (dataType === 'cost') {
+      const ser = window.__chartsData?.series || [];
+      pieLabels = ['Zuhause', 'Extern'];
+      pieData = [ser.reduce((a,d) => a+(d.home_cost||0), 0), ser.reduce((a,d) => a+(d.ext_cost||0), 0)];
+    } else {
+      doLineBar(ctx, canvasId, title, labels, datasets, avgValue, unit, color);
+      return;
+    }
+    const valid = pieData.map((v,i) => ({v, l: pieLabels[i]})).filter(x => x.v > 0);
+    if (valid.length === 0) { ctx.innerHTML = '<div class="text-muted small p-2">Keine Daten</div>'; return; }
+    chartInstances[canvasId] = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: valid.map(x=>x.l), datasets:[{ data: valid.map(x=>x.v), backgroundColor:[color,'#0dcaf0','#ffc107','#6f42c1','#fd7e14','#20c997'], borderWidth:0 }]},
+      options: { responsive:true, maintainAspectRatio:true, plugins:{ legend:{position:'bottom'}, title:{display:true, text:`${title} (Summe: ${valid.reduce((a,x)=>a+x.v,0).toFixed(1)} ${unit})`} } }
+    });
+    return;
   }
-  
-  window[canvasId + 'Chart'] = new Chart(ctx, {
-    type: chartType,
+
+  // ── Line / Bar ──
+  doLineBar(ctx, canvasId, title, labels, datasets, avgValue, unit, color);
+}
+
+function doLineBar(ctx, canvasId, title, labels, datasets, avgValue, unit, color) {
+  const state = chartStates[canvasId] || { type: 'line', showMA: true };
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: state.type,
     data: { labels, datasets },
     options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: { mode: 'index', intersect: false },
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode:'index', intersect:false },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 10 } } },
-        title: { display: true, text: `${title} (Ø ${avgValue ? Number(avgValue).toFixed(2) : '–'} ${unit})`, font: { size: 12 } },
-        tooltip: { 
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? Number(ctx.parsed.y).toFixed(2) + ' ' + unit : '–'}`
-          }
-        }
+        legend: { position:'top', labels:{font:{size:10}} },
+        title: { display:true, text:`${title} (Ø ${avgValue!=null?Number(avgValue).toFixed(2):'–'} ${unit})`, font:{size:12} },
+        tooltip: { callbacks:{ label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y!=null?Number(ctx.parsed.y).toFixed(2)+' '+unit:'–'}` } }
       },
       scales: {
-        x: { 
-          ticks: { maxTicksLimit: 10, font: { size: 9 } },
-          grid: { display: false }
-        },
-        y: { 
-          title: { display: true, text: unit, font: { size: 10 } },
-          ticks: { font: { size: 9 } },
-          beginAtZero: true
-        }
-      },
-      plugins: avgLinePlugin ? [avgLinePlugin] : []
+        x: { ticks:{maxTicksLimit:10,font:{size:9}}, grid:{display:false} },
+        y: { title:{display:true,text:unit,font:{size:10}}, ticks:{font:{size:9}}, beginAtZero:true }
+      }
     }
   });
 }
 
+// ── Per-chart type selector dropdown ───────────────────────────────
 function addChartTypeSelector(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  
   const card = canvas.closest('.card');
   if (!card || card.querySelector('.chart-type-selector')) return;
-  
   const header = card.querySelector('.card-header');
   if (!header) return;
-  
-  const selector = document.createElement('div');
-  selector.className = 'chart-type-selector ms-2';
-  selector.innerHTML = `
-    <select class="form-select form-select-sm d-inline-block" style="width:auto" data-chart="${canvasId}" aria-label="Diagrammtyp">
-      <option value="line" ${currentChartType === 'line' ? 'selected' : ''}>📈 Linie</option>
-      <option value="bar" ${currentChartType === 'bar' ? 'selected' : ''}>📊 Balken</option>
-      <option value="pie" ${currentChartType === 'pie' ? 'selected' : ''}>🥧 Kreis</option>
-    </select>
+
+  const state = chartStates[canvasId] || { type: 'line', showMA: true };
+  const sel = document.createElement('select');
+  sel.className = 'form-select form-select-sm d-inline-block';
+  sel.style.width = 'auto';
+  sel.dataset.chart = canvasId;
+  sel.setAttribute('aria-label', 'Diagrammtyp');
+  sel.innerHTML = `
+    <option value="line" ${state.type==='line'?'selected':''}>📈 Linie</option>
+    <option value="bar"  ${state.type==='bar'?'selected':''}>📊 Balken</option>
+    <option value="pie"  ${state.type==='pie'?'selected':''}>🥧 Kreis</option>
   `;
-  
+  sel.addEventListener('change', (e) => {
+    chartStates[canvasId].type = e.target.value;
+    updateChartTypeUI(canvasId);
+    loadStats();
+  });
+
   header.style.display = 'flex';
   header.style.alignItems = 'center';
   header.style.justifyContent = 'space-between';
-  header.appendChild(selector);
+  header.appendChild(sel);
 }
 
+function updateChartTypeUI(canvasId) {
+  const state = chartStates[canvasId];
+  if (!state) return;
+  document.querySelectorAll(`.chart-type-selector select[data-chart="${canvasId}"]`).forEach(sel => {
+    sel.value = state.type;
+  });
+}
+
+function setupChartTypeDropdowns() {
+  document.querySelectorAll('.chart-type-selector select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const cid = e.target.dataset.chart;
+      if (cid && chartStates[cid]) {
+        chartStates[cid].type = e.target.value;
+        updateChartTypeUI(cid);
+        loadStats();
+      }
+    });
+  });
+}
+
+// ── MA toggle per chart (independent) ─────────────────────────────
 function addMAToggle(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  
   const card = canvas.closest('.card');
   if (!card || card.querySelector('.ma-toggle')) return;
-  
   const header = card.querySelector('.card-header');
   if (!header) return;
-  
-  // Check if MA toggle button already exists (added in template)
-  const existingBtn = header.querySelector('[id^="ma"]');
-  if (existingBtn) {
-    existingBtn.classList.add('ma-toggle');
-    existingBtn.classList.toggle('active', showMovingAverage);
-    existingBtn.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
-    existingBtn.textContent = showMovingAverage ? '📈' : '📉';
-    return;
-  }
-  
-  const toggle = document.createElement('button');
-  toggle.className = 'btn btn-outline-secondary btn-sm ma-toggle';
-  toggle.style.minWidth = '32px';
-  toggle.dataset.chart = canvasId;
-  toggle.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
-  toggle.textContent = showMovingAverage ? '📈' : '📉';
-  toggle.classList.toggle('active', showMovingAverage);
-  
-  header.appendChild(toggle);
+
+  const state = chartStates[canvasId] || { type: 'line', showMA: true };
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-outline-secondary btn-sm ma-toggle';
+  btn.style.minWidth = '32px';
+  btn.dataset.chart = canvasId;
+  btn.title = state.showMA ? 'Mittelwert aus' : 'Mittelwert ein';
+  btn.textContent = state.showMA ? '📈' : '📉';
+  btn.classList.toggle('active', state.showMA);
+  header.appendChild(btn);
 }
 
-function setupMAToggleButtons() {
-  document.querySelectorAll('.ma-toggle, [id^="ma"]').forEach(btn => {
+function setupMATogglers() {
+  document.querySelectorAll('.ma-toggle').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      showMovingAverage = !showMovingAverage;
-      
-      // Update all MA toggle buttons
-      document.querySelectorAll('.ma-toggle, [id^="ma"]').forEach(b => {
-        b.classList.toggle('active', showMovingAverage);
-        b.title = showMovingAverage ? 'Moving Average (7T) aus' : 'Moving Average (7T) ein';
-        b.textContent = showMovingAverage ? '📈' : '📉';
-      });
-      
-      loadStats(); // Re-render all charts
+      const cid = btn.dataset.chart;
+      if (!cid || !chartStates[cid]) return;
+      chartStates[cid].showMA = !chartStates[cid].showMA;
+      btn.classList.toggle('active', chartStates[cid].showMA);
+      btn.title = chartStates[cid].showMA ? 'Mittelwert aus' : 'Mittelwert ein';
+      btn.textContent = chartStates[cid].showMA ? '📈' : '📉';
+      loadStats();
     });
   });
 }
 
-function setupChartTypeButtons() {
-  document.querySelectorAll('[id^="ct"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const types = ['line', 'bar', 'pie'];
-      const currentIndex = types.indexOf(currentChartType);
-      const nextIndex = (currentIndex + 1) % types.length;
-      currentChartType = types[nextIndex];
-      
-      // Update all chart type buttons
-      document.querySelectorAll('[id^="ct"]').forEach(b => {
-        const icons = { line: '📈', bar: '📊', pie: '🥧' };
-        b.textContent = icons[currentChartType];
-        b.title = `Diagrammtyp: ${currentChartType}`;
-      });
-      
-      // Also update any dropdown selectors
-      document.querySelectorAll('.chart-type-selector select').forEach(sel => {
-        sel.value = currentChartType;
-      });
-      
-      loadStats(); // Re-render all charts
-    });
-  });
-  
-  // Also handle dropdown selectors
-  document.querySelectorAll('.chart-type-selector select').forEach(sel => {
-    sel.addEventListener('change', (e) => {
-      currentChartType = e.target.value;
-      // Update all dropdowns
-      document.querySelectorAll('.chart-type-selector select').forEach(s => s.value = currentChartType);
-      // Update icon buttons
-      const icons = { line: '📈', bar: '📊', pie: '🥧' };
-      document.querySelectorAll('[id^="ct"]').forEach(b => {
-        b.textContent = icons[currentChartType];
-      });
-      
-      loadStats(); // Re-render all charts
-    });
-  });
 }
 
 function updateRangeLabel() {
@@ -1092,7 +1006,11 @@ function renderDriveCompareResult(data) {
       const consData = drives.map(d => d.cons_per_100);
       const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
       
-      if (window.driveConsChart) window.driveConsChart.destroy();
+      // Safely destroy previous instance
+      if (window.driveConsChart) {
+        try { if (window.driveConsChart instanceof Chart) window.driveConsChart.destroy(); } catch(e) {}
+        window.driveConsChart = null;
+      }
       window.driveConsChart = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
