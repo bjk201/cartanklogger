@@ -39,6 +39,7 @@ async function loadStats() {
 }
 
 function renderKPIs(s) {
+  s = s || {};
   const t = s.totals || {}, h = s.home || {}, e = s.external || {};
   const monthly = s.monthly || [];
   const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
@@ -235,8 +236,9 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
   }
   
   // Add overall average line (horizontal) for both line and bar charts
+  let avgLinePlugin = null;
   if (avgValue != null && avgValue !== 0) {
-    const avgLinePlugin = {
+    avgLinePlugin = {
       id: 'avgLine',
       beforeDraw: (chart) => {
         const ctx = chart.ctx;
@@ -289,7 +291,7 @@ function renderChart(canvasId, title, labels, data, maData, avgValue, unit, colo
           beginAtZero: true
         }
       },
-      plugins: avgValue != null && avgValue !== 0 ? [avgLinePlugin] : []
+      plugins: avgLinePlugin ? [avgLinePlugin] : []
     }
   });
 }

@@ -2722,6 +2722,7 @@ def _build_merged(rows):
         ev_kwh = sum(float(e.get("charged_kwh") or 0) for e in v["evcc"])
         ev_cost = sum(float(e.get("total_cost") or 0) for e in v["evcc"])
         ev_solar = (sum(float(e.get("solar_percentage") or 0) for e in v["evcc"]) / len(v["evcc"])) if v["evcc"] else 0
+        
         # TM-Zuhause: added = im Akku angekommen. ECHTER Ladeverlust zuhause
         # = EVCC-Wallbox (Wand) - TM added (Akku).
         # ABER: TeslaMate hat teils Datenluecken (Auto offline etc.). Dann ist
@@ -2731,6 +2732,15 @@ def _build_merged(rows):
         # - Verlust liegt zwischen 0 und 30% (physikalisch realistisch)
         tmh_added = sum(t["added"] for t in v["tm_home"])
         tmh_used = sum(t["used"] for t in v["tm_home"])
+        
+        # EVCC-FALLBACK: Wenn EVCC keine Daten liefert (0 kWh), aber TM-Home-Daten 
+        # vorhanden sind, diese als Zuhause-Ladung verwenden (statt 0 Wh / 0 €)
+        if ev_kwh == 0 and tmh_added > 0:
+            ev_kwh = tmh_added
+            ev_cost = sum(t.get("cost", 0) for t in v["tm_home"])
+            # PV-Anteil kann bei TM nicht bestimmt werden -> 0%
+            ev_solar = 0
+
         home_loss = None  # None = nicht ermittelbar -> Frontend zeigt "–"
         # TM 'used' = Wand (brutto) -> entspricht EVCC. 'added' = Akku (netto).
         # Deckung ueber TM_used pruefen (nicht added), weil used der EVCC-Wand

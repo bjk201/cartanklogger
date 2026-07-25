@@ -16,15 +16,13 @@ function buildApiParams() {
 async function loadAnalytics() {
   try {
     const params = buildApiParams();
-    const [kpis, charts, vampire] = await Promise.all([
+    const [kpis, charts] = await Promise.all([
       fetch(`/api/nerd/kpis?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/nerd/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()),
-      fetch(`/api/nerd/vampire-drain?${params}`, {credentials: "same-origin"}).then(r => r.json())
+      fetch(`/api/nerd/charts?${params}`, {credentials: "same-origin"}).then(r => r.json())
     ]);
     
     renderKPIs(kpis);
     renderCharts(charts);
-    renderVampireDrain(vampire);
     updateRangeLabel();
   } catch (e) {
     console.error('loadAnalytics failed', e);
@@ -33,13 +31,6 @@ async function loadAnalytics() {
 
 function renderKPIs(kpis) {
   const cards = [
-    {
-      icon: '🧛',
-      title: 'Vampire Drain',
-      value: kpis.vampire_drain?.pct_per_day !== undefined ? kpis.vampire_drain.pct_per_day.toFixed(2) + ' %/Tag' : '–',
-      subtitle: `${kpis.vampire_drain?.intervals_count || 0} Intervalle`,
-      color: 'warning'
-    },
     {
       icon: '🔋',
       title: 'Batterie-Degradation',
@@ -173,46 +164,6 @@ function renderCharts(charts) {
       }
     });
   }
-}
-
-function renderVampireDrain(vampire) {
-  const sessions = vampire.park_sessions || [];
-  
-  if (!sessions.length) {
-    document.getElementById('vampireDrainTable').innerHTML = `
-      <div class="text-center py-4 text-muted">
-        <i class="bi bi-info-circle fs-1 mb-2"></i>
-        <p>Keine Park-Sessions mit SoC-Verlust erkannt.</p>
-        <small>Benötigt Fahrten mit SoC-Daten und Parkzeiten > 1h.</small>
-      </div>`;
-    return;
-  }
-  
-  const html = `
-    <div class="table-responsive">
-      <table class="table table-sm table-striped align-middle mb-0">
-        <thead class="sticky-header">
-          <tr>
-            <th>Datum / Zeit</th>
-            <th>Dauer (h)</th>
-            <th>SoC Verlust (%)</th>
-            <th>Gesch. Verlust (kWh)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${sessions.map(s => `
-            <tr>
-              <td>${s.date}</td>
-              <td>${s.duration_h.toFixed(1)}</td>
-              <td>${s.soc_loss_pct.toFixed(2)}</td>
-              <td>${s.est_loss_kwh.toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`;
-  
-  document.getElementById('vampireDrainTable').innerHTML = html;
 }
 
 function updateRangeLabel() {

@@ -25,7 +25,7 @@ async function loadOverview() {
     ]);
     
     renderMergedTable(merged);
-    renderKPIs(stats);
+    renderKPIs(stats, merged);
     renderSourceChart(stats);
     renderMergedDayChart(charts);
     updateRangeLabel();
@@ -148,7 +148,7 @@ function buildDetail(r) {
   return html;
 }
 
-function renderKPIs(s) {
+function renderKPIs(s, mergedRows = []) {
   const t = s.totals || {}, h = s.home || {}, e = s.external || {};
   const monthly = s.monthly || [];
   const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
@@ -179,13 +179,14 @@ function renderKPIs(s) {
       </div>
     </div>`).join('');
   
-  // mergedKpis
+  // mergedKpis - use passed mergedRows
+  const rows = mergedRows || [];
   const days = rows.length;
   const totKwh = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
   const totCost = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
   const extKwhM = rows.reduce((a, r) => a + (r.ext_kwh || 0), 0);
   const homeLossM = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
-  const cons = totKwh > 0 ? totKwh / (t.distance_km / 100) : 0;
+  const cons = totKwh > 0 && t.distance_km > 0 ? totKwh / (t.distance_km / 100) : 0;
   const consNet = cons * 0.85;
   const tco = (t.tco) || 0;
   const tco100 = (t.tco_per_100km) || 0;
