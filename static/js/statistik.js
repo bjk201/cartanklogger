@@ -26,18 +26,19 @@ async function loadStats() {
     const params = buildApiParams();
     
     // Fetch all data with individual error handling so one failure doesn't break everything
-    const [statsRes, chartsRes, batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes] = await Promise.all([
+    const [statsRes, chartsRes, batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes, nerdKpisRes] = await Promise.all([
       fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({totals: {}, home: {}, external: {}, monthly: []})),
       fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({series: [], kpis: {}})),
       fetch(`/api/vehicle/battery-health?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
       fetch(`/api/vehicle/charging-curve?limit=20`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
       fetch(`/api/vehicle/vampire-drain?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
-      fetch(`/api/vehicle/range-projection?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false}))
+      fetch(`/api/vehicle/range-projection?days=30`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({available: false})),
+      fetch(`/api/nerd/kpis?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({}))
     ]);
     
-    renderKPIs(statsRes);
+    renderKPIs(statsRes, nerdKpisRes);
     renderCharts(chartsRes);
-    renderVehicleCharts(batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes);
+    renderVehicleCharts(batteryHealthRes, chargingCurveRes, vampireDrainRes, rangeProjectionRes, nerdKpisRes);
     renderDataQualityWarnings(statsRes);
     updateRangeLabel();
   } catch (e) {
@@ -45,7 +46,7 @@ async function loadStats() {
   }
 }
 
-function renderKPIs(s) {
+function renderKPIs(s, nerdKpis) {
   s = s || {};
   const t = s.totals || {}, h = s.home || {}, e = s.external || {};
   const monthly = s.monthly || [];
@@ -54,7 +55,7 @@ function renderKPIs(s) {
   const homeKwh = t.home_kwh || 0;
   const extKwh = t.ext_kwh || 0;
   const homeShare = (homeKwh + extKwh) > 0 ? Math.round(homeKwh / (homeKwh + extKwh) * 100) : 0;
-  
+
   const cards = [
     {icon:'💶', t:'Kosten diesen Monat', v:fmtEUR(costThisMonth), s:curMonth ? curMonth.month : '–', c:'success'},
     {icon:'⚡', t:'Geladene Energie', v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:'primary'},
@@ -65,7 +66,38 @@ function renderKPIs(s) {
     {icon:'🏠', t:'Zuhause vs. Extern', v:`${homeShare} % Zuhause`, s:`${fmtKwh(homeKwh)} zu Hause · ${fmtKwh(extKwh)} extern`, c:'primary'},
     {icon:'🔌', t:'Ladeverluste', v:fmtKwh(t.home_loss_kwh), s:'Wallbox → Akku (Differenz)', c:'dark'},
   ];
-  
+
+  // Add Nerd Stats cards
+  if (nerdKpis && typeof nerdKpis === 'object') {
+    if (nerdKpis.battery_degradation) {
+      const bd = nerdKpis.battery_degradation;
+      cards.push({
+        icon:'🧪', t:'Batterie-Degradation', 
+        v:`${bd.degradation_pct != null ? bd.degradation_pct.toFixed(2) + ' %' : '–'}`, 
+        s:`${bd.first_range_km||0} → ${bd.last_range_km||0} km (100%) | ${bd.data_points||0} Punkte`, 
+        c:'danger'
+      });
+    }
+    if (nerdKpis.charging_efficiency) {
+      const ce = nerdKpis.charging_efficiency;
+      cards.push({
+        icon:'⚡', t:'Ladeeffizienz', 
+        v:`AC ${ce.ac_avg_pct||0}% · DC ${ce.dc_avg_pct||0}%`, 
+        s:`${ce.ac_sessions||0} AC · ${ce.dc_sessions||0} DC Sessions`, 
+        c:'primary'
+      });
+    }
+    if (nerdKpis.temperature_efficiency) {
+      const te = nerdKpis.temperature_efficiency;
+      cards.push({
+        icon:'🌡️', t:'Temp.-Effizienz', 
+        v:`${te.diff_pct != null ? (te.diff_pct > 0 ? '+' : '') + te.diff_pct.toFixed(1) : '–'} %`, 
+        s:`Winter ${te.winter_wh_km||0} Wh/km · Sommer ${te.summer_wh_km||0} Wh/km`, 
+        c:'info'
+      });
+    }
+  }
+
   document.getElementById('statsKpis').innerHTML = cards.map(c => `
     <div class="col-6 col-md-4 col-lg-3">
       <div class="card kpi-card text-white bg-${c.c} h-100">
@@ -323,11 +355,10 @@ function setupMATogglers() {
       loadStats();
     });
   });
-}
+  }
 
-}
 
-function updateRangeLabel() {
+  function updateRangeLabel() {
   const el = document.getElementById('rangeLabel');
   if (!el) return;
   el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
@@ -682,7 +713,7 @@ function renderRangeProjectionChart(data) {
 /**
  * Render all vehicle charts container
  */
-function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangeProjection) {
+function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangeProjection, nerdKpis) {
   const container = document.getElementById('vehicleChartsSection');
   if (!container) return;
   
@@ -717,6 +748,12 @@ function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangePr
           <div class="card-body p-2"><canvas id="chartRangeProjection" height="180"></canvas></div>
         </div>
       </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-header py-2">🧪 Batterie-Degradation (Odometer vs. Range@100%)</div>
+          <div class="card-body p-2"><canvas id="chartDegradation" height="180"></canvas></div>
+        </div>
+      </div>
     </div>
   `;
   
@@ -725,6 +762,7 @@ function renderVehicleCharts(batteryHealth, chargingCurve, vampireDrain, rangePr
   if (chargingCurve) renderChargingCurveChart(chargingCurve);
   if (vampireDrain) renderVampireDrainChart(vampireDrain);
   if (rangeProjection) renderRangeProjectionChart(rangeProjection);
+  if (nerdKpis?.battery_degradation) renderDegradationChart(nerdKpis.battery_degradation);
 }
 
 /* ============================================================
@@ -1123,6 +1161,51 @@ function addExportButtons() {
       exportSessionsCSV(e.target.dataset.export);
     });
   });
+}
+
+// ── Degradation Scatter Chart (from Nerd Stats) ──────────────────
+function renderDegradationChart(bd) {
+  const ctx = document.getElementById('chartDegradation');
+  if (!ctx || !window.Chart) return;
+  if (chartInstances.chartDegradation) { try { chartInstances.chartDegradation.destroy(); } catch(e) {} }
+  
+  // Get degradation data points from the API
+  fetch(`/api/nerd/charts?days=${currentDays}`)
+    .then(r => r.json())
+    .then(data => {
+      const degData = data.degradation || [];
+      if (!degData.length) {
+        ctx.innerHTML = '<div class="text-muted small p-2">Keine Degradationsdaten</div>';
+        return;
+      }
+      chartInstances.chartDegradation = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Projizierte 100% Reichweite (km)',
+            data: degData.map(d => ({x: d.odo, y: d.range_100})),
+            backgroundColor: 'rgba(14, 165, 233, 0.6)',
+            borderColor: 'rgba(14, 165, 233, 1)',
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            showLine: false
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: `Batterie-Degradation: Odometer vs. projizierte 100% Reichweite (${bd.degradation_pct?.toFixed(2) || '?'}%)`, font: { size: 12 } },
+            tooltip: { callbacks: { label: ctx => `Odo: ${Math.round(ctx.parsed.x).toLocaleString('de-DE')} km | Range@100%: ${ctx.parsed.y.toFixed(1)} km` } }
+          },
+          scales: {
+            x: { ticks: { font: { size: 9 } }, title: { display: true, text: 'Kilometerstand (km)' } },
+            y: { ticks: { font: { size: 9 } }, title: { display: true, text: 'Range @100% (km)' }, beginAtZero: false }
+          }
+        }
+      });
+    })
+    .catch(e => console.error('Degradation chart failed', e));
 }
 
 /* ============================================================

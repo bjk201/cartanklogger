@@ -256,7 +256,16 @@ async function doSync(url, msg) {
   $("syncMsg").textContent = "…";
   const r = await csrfFetch(url, {method:"POST"});
   const j = await r.json();
-  $("syncMsg").textContent = `${msg}: ${j.inserted??0} neu / ${j.fetched??0} geholt`;
+  
+  // Handle /sync/all (nested results) vs single endpoints
+  if (url.includes("/sync/all")) {
+    const evcc = j.evcc || {};
+    const tm = j.teslamate || {};
+    const drives = j.drives || {};
+    $("syncMsg").innerHTML = `${msg}: EVCC ${evcc.inserted??0} neu / ${evcc.fetched??0} geholt – TM ${tm.inserted??0} neu / ${tm.fetched??0} geholt – Fahrten ${drives.inserted??0} neu / ${drives.fetched??0} geholt`;
+  } else {
+    $("syncMsg").textContent = `${msg}: ${j.inserted??0} neu / ${j.fetched??0} geholt`;
+  }
   loadExtPrices();
 }
 
