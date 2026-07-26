@@ -120,7 +120,7 @@ function renderCharts(charts) {
   const consData   = s.map(d => d.consumption);
   const priceData  = s.map(d => d.price_per_kwh);
   const cost100Data= s.map(d => d.cost_per_100);
-  const dailyKmData= s.map(d => d.km);
+  const dailyKmData= s.map(d => d.cum_km);
 
   // Period average over the selected date range (not fixed 7T MA)
   const rangeAvg = arr => {
@@ -135,16 +135,14 @@ function renderCharts(charts) {
   renderChart('chartCons',    'Verbrauch (kWh/100 km)', labels, consData,   avgCons,   'kWh/100km', '#198754', 'consumption');
   renderChart('chartPrice',   'Energiepreis (€/kWh)',   labels, priceData,   avgPrice,  '€/kWh',     '#0d6efd', 'price');
   renderChart('chartCost100', 'Kosten (€/100 km)',      labels, cost100Data, avgCost100,'€/100km',   '#ffc107', 'cost');
-  renderChart('chartKm',      'Tageskilometer',         labels, dailyKmData, avgKm,     'km',        '#6f42c1', 'km');
+  renderChart('chartKm',      'Kilometer (kumuliert)',    labels, dailyKmData, avgKm,     'km',        '#6f42c1', 'km');
 
-  // Per-chart type selector dropdowns + MA toggles
+  // Per-chart MA toggles only (no chart type selector)
   ['chartCons','chartPrice','chartCost100','chartKm'].forEach(id => {
-    addChartTypeSelector(id);
     addMAToggle(id);
     updateChartTypeUI(id);
   });
 
-  setupChartTypeDropdowns();
   setupMATogglers();
 
   // Render heatmaps

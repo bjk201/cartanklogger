@@ -1649,11 +1649,6 @@ def extra():
     return render_template("extra.html", mock=mock_mode(), js_version=js_ver)
 
 
-@app.route("/analytics")
-def analytics():
-    js_ver = os.environ.get("APP_VERSION", "1")
-    return render_template("analytics.html", mock=mock_mode(), js_version=js_ver)
-
 
 @app.route("/api/version")
 def api_version():
