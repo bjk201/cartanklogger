@@ -996,46 +996,79 @@ function renderDriveCompareResult(data) {
     return;
   }
 
+  // Standard layout: rows = trips, columns = metrics
   let html = `
     <h6>Vergleichsergebnis</h6>
     <div class="table-responsive">
       <table class="table table-sm table-bordered align-middle mb-3">
         <thead class="table-light">
           <tr>
-            <th>Kennzahl</th>
-            <th>Ø</th>
-            ${drives.map(d => `
-              <th class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">
-                ${d.start_date ? d.start_date.slice(0,10) : ''}
-                ${d.is_best ? ' 🏆' : ''}
-                ${d.is_worst ? ' ⚠️' : ''}
-              </th>
-            `).join('')}
+            <th>Datum</th>
+            <th>Route</th>
+            <th class="text-end">km</th>
+            <th class="text-end">Dauer (min)</th>
+            <th class="text-end">Ø km/h</th>
+            <th class="text-end">kWh</th>
+            <th class="text-end">kWh/100km</th>
+            <th class="text-end">SoC Δ</th>
+            <th class="text-end">Temp °C</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Datum</td><td>–</td>${drives.map(d => `<td>${d.start_date ? d.start_date.slice(0,10) : ''}</td>`).join('')}</tr>
-          <tr><td>Route</td><td>–</td>${drives.map(d => `<td>${d.route || '–'}</td>`).join('')}</tr>
-          <tr><td>km</td><td>${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>Dauer (min)</td><td>${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>${drives.map(d => `<td>${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>`).join('')}</tr>
-          <tr><td>Ø km/h</td><td>${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>kWh</td><td>${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td><strong>kWh/100km</strong></td><td><strong>${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</strong></td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle fw-bold' : ''} ${d.id === worst ? 'bg-danger-subtle fw-bold' : ''}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>SoC Δ</td><td>${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>${drives.map(d => `<td>${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>`).join('')}</tr>
-          <tr><td>Temp °C</td><td>${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>${drives.map(d => `<td>${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>`).join('')}</tr>
-        </tbody>
-      </table>
+  `;
+
+  drives.forEach(d => {
+    const isBest = d.id === best;
+    const isWorst = d.id === worst;
+    const rowClass = isBest ? 'bg-success-subtle' : (isWorst ? 'bg-danger-subtle' : '');
+    const marker = isBest ? ' 🏆' : (isWorst ? ' ⚠️' : '');
+    
+    // Cell colors for best/worst highlighting on key metrics
+    const kmClass = isBest ? 'bg-success-subtle' : (isWorst ? 'bg-danger-subtle' : '');
+    const consClass = isBest ? 'bg-success-subtle fw-bold' : (isWorst ? 'bg-danger-subtle fw-bold' : 'fw-bold');
+    
+    html += `
+      <tr class="${rowClass}">
+        <td>${d.start_date ? d.start_date.slice(0,10) : '–'}${marker}</td>
+        <td>${d.route || '–'}</td>
+        <td class="text-end ${kmClass}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>
+        <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end ${consClass}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
+      </tr>
     `;
+  });
+
+  // Average row
+  html += `
+      <tr class="table-light fw-bold">
+        <td>Ø</td>
+        <td>–</td>
+        <td class="text-end">${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>
+        <td class="text-end">${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+  `;
 
   // Add bar chart for consumption comparison
   html += `
-      <div class="card mb-3">
-        <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
-        <div class="card-body">
-          <canvas id="driveConsChart" height="120"></canvas>
-        </div>
+    <div class="card mb-3">
+      <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
+      <div class="card-body">
+        <canvas id="driveConsChart" height="120"></canvas>
       </div>
-    `;
+    </div>
+  `;
 
   resultDiv.innerHTML = html;
 
