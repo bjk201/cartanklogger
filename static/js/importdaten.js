@@ -4,7 +4,7 @@ let currentFrom = null;
 let currentTo = null;
 let currentPageHome = 1;
 let currentPageExt = 1;
-const PER_PAGE = 25;
+const PER_PAGE = 20;
 
 function buildApiParams(page, source) {
   if (typeof getGlobalRangeParams === 'function') {

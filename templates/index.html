@@ -10,13 +10,13 @@
 <!-- Merged KPIs (zusätzliche Kennzahlen) -->
 <div class="row g-2 mb-3" id="mergedKpis"></div>
 
-<!-- Letzte Ladevorgänge - max 10 Einträge, scrollbar -->
+<!-- Letzte Ladevorgänge - 20 Einträge pro Seite, blätterbar -->
 <div class="row g-2 mb-3">
   <div class="col-12">
     <div class="card h-100">
-      <div class="card-header py-2">🔌 Letzte Ladevorgänge (max. 10)</div>
+      <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
       <div class="card-body p-0">
-        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+        <div class="table-container" style="max-height: 500px; overflow-y: auto;">
           <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
             <thead class="sticky-header"><tr>
               <th>Datum</th><th>Stationen</th><th>Zuhause kWh</th><th>Zuhause €</th>
@@ -25,6 +25,9 @@
             </tr></thead><tbody></tbody>
           </table>
         </div>
+      </div>
+      <div class="card-footer py-2">
+        <nav id="paginationMerged" aria-label="Pagination"></nav>
       </div>
     </div>
   </div>

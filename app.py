@@ -2825,10 +2825,60 @@ def _build_merged(rows):
 
 @app.route("/api/merged")
 def api_merged():
-    # api_sessions() liest den Zeitraum selbst aus request.args (gleicher
-    # Request-Kontext), daher hier kein expliziter Durchreich-Parameter nötig.
-    sess = api_sessions().get_json()
-    return jsonify(_build_merged(sess))
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    
+    # Fetch ALL sessions for the time range (no pagination on sessions!)
+    # We need all sessions to correctly group by day
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+        home_q = "SELECT * FROM home_sessions WHERE created >= ? AND created <= ? ORDER BY created DESC"
+        ext_q = "SELECT * FROM external_sessions WHERE started_at >= ? AND started_at <= ? ORDER BY started_at DESC"
+        params = [cutoff, end]
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        home_q = "SELECT * FROM home_sessions WHERE created >= ? ORDER BY created DESC"
+        ext_q = "SELECT * FROM external_sessions WHERE started_at >= ? ORDER BY started_at DESC"
+        params = [cutoff]
+    db = get_db()
+    
+    home = [dict(r) for r in db.execute(home_q, params).fetchall()]
+    for r in home:
+        c = compute_home_cost_row(r)
+        r.update(c)
+        r["raw"] = None
+        r["has_raw"] = bool(r.get("raw"))
+    ext = [dict(r) for r in db.execute(ext_q, params).fetchall()]
+    for r in ext:
+        r["address"] = _location_label(r.get("location_name"), r.get("address"))
+        r["latitude"] = None
+        r["longitude"] = None
+        r["has_raw"] = bool(r.get("raw"))
+        r.pop("raw", None)
+    
+    sess = {"home": home, "external": ext}
+    merged_all = _build_merged(sess)
+    
+    # Apply pagination to merged day results
+    total = len(merged_all)
+    start = (page - 1) * per_page
+    end = start + per_page
+    merged_page = merged_all[start:end]
+    
+    return jsonify({
+        "rows": merged_page,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page
+        }
+    })
 
 
 @app.route("/api/charts")

@@ -1,30 +1,32 @@
 // overview.js - Übersichtsseite (merged Tabelle + KPIs + Charts)
-let currentDays = 365;
+let currentDays = 90;
 let currentFrom = null;
 let currentTo = null;
+let currentPageMerged = 1;
+const PER_PAGE = 20;
 
-function buildApiParams() {
-  // Use global date range if available
+function buildApiParams(page) {
   if (typeof getGlobalRangeParams === 'function') {
-    return getGlobalRangeParams();
+    return getGlobalRangeParams() + `&page=${page}&per_page=${PER_PAGE}`;
   }
   if (currentFrom && currentTo) {
-    return `from=${currentFrom}&to=${currentTo}`;
+    return `from=${currentFrom}&to=${currentTo}&page=${page}&per_page=${PER_PAGE}`;
   }
-  return `days=${currentDays}`;
+  return `days=${currentDays}&page=${page}&per_page=${PER_PAGE}`;
 }
 
 async function loadOverview() {
   try {
-    const params = buildApiParams();
+    const params = buildApiParams(currentPageMerged);
     const [merged, stats, charts] = await Promise.all([
-      fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => []),
-      fetch(`/api/stats?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({totals: {}, home: {}, external: {}, monthly: []})),
-      fetch(`/api/charts?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({series: [], kpis: {}}))
+      fetch(`/api/merged?${params}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({rows: [], pagination: {}})),
+      fetch(`/api/stats?days=${currentDays}${currentFrom ? '&from='+currentFrom+'&to='+currentTo : ''}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({totals: {}, home: {}, external: {}, monthly: []})),
+      fetch(`/api/charts?days=${currentDays}${currentFrom ? '&from='+currentFrom+'&to='+currentTo : ''}`, {credentials: "same-origin"}).then(r => r.json()).catch(() => ({series: [], kpis: {}}))
     ]);
     
-    renderMergedTable(merged);
-    renderKPIs(stats, merged);
+    renderMergedTable(merged.rows || merged);
+    renderPaginationMerged(merged.pagination?.total || merged.pagination?.merged_total || 0);
+    renderKPIs(stats, merged.rows || merged);
     renderSourceChart(stats);
     renderMergedDayChart(charts);
     updateRangeLabel();
@@ -42,9 +44,7 @@ function renderMergedTable(rows) {
     return;
   }
   
-  const displayRows = rows.slice(0, 10);
-  
-  tb.innerHTML = displayRows.map((r, i) => `
+  tb.innerHTML = rows.map((r, i) => `
     <tr>
       <td>${r.day || '–'}</td>
       <td>${r.stations || '–'}</td>
@@ -62,6 +62,44 @@ function renderMergedTable(rows) {
       <div class="collapse" id="m${i}"><div class="p-2 bg-light">${buildDetail(r)}</div></div>
     </td></tr>
   `).join('');
+}
+
+function renderPaginationMerged(totalRows) {
+  const totalPages = Math.ceil(totalRows / PER_PAGE);
+  const nav = document.getElementById('paginationMerged');
+  if (!nav) return;
+  
+  if (totalPages <= 1) {
+    nav.innerHTML = '';
+    return;
+  }
+  
+  let html = '<ul class="pagination pagination-sm justify-content-center mb-0">';
+  html += `<li class="page-item ${currentPageMerged === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPageMerged - 1}">‹</a></li>`;
+  
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= currentPageMerged - 1 && i <= currentPageMerged + 1)) {
+      html += `<li class="page-item ${i === currentPageMerged ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    } else if (i === currentPageMerged - 2 || i === currentPageMerged + 2) {
+      html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+    }
+  }
+  
+  html += `<li class="page-item ${currentPageMerged === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPageMerged + 1}">›</a></li>`;
+  html += '</ul>';
+  
+  nav.innerHTML = html;
+  
+  nav.querySelectorAll('.page-link[data-page]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = parseInt(link.getAttribute('data-page'));
+      if (!isNaN(page) && page >= 1 && page <= totalPages && page !== currentPageMerged) {
+        currentPageMerged = page;
+        loadOverview();
+      }
+    });
+  });
 }
 
 function buildDetail(r) {
@@ -200,34 +238,6 @@ function updateRangeLabel() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('[data-days]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentDays = parseInt(btn.getAttribute('data-days'), 10);
-      currentFrom = null;
-      currentTo = null;
-      document.getElementById('rangeFrom').value = '';
-      document.getElementById('rangeTo').value = '';
-      loadOverview();
-    });
-  });
-  
-  // Date range picker
-  const btnRange = document.getElementById('btnRange');
-  if (btnRange) {
-    btnRange.addEventListener('click', () => {
-      const from = document.getElementById('rangeFrom').value;
-      const to = document.getElementById('rangeTo').value;
-      if (from && to) {
-        currentFrom = from;
-        currentTo = to;
-        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-        loadOverview();
-      }
-    });
-  }
-  
   // Listen to global date range changes
   window.addEventListener('globalRangeChange', (e) => {
     const params = e.detail;
@@ -254,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+    currentPageMerged = 1;
     loadOverview();
   });
   
