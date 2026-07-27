@@ -210,40 +210,31 @@ function renderKPIs(s, mergedRows = []) {
   ];
   
   document.getElementById('summaryCards').innerHTML = cards.map(c => `
-    <div class="col-6 col-md-4 col-lg-2">
-      <div class="card kpi-card text-white bg-${c.color} h-100">
-        <div class="card-body py-3">
-          <div class="kpi-label opacity-75 small"><span class="kpi-icon me-1">${c.icon}</span> ${c.title}</div>
-          <div class="kpi-value fw-bold fs-5">${c.value}</div>
-          <div class="kpi-sub small">${c.sub}</div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="card kpi-card text-white bg-${c.color} h-100">
+          <div class="card-body py-3">
+            <div class="kpi-label opacity-75 small"><span class="kpi-icon me-1">${c.icon}</span> ${c.title}</div>
+            <div class="kpi-value fw-bold fs-5">${c.value}</div>
+            <div class="kpi-sub small">${c.sub}</div>
+          </div>
         </div>
-      </div>
-    </div>`).join('');
-  
-  // Second row (mergedKpis) - keep existing additional KPIs
-  const rows = mergedRows || [];
-  const totKwhM = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
-  const totCostM = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
-  const extKwhM = rows.reduce((a, r) => a + (r.ext_kwh || 0), 0);
-  const homeLossM = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
-  const consM = t.distance_km > 0 ? t.kwh / (t.distance_km / 100.0) : 0;
-  const consNetM = consM * 0.85;
-  const tco = t.tco || 0;
-  const tco100 = t.tco_per_100km || 0;
-  
-  document.getElementById('mergedKpis').innerHTML = [
-    kpiStat('💰 TCO gesamt', fmtEUR(tco), 'inkl. Anschaffung/Versicherung/Steuer'),
-    kpiStat('💡 TCO / 100km', tco100.toLocaleString('de-DE', {minimumFractionDigits: 2}) + ' €'),
-    kpiStat('🔌 Extern', extKwhM.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh'),
-    kpiStat('📉 Ladeverlust (Summe)', homeLossM.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh'),
-    kpiStat('☀️ PV-Anteil Zuhause', fmtPct(h.pv_share_pct), `${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(t.home_kwh||0)}`),
-    kpiStat('🏠 Zuhause vs. Extern', `${((t.home_kwh||0) + (t.ext_kwh||0)) > 0 ? Math.round((t.home_kwh||0) / ((t.home_kwh||0) + (t.ext_kwh||0)) * 100) : 0}% Zuhause`, `${fmtKwh(t.home_kwh||0)} zu Hause · ${fmtKwh(t.ext_kwh||0)} extern`),
-  ].join('');
-}
+      </div>`).join('');
+  }
 
-function kpiStat(label, value, sub) {
-  return `<div class="col-6 col-md-4 col-lg-2"><div class="card h-100 text-center shadow-sm"><div class="card-body py-2"><div class="text-muted small">${label}</div><div class="fs-6 fw-bold">${value}</div><div class="small opacity-75">${sub||''}</div></div></div></div>`;
-}
+  // --- Defensive DOM helpers ---
+  function setHtml(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function getEl(id) {
+    return document.getElementById(id);
+  }
 
 function renderCharts(chartsData, stats) {
   const s = chartsData.series || [];
@@ -260,114 +251,123 @@ function renderCharts(chartsData, stats) {
   if (!window.Chart) return;
   
   const labels = s.map(d => d.day).slice().reverse();
-  
-  // ---------- 1. VERBRAUCH CHART (Line mit Area) ----------
-  const consumptionData = s.map(d => d.consumption).slice().reverse();
-  const avgConsumption = kpis.avg_consumption || 0;
-  
-  charts.consumption = new Chart(document.getElementById('chartConsumption'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Verbrauch (kWh/100km)',
-        data: consumptionData,
-        borderColor: '#0dcaf0',
-        backgroundColor: 'rgba(13, 202, 240, 0.15)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        spanGaps: true
-      }, {
-        label: 'Ø ' + avgConsumption.toFixed(1),
-        data: new Array(labels.length).fill(avgConsumption),
-        borderColor: '#0dcaf0',
-        borderDash: [5, 5],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false
-      }]
-    },
-    options: getLineChartOptions('kWh/100km', avgConsumption)
-  });
-  
-  document.getElementById('avgConsumptionBadge').textContent = 'Ø ' + avgConsumption.toFixed(1);
-  
-  // ---------- 2. KOSTEN CHART (Line mit Area) ----------
-  const costData = s.map(d => d.cost_per_100).slice().reverse();
-  const avgCost = kpis.avg_cost_100 || 0;
-  
-  charts.cost = new Chart(document.getElementById('chartCost'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Kosten (EUR/100km)',
-        data: costData,
-        borderColor: '#ffc107',
-        backgroundColor: 'rgba(255, 193, 7, 0.15)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        spanGaps: true
-      }, {
-        label: 'Ø ' + avgCost.toFixed(2),
-        data: new Array(labels.length).fill(avgCost),
-        borderColor: '#ffc107',
-        borderDash: [5, 5],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false
-      }]
-    },
-    options: getLineChartOptions('EUR/100km', avgCost)
-  });
-  
-  document.getElementById('avgCostBadge').textContent = 'Ø ' + avgCost.toFixed(2);
-  
-  // ---------- 3. KILOMETER CHART (Bar) ----------
-  const kmData = s.map(d => d.km).slice().reverse();
-  const totalKm = kpis.total_km || 0;
-  
-  charts.km = new Chart(document.getElementById('chartKm'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'km',
-        data: kmData,
-        backgroundColor: '#0d6efd',
-        borderRadius: 4,
-        barThickness: 'flex',
-        maxBarThickness: 40
-      }]
-    },
-    options: {
-      ...getBaseChartOptions(),
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' km' } }
-      },
-      scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true, title: { display: true, text: 'km' } }
-      }
+
+    // ---------- 1. VERBRAUCH CHART (Line mit Area) ----------
+    const consumptionData = s.map(d => d.consumption).slice().reverse();
+    const avgConsumption = kpis.avg_consumption || 0;
+
+    const chartConsumptionEl = getEl('chartConsumption');
+    if (chartConsumptionEl) {
+      charts.consumption = new Chart(chartConsumptionEl, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Verbrauch (kWh/100km)',
+            data: consumptionData,
+            borderColor: '#0dcaf0',
+            backgroundColor: 'rgba(13, 202, 240, 0.15)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            spanGaps: true
+          }, {
+            label: 'Ø ' + avgConsumption.toFixed(1),
+            data: new Array(labels.length).fill(avgConsumption),
+            borderColor: '#0dcaf0',
+            borderDash: [5, 5],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false
+          }]
+        },
+        options: getLineChartOptions('kWh/100km', avgConsumption)
+      });
     }
-  });
-  
-  document.getElementById('totalKmBadge').textContent = 'Σ ' + totalKm.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' km';
-  
-  // ---------- 4. HOME vs EXTERN DONUT ----------
-  renderHomeExternDonut(stats);
-  
-  // ---------- 5. HEATMAP: VERBRAUCH / TEMPERATUR ----------
-  renderHeatmapTempConsumption(s);
-  
-  // ---------- 6. HEATMAP: VERBRAUCH / WOCHENTAG ----------
-  renderHeatmapWeekdayConsumption(s);
-}
+
+    setText('avgConsumptionBadge', 'Ø ' + avgConsumption.toFixed(1));
+
+    // ---------- 2. KOSTEN CHART (Line mit Area) ----------
+    const costData = s.map(d => d.cost_per_100).slice().reverse();
+    const avgCost = kpis.avg_cost_100 || 0;
+
+    const chartCostEl = getEl('chartCost');
+    if (chartCostEl) {
+      charts.cost = new Chart(chartCostEl, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Kosten (EUR/100km)',
+            data: costData,
+            borderColor: '#ffc107',
+            backgroundColor: 'rgba(255, 193, 7, 0.15)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            spanGaps: true
+          }, {
+            label: 'Ø ' + avgCost.toFixed(2),
+            data: new Array(labels.length).fill(avgCost),
+            borderColor: '#ffc107',
+            borderDash: [5, 5],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false
+          }]
+        },
+        options: getLineChartOptions('EUR/100km', avgCost)
+      });
+    }
+
+    setText('avgCostBadge', 'Ø ' + avgCost.toFixed(2));
+
+    // ---------- 3. KILOMETER CHART (Bar) ----------
+    const kmData = s.map(d => d.km).slice().reverse();
+    const totalKm = kpis.total_km || 0;
+
+    const chartKmEl = getEl('chartKm');
+    if (chartKmEl) {
+      charts.km = new Chart(chartKmEl, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'km',
+            data: kmData,
+            backgroundColor: '#0d6efd',
+            borderRadius: 4,
+            barThickness: 'flex',
+            maxBarThickness: 40
+          }]
+        },
+        options: {
+          ...getBaseChartOptions(),
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' km' } }
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, title: { display: true, text: 'km' } }
+          }
+        }
+      });
+    }
+
+    setText('totalKmBadge', 'Σ ' + totalKm.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' km');
+
+    // ---------- 4. HOME vs EXTERN DONUT ----------
+    renderHomeExternDonut(stats);
+
+    // ---------- 5. HEATMAP: VERBRAUCH / TEMPERATUR ----------
+    renderHeatmapTempConsumption(s);
+
+    // ---------- 6. HEATMAP: VERBRAUCH / WOCHENTAG ----------
+    renderHeatmapWeekdayConsumption(s);
+  }
 
 function getLineChartOptions(yTitle, avgValue) {
   return {
@@ -422,16 +422,16 @@ function renderHomeExternDonut(stats) {
   const extPrice = (extKwh > 0) ? (extCost / extKwh).toFixed(2) : '0.00';
   
   // Update side labels
-  document.getElementById('homeKwh').textContent = homeKwh.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh';
-  document.getElementById('homePct').textContent = homePct + '%';
-  document.getElementById('homePrice').textContent = 'Ø ' + homePrice + ' €/kWh';
+  setText('homeKwh', homeKwh.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh');
+  setText('homePct', homePct + '%');
+  setText('homePrice', 'Ø ' + homePrice + ' €/kWh');
   
-  document.getElementById('extKwh').textContent = extKwh.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh';
-  document.getElementById('extPct').textContent = extPct + '%';
-  document.getElementById('extPrice').textContent = 'Ø ' + extPrice + ' €/kWh';
+  setText('extKwh', extKwh.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh');
+  setText('extPct', extPct + '%');
+  setText('extPrice', 'Ø ' + extPrice + ' €/kWh');
   
   // Donut chart
-  const ctx = document.getElementById('chartHomeExtern');
+  const ctx = getEl('chartHomeExtern');
   if (!ctx || !window.Chart) return;
   
   if (charts.homeExtern) charts.homeExtern.destroy();
@@ -464,8 +464,6 @@ function renderHomeExternDonut(stats) {
 }
 
 function renderHeatmapTempConsumption(series) {
-  // Temperature bins: <0, 0-10, 11-20, 21-30, >30
-  // Consumption bins: <14, 14-16, 16-18, 18-20, >20
   const tempBins = ['<0°C', '0-10°C', '11-20°C', '21-30°C', '>30°C'];
   const consBins = ['<14', '14-16', '16-18', '18-20', '>20'];
   
@@ -473,10 +471,6 @@ function renderHeatmapTempConsumption(series) {
   const matrix = Array(5).fill().map(() => Array(5).fill(0));
   
   series.forEach(d => {
-    // We need temperature data - check if it's available in series
-    // For now, we'll use a placeholder or derive from available data
-    // Since we don't have temperature in the series, we'll create mock data based on consumption
-    // In production, this would come from weather API or car data
     if (d.consumption !== null && d.consumption !== undefined) {
       let consIdx = 0;
       if (d.consumption >= 20) consIdx = 4;
@@ -522,7 +516,7 @@ function renderHeatmapTempConsumption(series) {
     });
   });
   
-  const ctx = document.getElementById('heatmapTempConsumption');
+  const ctx = getEl('heatmapTempConsumption');
   if (!ctx || !window.Chart) return;
   
   if (charts.heatmapTemp) charts.heatmapTemp.destroy();
@@ -574,12 +568,12 @@ function renderHeatmapTempConsumption(series) {
   });
   
   // Legend
-  document.getElementById('legendTempConsumption').innerHTML = 
+  setHtml('legendTempConsumption', 
     '<div class="d-flex flex-wrap gap-2 small text-muted">' +
     ['< 14', '14–16', '16–18', '18–20', '> 20'].map((label, i) => 
       `<span class="d-inline-flex align-items-center gap-1"><span class="badge bg-secondary" style="background:${['rgba(64,224,208,0.5)','rgba(46,204,113,0.6)','rgba(241,196,15,0.7)','rgba(230,126,34,0.8)','rgba(231,76,60,0.9)'][i]}">${label}</span></span>`
     ).join('') +
-    '</div>';
+    '</div>');
 }
 
 function renderHeatmapWeekdayConsumption(series) {
@@ -618,7 +612,7 @@ function renderHeatmapWeekdayConsumption(series) {
     });
   });
   
-  const ctx = document.getElementById('heatmapWeekdayConsumption');
+  const ctx = getEl('heatmapWeekdayConsumption');
   if (!ctx || !window.Chart) return;
   
   if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
@@ -670,12 +664,12 @@ function renderHeatmapWeekdayConsumption(series) {
   });
   
   // Legend
-  document.getElementById('legendWeekdayConsumption').innerHTML = 
+  setHtml('legendWeekdayConsumption', 
     '<div class="d-flex flex-wrap gap-2 small text-muted">' +
     ['< 14', '14–16', '16–18', '18–20', '> 20'].map((label, i) => 
       `<span class="d-inline-flex align-items-center gap-1"><span class="badge" style="background:${['rgba(64,224,208,0.5)','rgba(46,204,113,0.6)','rgba(241,196,15,0.7)','rgba(230,126,34,0.8)','rgba(231,76,60,0.9)'][i]}">${label}</span></span>`
     ).join('') +
-    '</div>';
+    '</div>');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -688,15 +682,15 @@ document.addEventListener('DOMContentLoaded', () => {
       currentTo = urlParams.get('to');
       currentDays = 365;
       document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-      if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = currentFrom;
-      if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = currentTo;
+      setHtml('rangeFrom', currentFrom);
+      setHtml('rangeTo', currentTo);
     } else {
       const urlParams = new URLSearchParams(params);
       currentDays = parseInt(urlParams.get('days'), 10);
       currentFrom = null;
       currentTo = null;
-      if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = '';
-      if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = '';
+      setHtml('rangeFrom', '');
+      setHtml('rangeTo', '');
       document.querySelectorAll('[data-days]').forEach(b => {
         if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
           b.classList.add('active');

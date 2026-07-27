@@ -3039,19 +3039,9 @@ def api_charts():
 
         kwh = day_kwh.get(d, 0)
         cost = day_cost.get(d, 0)
-        # Verbrauch kWh/100km (nur wenn km>0 UND plausibel, sonst None)
-        # km muss zum geladenen kWh passen: bei ~15 kWh/100km sind 29,8 kWh ~200 km.
-        # Wenn km_day deutlich zu niedrig fuer die geladene kWh -> odometer-Luecke,
-        # dann Verbrauch/€-Werte nicht berechnen (keine Fantasiezahlen).
-        km_plausible = km_day >= (kwh * 100 / 60.0)  # max 60 kWh/100km erlaubt
-        raw_cons = kwh / (km_day / 100.0) if (km_day > 0 and km_plausible) else None
-        consumption = round(raw_cons, 2) if (raw_cons is not None and 0 < raw_cons <= 60) else None
         # €/kWh (gewichtet)
         ppk_vals = day_price.get(d, [])
         price_per_kwh = round(sum(p * w for p, w in ppk_vals) / sum(w for _, w in ppk_vals), 4) if ppk_vals else None
-        # €/100km (nur bei plausibler km)
-        raw_c100 = cost / (km_day / 100.0) if (km_day > 0 and km_plausible) else None
-        cost_per_100 = round(raw_c100, 2) if (raw_c100 is not None and 0 <= raw_c100 <= 30) else None
         # CO2 g/kWh (gewichtet)
         co2_vals = day_co2.get(d, [])
         co2 = round(sum(c * w for c, w in co2_vals) / sum(w for _, w in co2_vals), 1) if co2_vals else None
@@ -3062,8 +3052,10 @@ def api_charts():
         series.append({
             "day": d, "km": km_day, "cum_km": round(cum_km, 1),
             "kwh": round(kwh, 2), "cost": round(cost, 2),
-            "consumption": consumption, "price_per_kwh": price_per_kwh,
-            "cost_per_100": cost_per_100, "co2": co2, "loss": loss,
+            "consumption": None,  # wird NACH Drive-km Korrektur berechnet
+            "price_per_kwh": price_per_kwh,
+            "cost_per_100": None,  # wird NACH Drive-km Korrektur berechnet
+            "co2": co2, "loss": loss,
             "ac_kwh": round(day_ac_kwh.get(d, 0), 2),
             "dc_kwh": round(day_dc_kwh.get(d, 0), 2),
             "ac_cost": round(day_ac_cost.get(d, 0), 2),
