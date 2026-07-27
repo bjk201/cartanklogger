@@ -123,56 +123,113 @@ function buildDetail(r) {
 
 function renderKPIs(s, mergedRows = []) {
   s = s || {};
-  const t = s.totals || {}, h = s.home || {}, e = s.external || {};
+  const t = s.totals || {};
+  const h = s.home || {};
+  const e = s.external || {};
   const monthly = s.monthly || [];
-  const curMonth = monthly.length ? monthly[monthly.length - 1] : null;
-  const costThisMonth = curMonth ? (curMonth.home_cost + curMonth.ext_cost + curMonth.extra) : 0;
-  const homeKwh = t.home_kwh || 0;
-  const extKwh = t.ext_kwh || 0;
-  const homeShare = (homeKwh + extKwh) > 0 ? Math.round(homeKwh / (homeKwh + extKwh) * 100) : 0;
   
+  // Current period values
+  const distanceKm = t.total_km || t.distance_km || 0;
+  const totalKwh = t.kwh || (t.home_kwh || 0) + (t.ext_kwh || 0);
+  const consumption = t.consumption_kwh_per_100km || (distanceKm > 0 ? totalKwh / (distanceKm / 100) : 0);
+  const costPerKm = t.cost_per_km || (t.cost_home_and_external || 0) / (distanceKm || 1);
+  const costPer100km = costPerKm * 100;
+  const totalCost = t.cost_home_and_external || 0;
+  const homeLossKwh = t.home_loss_kwh || 0;
+  const lossPct = totalKwh > 0 ? (homeLossKwh / totalKwh * 100) : 0;
+  
+  // Days in period for daily average
+  const daysInPeriod = currentFrom && currentTo 
+    ? Math.ceil((new Date(currentTo) - new Date(currentFrom)) / (1000*60*60*24)) + 1
+    : (currentDays || 90);
+  const kmPerDay = daysInPeriod > 0 ? distanceKm / daysInPeriod : 0;
+  const kwhPer100km = distanceKm > 0 ? totalKwh / (distanceKm / 100) : 0;
+  
+  // Previous period comparison (use monthly data if available with distance_km)
+  let consumptionChangePct = 0;
+  let costChangePct = 0;
+  if (monthly.length >= 2) {
+    const last = monthly[monthly.length - 1];
+    const prev = monthly[monthly.length - 2];
+    // Check if monthly has distance_km, otherwise skip comparison
+    if (last.distance_km && prev.distance_km && last.distance_km > 0 && prev.distance_km > 0) {
+      const lastCons = last.total_kwh > 0 ? last.total_kwh / (last.distance_km / 100) : 0;
+      const prevCons = prev.total_kwh > 0 ? prev.total_kwh / (prev.distance_km / 100) : 0;
+      if (prevCons > 0) consumptionChangePct = ((lastCons - prevCons) / prevCons) * 100;
+      const lastCost = last.total_cost / last.distance_km * 100;
+      const prevCost = prev.total_cost / prev.distance_km * 100;
+      if (prevCost > 0) costChangePct = ((lastCost - prevCost) / prevCost) * 100;
+    }
+  }
+  
+  // 5 KPIs for first row (col-lg-2 = 5 per row on large screens)
   const cards = [
-    {icon:'💶', t:'Kosten diesen Monat', v:fmtEUR(costThisMonth), s:curMonth ? curMonth.month : '–', c:'success'},
-    {icon:'⚡', t:'Geladene Energie', v:fmtKwh(t.kwh), s:`Zuhause ${fmtKwh(homeKwh)} · Extern ${fmtKwh(extKwh)}`, c:'primary'},
-    {icon:'🛣️', t:'Gefahrene km', v:(t.distance_km||0).toLocaleString('de-DE')+' km', s:'Tacho-Stand (max)', c:'secondary'},
-    {icon:'💡', t:'Kosten / 100 km', v:fmtEUR(t.tco_per_100km)+' /100km', s:`TCO ${fmtEUR(t.tco)}`, c:'warning'},
-    {icon:'🔋', t:'Verbrauch', v:fmtKwh(t.consumption_kwh_per_100km)+' /100km', s:`Akku ≈ ${fmtKwh(t.consumption_net_kwh_per_100km)} (geschätzt)`, c:'info'},
-    {icon:'☀️', t:'PV-Anteil', v:fmtPct(h.pv_share_pct), s:`${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(homeKwh)}`, c:'success'},
-    {icon:'🏠', t:'Zuhause vs. Extern', v:`${homeShare} % Zuhause`, s:`${fmtKwh(homeKwh)} zu Hause · ${fmtKwh(extKwh)} extern`, c:'primary'},
-    {icon:'🔌', t:'Ladeverluste', v:fmtKwh(t.home_loss_kwh), s:'Wallbox → Akku (Differenz)', c:'dark'},
+    {
+      icon: '🛣️',
+      title: 'Gefahrene km',
+      value: distanceKm.toLocaleString('de-DE', {minimumFractionDigits: 0}) + ' km',
+      sub: `Ø ${kmPerDay.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})} km/Tag`,
+      color: 'primary'
+    },
+    {
+      icon: '⚡',
+      title: 'Geladene kWh',
+      value: totalKwh.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' kWh',
+      sub: `Ø ${kwhPer100km.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})} kWh/100km`,
+      color: 'success'
+    },
+    {
+      icon: '🔋',
+      title: 'Durchschn. Verbrauch',
+      value: consumption.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' kWh/100km',
+      sub: `${consumptionChangePct >= 0 ? '+' : ''}${consumptionChangePct.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})}% ggü. Vorperiode`,
+      color: 'info'
+    },
+    {
+      icon: '💶',
+      title: 'Durchschn. Kosten',
+      value: fmtEUR(costPer100km) + ' / 100 km',
+      sub: `Gesamt ${fmtEUR(totalCost)} ${costChangePct !== 0 ? `(${costChangePct >= 0 ? '+' : ''}${costChangePct.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)` : ''}`,
+      color: 'warning'
+    },
+    {
+      icon: '🔌',
+      title: 'Ladeverluste',
+      value: homeLossKwh.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' kWh',
+      sub: `${lossPct.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})}% der geladenen Energie`,
+      color: 'danger'
+    }
   ];
   
   document.getElementById('summaryCards').innerHTML = cards.map(c => `
-    <div class="col-6 col-md-4 col-lg-3">
-      <div class="card kpi-card text-white bg-${c.c} h-100">
-        <div class="card-body py-2">
-          <div class="kpi-label opacity-75"><span class="kpi-icon">${c.icon}</span> ${c.t}</div>
-          <div class="kpi-value">${c.v}</div>
-          <div class="kpi-sub">${c.s}</div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card kpi-card text-white bg-${c.color} h-100">
+        <div class="card-body py-3">
+          <div class="kpi-label opacity-75 small"><span class="kpi-icon me-1">${c.icon}</span> ${c.title}</div>
+          <div class="kpi-value fw-bold fs-5">${c.value}</div>
+          <div class="kpi-sub small">${c.sub}</div>
         </div>
       </div>
     </div>`).join('');
   
-  // mergedKpis - use passed mergedRows
+  // Second row (mergedKpis) - keep existing additional KPIs
   const rows = mergedRows || [];
-  const totKwh = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
-  const totCost = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
+  const totKwhM = rows.reduce((a, r) => a + (r.total_kwh || 0), 0);
+  const totCostM = rows.reduce((a, r) => a + (r.total_cost || 0), 0);
   const extKwhM = rows.reduce((a, r) => a + (r.ext_kwh || 0), 0);
   const homeLossM = rows.reduce((a, r) => a + (r.home_loss || 0), 0);
-  const cons = t.distance_km > 0 ? t.kwh / (t.distance_km / 100.0) : 0;
-  const consNet = cons * 0.85;
-  const tco = (t.tco) || 0;
-  const tco100 = (t.tco_per_100km) || 0;
+  const consM = t.distance_km > 0 ? t.kwh / (t.distance_km / 100.0) : 0;
+  const consNetM = consM * 0.85;
+  const tco = t.tco || 0;
+  const tco100 = t.tco_per_100km || 0;
   
   document.getElementById('mergedKpis').innerHTML = [
-    kpiStat('🛣️ Gefahrene km', (t.distance_km||0).toLocaleString('de-DE')+' km'),
-    kpiStat('⚡ Geladene kWh', totKwh.toLocaleString('de-DE', {minimumFractionDigits:1})+' kWh'),
-    kpiStat('💶 Ausgaben (Energie)', fmtEUR(totCost)),
     kpiStat('💰 TCO gesamt', fmtEUR(tco), 'inkl. Anschaffung/Versicherung/Steuer'),
-    kpiStat('💡 TCO / 100km', tco100.toLocaleString('de-DE', {minimumFractionDigits:2})+' €'),
-    kpiStat('🔋 Ø Verbrauch', cons.toLocaleString('de-DE', {minimumFractionDigits:1})+' kWh/100km', `von der Wand · Akku ≈ ${consNet.toLocaleString('de-DE', {minimumFractionDigits:1})}`),
-    kpiStat('🔌 Extern', extKwhM.toLocaleString('de-DE', {minimumFractionDigits:1})+' kWh'),
-    kpiStat('📉 Ladeverlust', homeLossM.toLocaleString('de-DE', {minimumFractionDigits:1})+' kWh'),
+    kpiStat('💡 TCO / 100km', tco100.toLocaleString('de-DE', {minimumFractionDigits: 2}) + ' €'),
+    kpiStat('🔌 Extern', extKwhM.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh'),
+    kpiStat('📉 Ladeverlust (Summe)', homeLossM.toLocaleString('de-DE', {minimumFractionDigits: 1}) + ' kWh'),
+    kpiStat('☀️ PV-Anteil Zuhause', fmtPct(h.pv_share_pct), `${fmtKwh(h.pv_kwh||0)} PV von ${fmtKwh(t.home_kwh||0)}`),
+    kpiStat('🏠 Zuhause vs. Extern', `${((t.home_kwh||0) + (t.ext_kwh||0)) > 0 ? Math.round((t.home_kwh||0) / ((t.home_kwh||0) + (t.ext_kwh||0)) * 100) : 0}% Zuhause`, `${fmtKwh(t.home_kwh||0)} zu Hause · ${fmtKwh(t.ext_kwh||0)} extern`),
   ].join('');
 }
 
