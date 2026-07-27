@@ -42,7 +42,7 @@ function renderMergedTable(rows) {
     return;
   }
   
-  const displayRows = rows.slice(0, 25);
+  const displayRows = rows.slice(0, 10);
   
   tb.innerHTML = displayRows.map((r, i) => `
     <tr>

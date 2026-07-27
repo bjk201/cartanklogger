@@ -1,14 +1,22 @@
 {% extends "base.html" %}
 {% block title %}CarTankLogger – Übersicht{% endblock %}
 {% block content %}
+<!-- KPI Kacheln ZUERST -->
 <div class="row g-2 mb-3" id="summaryCards"></div>
 
+<!-- Trip Cards (Fahrten) -->
+<div class="row g-2 mb-3" id="tripCards"></div>
+
+<!-- Merged KPIs (zusätzliche Kennzahlen) -->
+<div class="row g-2 mb-3" id="mergedKpis"></div>
+
+<!-- Letzte Ladevorgänge - max 10 Einträge, scrollbar -->
 <div class="row g-2 mb-3">
   <div class="col-12">
     <div class="card h-100">
-      <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
+      <div class="card-header py-2">🔌 Letzte Ladevorgänge (max. 10)</div>
       <div class="card-body p-0">
-        <div class="table-container">
+        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
           <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
             <thead class="sticky-header"><tr>
               <th>Datum</th><th>Stationen</th><th>Zuhause kWh</th><th>Zuhause €</th>
@@ -21,9 +29,6 @@
     </div>
   </div>
 </div>
-
-<div class="row g-2 mb-3" id="mergedKpis"></div>
-<div class="row g-2 mb-3" id="tripCards"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/overview.js') }}?v={{ js_version }}"></script>
