@@ -398,17 +398,70 @@ html[data-theme="dark"] .spinner-grow {
 /* KPI Cards */
 #summaryCards .card {
   min-height: 96px;
+  max-height: 110px;
   transition: transform 0.15s;
+  overflow: hidden;
 }
 #summaryCards .card:hover { transform: translateY(-2px); }
-.kpi-label { font-size: .72rem; letter-spacing: .02em; }
-.kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.15; }
-.kpi-sub { font-size: .7rem; opacity: .8; }
+.kpi-label { font-size: .72rem; letter-spacing: .02em; margin-bottom: 0.15rem; }
+.kpi-value { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+.kpi-sub { font-size: .68rem; opacity: .8; margin-top: 0.1rem; }
 .kpi-icon { font-size: 1.1rem; }
-@media (max-width: 576px) { .kpi-value { font-size: 1.2rem; } }
+@media (max-width: 576px) { .kpi-value { font-size: 1.1rem; } }
 
-/* Charts */
-canvas { max-height: 260px; }
+/* Charts - constrain card heights */
+.chart-card {
+  max-height: 300px;
+  overflow: hidden;
+}
+.chart-card .card-body {
+  padding: 0.5rem 0.75rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.chart-card canvas {
+  max-height: 180px;
+  height: 180px !important;
+  flex: 1;
+  width: 100% !important;
+}
+
+/* Donut chart card */
+.donut-card {
+  max-height: 340px;
+}
+.donut-card .card-body {
+  padding: 0.75rem;
+}
+
+/* Heatmap cards */
+.heatmap-card {
+  max-height: 280px;
+}
+.heatmap-card canvas {
+  max-height: 180px;
+  height: 180px !important;
+}
+
+/* Heatmap legends */
+#legendTempConsumption,
+#legendWeekdayConsumption {
+  margin-top: 0.5rem !important;
+  font-size: 0.65rem;
+}
+
+/* Table container - prevent overlap */
+.table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+/* Ensure main content doesn't overlap header */
+main, main.col-12.py-3 {
+  padding-top: calc(var(--header-height) + 1rem) !important;
+}
 
 /* Collapse rows */
 tr.collapse-row > td { padding: 0 !important; border: none !important; }

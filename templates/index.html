@@ -9,7 +9,7 @@
   <!-- LINKE SPALTE: 3 Zeitreihen-Charts übereinander -->
   <div class="col-12 col-lg-6">
     <!-- Verbrauch Chart -->
-    <div class="card h-100 mb-3">
+    <div class="card h-100 mb-3 chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
         <span class="badge bg-info text-dark" id="avgConsumptionBadge">Ø –</span>
@@ -20,7 +20,7 @@
     </div>
 
     <!-- Kosten Chart -->
-    <div class="card h-100 mb-3">
+    <div class="card h-100 mb-3 chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
         <span class="badge bg-warning text-dark" id="avgCostBadge">Ø –</span>
@@ -31,7 +31,7 @@
     </div>
 
     <!-- Kilometer Chart -->
-    <div class="card h-100 mb-3">
+    <div class="card h-100 mb-3 chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">🛣️ Kilometer (km)</span>
         <span class="badge bg-primary" id="totalKmBadge">Σ –</span>
@@ -45,7 +45,7 @@
   <!-- RECHTE SPALTE: Donut oben, 2 Heatmaps unten -->
   <div class="col-12 col-lg-6">
     <!-- Home vs Extern Donut -->
-    <div class="card h-100 mb-3">
+    <div class="card h-100 mb-3 chart-card donut-card">
       <div class="card-header py-2">
         <span class="fw-medium">🏠🔌 Home vs. Extern (kWh)</span>
       </div>
@@ -74,7 +74,7 @@
     <div class="row g-2">
       <!-- Heatmap links: Verbrauch / Temperatur -->
       <div class="col-12 col-md-6">
-        <div class="card h-100">
+        <div class="card h-100 chart-card heatmap-card">
           <div class="card-header py-2 d-flex align-items-center justify-content-between">
             <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
@@ -88,7 +88,7 @@
 
       <!-- Heatmap rechts: Verbrauch / Wochentag -->
       <div class="col-12 col-md-6">
-        <div class="card h-100">
+        <div class="card h-100 chart-card heatmap-card">
           <div class="card-header py-2 d-flex align-items-center justify-content-between">
             <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
@@ -103,9 +103,6 @@
   </div>
 </div>
 
-<!-- ===== Zweite KPI-Zeile (Zusatz-KPIs aus merged) ===== -->
-<div class="row g-2 mb-3" id="mergedKpis"></div>
-
 <!-- ===== Trip Cards (Fahrten) ===== -->
 <div class="row g-2 mb-3" id="tripCards"></div>
 
@@ -115,7 +112,7 @@
     <div class="card h-100">
       <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
       <div class="card-body p-0">
-        <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-container">
           <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
             <thead class="sticky-header"><tr>
               <th>Datum</th><th>Stationen</th><th>Zuhause kWh</th><th>Zuhause €</th>
