@@ -996,60 +996,64 @@ function renderDriveCompareResult(data) {
     return;
   }
 
-  // Define metrics to display (key, label, formatter, highlightBestWorst)
-  const metrics = [
-    { key: 'route', label: 'Route', fmt: v => v || '–', highlight: false },
-    { key: 'km', label: 'km', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
-    { key: 'duration_min', label: 'Dauer (min)', fmt: v => v != null ? Math.round(v) : '–', highlight: true },
-    { key: 'speed_avg', label: 'Ø km/h', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
-    { key: 'energy_kwh', label: 'kWh', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
-    { key: 'cons_per_100', label: 'kWh/100km', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
-    { key: 'soc_used', label: 'SoC Δ', fmt: v => v != null ? v + ' %' : '–', highlight: true },
-    { key: 'outside_temp_avg', label: 'Temp °C', fmt: v => v != null ? Math.round(v) : '–', highlight: false },
-  ];
-
-  // Build transposed table: columns = drives + Ø, rows = metrics
+  // Standard layout: rows = trips, columns = metrics
   let html = `
     <h6>Vergleichsergebnis</h6>
     <div class="table-responsive">
       <table class="table table-sm table-bordered align-middle mb-3">
         <thead class="table-light">
           <tr>
-            <th>Kennzahl</th>
-            ${drives.map(d => `
-              <th class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">
-                ${d.start_date ? d.start_date.slice(0,10) : ''}
-                ${d.is_best ? ' 🏆' : ''}
-                ${d.is_worst ? ' ⚠️' : ''}
-              </th>
-            `).join('')}
-            <th>Ø</th>
+            <th>Datum</th>
+            <th>Route</th>
+            <th class="text-end">km</th>
+            <th class="text-end">Dauer (min)</th>
+            <th class="text-end">Ø km/h</th>
+            <th class="text-end">kWh</th>
+            <th class="text-end">kWh/100km</th>
+            <th class="text-end">SoC Δ</th>
+            <th class="text-end">Temp °C</th>
           </tr>
         </thead>
         <tbody>
   `;
 
-  metrics.forEach(m => {
-    const isConsumption = m.key === 'cons_per_100';
-    const rowClass = isConsumption ? 'fw-bold' : '';
+  drives.forEach(d => {
+    const isBest = d.id === best;
+    const isWorst = d.id === worst;
+    const rowClass = isBest ? 'bg-success-subtle' : (isWorst ? 'bg-danger-subtle' : '');
+    const marker = isBest ? ' 🏆' : (isWorst ? ' ⚠️' : '');
+    
     html += `
       <tr class="${rowClass}">
-        <td class="fw-semibold">${m.label}</td>
-        ${drives.map(d => {
-          const val = d[m.key];
-          const cls = (m.highlight && d.id === best) ? 'bg-success-subtle' : 
-                      (m.highlight && d.id === worst) ? 'bg-danger-subtle' : '';
-          return `<td class="${cls}">${m.fmt(val)}</td>`;
-        }).join('')}
-        <td>${m.fmt(averages[m.key])}</td>
+        <td>${d.start_date ? d.start_date.slice(0,10) : '–'}${marker}</td>
+        <td>${d.route || '–'}</td>
+        <td class="text-end">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>
+        <td class="text-end">${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end fw-bold">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>
       </tr>
     `;
   });
 
+  // Average row
   html += `
-        </tbody>
-      </table>
-    </div>
+      <tr class="table-light fw-bold">
+        <td>Ø</td>
+        <td>–</td>
+        <td class="text-end">${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>
+        <td class="text-end">${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>
+        <td class="text-end">${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>
+        <td class="text-end">${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
   `;
 
   // Add bar chart for consumption comparison
@@ -1069,7 +1073,7 @@ function renderDriveCompareResult(data) {
   if (ctx && window.Chart) {
     const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
     const consData = drives.map(d => d.cons_per_100);
-    const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
+    const colors = drives.map(d => d.id === best ? '#198754' : (d.id === worst ? '#dc3545' : '#0d6efd'));
     
     // Safely destroy previous instance
     if (window.driveConsChart) {
