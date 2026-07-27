@@ -3074,11 +3074,47 @@ def api_charts():
     # --- Gesamt-KPIs ---
     total_kwh = round(sum(s["kwh"] for s in series), 2)
     total_cost = round(sum(s["cost"] for s in series), 2)
-    total_km = round(sum(s["km"] for s in series), 1) or 0.0  # gefahrene km (Summe Tages-km), nicht Tacho-Stand
     total_ac = round(sum(s["ac_kwh"] for s in series), 2)
     total_dc = round(sum(s["dc_kwh"] for s in series), 2)
     total_dc_cost = round(sum(s["dc_cost"] for s in series), 2)
     total_ac_cost = round(sum(s["ac_cost"] for s in series), 2)
+    
+    # Verwende Drive-basierte km für Gesamtwerte (genauer als Odometer)
+    drive_km_total = 0.0
+    drive_days = {}
+    try:
+        from collections import defaultdict as _dd
+        drive_km_by_day = _dd(float)
+        for dr in _drive_rows(days_param, from_date, to_date):
+            dk = (dr.get("start_date") or "")[:10]
+            if not dk:
+                continue
+            try:
+                drive_km_by_day[dk] += float(dr.get("distance_km") or 0)
+            except Exception:
+                pass
+        drive_km_total = sum(drive_km_by_day.values())
+        drive_days = dict(drive_km_by_day)
+    except Exception:
+        pass
+    
+    total_km = drive_km_total if drive_km_total > 0 else round(sum(s["km"] for s in series), 1)
+    # Aktualisiere series km mit Drive-Daten für Charts
+    if drive_days:
+        for s in series:
+            if s["day"] in drive_days:
+                s["km"] = round(drive_days[s["day"]], 1)
+    
+    # --- JETZT: Verbrauch & Kosten pro 100km für jede Series neu berechnen mit korrigierten km ---
+    for s in series:
+        kwh = s["kwh"]
+        cost = s["cost"]
+        km_day = s["km"]
+        # Plausibilität: km müssen zur geladenen kWh passen (max 60 kWh/100km)
+        km_plausible = km_day >= (kwh * 100 / 60.0) if kwh > 0 else True
+        s["consumption"] = round(kwh / (km_day / 100.0), 2) if (km_day > 0 and km_plausible) else None
+        s["cost_per_100"] = round(cost / (km_day / 100.0), 2) if (km_day > 0 and km_plausible) else None
+    
     avg_consumption = round(total_kwh / (total_km / 100.0), 2) if total_km > 0 else 0
     avg_cost_100 = round(total_cost / (total_km / 100.0), 2) if total_km > 0 else 0
     # gewichteter €/kWh ueber alle Tage

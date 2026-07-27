@@ -1,16 +1,112 @@
 {% extends "base.html" %}
 {% block title %}CarTankLogger – Übersicht{% endblock %}
 {% block content %}
-<!-- KPI Kacheln ZUERST -->
+<!-- ===== ZEILE 1: 5 KPIs (volle Breite, responsive) ===== -->
 <div class="row g-2 mb-3" id="summaryCards"></div>
 
-<!-- Trip Cards (Fahrten) -->
+<!-- ===== ANALYSEBEREICH: 2 Spalten (Links Charts, Rechts Donut + Heatmaps) ===== -->
+<div class="row g-3 mb-3" id="analysisArea">
+  <!-- LINKE SPALTE: 3 Zeitreihen-Charts übereinander -->
+  <div class="col-12 col-lg-6">
+    <!-- Verbrauch Chart -->
+    <div class="card h-100 mb-3">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
+        <span class="badge bg-info text-dark" id="avgConsumptionBadge">Ø –</span>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="chartConsumption" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- Kosten Chart -->
+    <div class="card h-100 mb-3">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
+        <span class="badge bg-warning text-dark" id="avgCostBadge">Ø –</span>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="chartCost" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- Kilometer Chart -->
+    <div class="card h-100 mb-3">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium">🛣️ Kilometer (km)</span>
+        <span class="badge bg-primary" id="totalKmBadge">Σ –</span>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="chartKm" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECHTE SPALTE: Donut oben, 2 Heatmaps unten -->
+  <div class="col-12 col-lg-6">
+    <!-- Home vs Extern Donut -->
+    <div class="card h-100 mb-3">
+      <div class="card-header py-2">
+        <span class="fw-medium">🏠🔌 Home vs. Extern (kWh)</span>
+      </div>
+      <div class="card-body py-2">
+        <div class="row g-0 align-items-center">
+          <div class="col-5 text-end pe-2">
+            <div class="small text-muted">Zuhause</div>
+            <div class="fw-bold" id="homeKwh">– kWh</div>
+            <div class="small" id="homePct">–%</div>
+            <div class="small text-muted" id="homePrice">Ø – €/kWh</div>
+          </div>
+          <div class="col-2 text-center">
+            <canvas id="chartHomeExtern" height="140" width="140"></canvas>
+          </div>
+          <div class="col-5 ps-2">
+            <div class="small text-muted">Extern</div>
+            <div class="fw-bold" id="extKwh">– kWh</div>
+            <div class="small" id="extPct">–%</div>
+            <div class="small text-muted" id="extPrice">Ø – €/kWh</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNTEN: 2 Heatmaps nebeneinander (je 2,5 KPIs breit = 50% der rechten Spalte) -->
+    <div class="row g-2">
+      <!-- Heatmap links: Verbrauch / Temperatur -->
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
+            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="heatmapTempConsumption" height="180"></canvas>
+            <div class="mt-2 small" id="legendTempConsumption"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Heatmap rechts: Verbrauch / Wochentag -->
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
+            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="heatmapWeekdayConsumption" height="180"></canvas>
+            <div class="mt-2 small" id="legendWeekdayConsumption"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Trip Cards (Fahrten) ===== -->
 <div class="row g-2 mb-3" id="tripCards"></div>
 
-<!-- Merged KPIs (zusätzliche Kennzahlen) -->
-<div class="row g-2 mb-3" id="mergedKpis"></div>
-
-<!-- Letzte Ladevorgänge - 20 Einträge pro Seite, blätterbar -->
+<!-- ===== Letzte Ladevorgänge - 20 Einträge pro Seite, blätterbar ===== -->
 <div class="row g-2 mb-3">
   <div class="col-12">
     <div class="card h-100">
