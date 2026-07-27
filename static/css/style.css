@@ -60,11 +60,22 @@ html[data-theme="dark"] body {
   color: var(--text-dark);
 }
 
-/* Header */
-.app-header {
-  background: var(--bg-header-light);
-  border-bottom: 1px solid var(--border-light);
-}
+/* Header height variable */
+  :root {
+    --header-height: 88px; /* Approximate fixed header height with all controls */
+  }
+
+  .app-header {
+    background: var(--bg-header-light);
+    border-bottom: 1px solid var(--border-light);
+    height: var(--header-height);
+  }
+  
+  /* Push main content below fixed header */
+  main.col-12.py-3,
+  main {
+    padding-top: calc(var(--header-height) + 1rem) !important;
+  }
 .app-header .navbar-brand {
   color: var(--text-light) !important;
   font-weight: 700;
@@ -484,12 +495,19 @@ html[data-theme="dark"] .sidebar .theme-toggle { border-top-color: var(--border-
   
   /* Main content - full width on mobile */
   main { 
-    padding-top: 56px; /* Fixed header height - reduced from 96px */
+    padding-top: 56px !important; /* Fixed header height */
     width: 100%;
     min-height: calc(100vh - 56px);
   }
   
-  /* Ensure first content row has extra space from header */
+  /* Ensure desktop also has header offset */
+  @media (min-width: 768px) {
+    main {
+      padding-top: 56px !important;
+    }
+  }
+  
+  /* Ensure first content row has no extra margin */
   /* ── ZEITRAUM-UI: Content below fixed header ── */
 .content-wrapper {
   padding-top: 0.5rem;
