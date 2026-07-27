@@ -1658,6 +1658,12 @@ def extra():
     return render_template("extra.html", mock=mock_mode(), js_version=js_ver)
 
 
+@app.route("/monatsvergleich")
+def monatsvergleich():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("monatsvergleich.html", mock=mock_mode(), js_version=js_ver)
+
+
 
 @app.route("/api/version")
 def api_version():
@@ -3298,6 +3304,88 @@ def api_statistics():
         "home_vs_extern": home_vs_extern,
         "heatmap": heat,
         "heatmap_kwh": heat_kwh,
+    })
+
+
+@app.route("/api/monatsvergleich")
+def api_monatsvergleich():
+    """Monatsvergleich: Monat | km | kWh Home/Extern | € Home/Extern | Ø Verbrauch | €/100km"""
+    days = request.args.get("days", 365, type=int)
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    if from_date and to_date:
+        cutoff = from_date + "T00:00:00"
+        end = to_date + "T23:59:59"
+    else:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        end = None
+    
+    # Use existing build_stats which already computes monthly data correctly
+    stats = build_stats(days, from_date, to_date)
+    monthly = stats.get("monthly", [])
+    totals = stats.get("totals", {})
+    
+    # Also need daily km per month for consumption calculation
+    # Get drives grouped by month
+    db = get_db()
+    if from_date and to_date:
+        drives_q = "SELECT start_date, distance_km FROM drives WHERE start_date >= ? AND start_date <= ?"
+        drives_params = [cutoff, end]
+    else:
+        drives_q = "SELECT start_date, distance_km FROM drives WHERE start_date >= ?"
+        drives_params = [cutoff]
+    drives = [dict(r) for r in db.execute(drives_q, drives_params).fetchall()]
+    
+    # Group drives by month
+    from collections import defaultdict
+    km_by_month = defaultdict(float)
+    for d in drives:
+        m = (d.get("start_date") or "")[:7]
+        if m:
+            km_by_month[m] += float(d.get("distance_km") or 0)
+    
+    # Build response with computed values
+    result = []
+    for m in monthly:
+        month_key = m.get("month")
+        km = km_by_month.get(month_key, 0)
+        home_kwh = m.get("home_kwh", 0)
+        ext_kwh = m.get("ext_kwh", 0)
+        total_kwh = home_kwh + ext_kwh
+        home_cost = m.get("home_cost", 0)
+        ext_cost = m.get("ext_cost", 0)
+        total_cost = home_cost + ext_cost + m.get("extra", 0)
+        
+        # Consumption: home_kwh / km * 100 (only home charging reflects actual consumption)
+        consumption = round(home_kwh / km * 100, 2) if km > 0 and home_kwh > 0 else None
+        # Cost per 100km: total_cost / km * 100
+        cost_per_100 = round(total_cost / km * 100, 2) if km > 0 else None
+        
+        result.append({
+            "month": month_key,
+            "km": round(km, 1),
+            "home_kwh": round(home_kwh, 2),
+            "ext_kwh": round(ext_kwh, 2),
+            "home_cost": round(home_cost, 2),
+            "ext_cost": round(ext_cost, 2),
+            "total_cost": round(total_cost, 2),
+            "consumption_kwh_per_100km": consumption,
+            "cost_per_100km": cost_per_100,
+        })
+    
+    # Sort by month descending (newest first)
+    result.sort(key=lambda x: x["month"], reverse=True)
+    
+    return jsonify({
+        "months": result,
+        "totals": {
+            "total_km": round(sum(r["km"] for r in result), 1),
+            "total_home_kwh": round(sum(r["home_kwh"] for r in result), 2),
+            "total_ext_kwh": round(sum(r["ext_kwh"] for r in result), 2),
+            "total_home_cost": round(sum(r["home_cost"] for r in result), 2),
+            "total_ext_cost": round(sum(r["ext_cost"] for r in result), 2),
+            "total_cost": round(sum(r["total_cost"] for r in result), 2),
+        }
     })
 
 

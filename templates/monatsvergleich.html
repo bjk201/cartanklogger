@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}CarTankLogger – Monatsvergleich{% endblock %}
+{% block content %}
+<div class="row mb-3 align-items-center">
+  <div class="col-md-6"><small class="text-muted" id="rangeLabel">Letzte 365 Tage</small></div>
+  <div class="col-md-6 text-md-end">
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary" data-days="90">90 T</button>
+      <button class="btn btn-outline-secondary active" data-days="365">1 J</button>
+      <button class="btn btn-outline-secondary" data-days="9999">All</button>
+    </div>
+    <div class="input-group input-group-sm d-inline-flex ms-2" style="width:auto">
+      <span class="input-group-text">Von</span>
+      <input type="date" id="rangeFrom" class="form-control form-control-sm">
+      <span class="input-group-text">Bis</span>
+      <input type="date" id="rangeTo" class="form-control form-control-sm">
+      <button class="btn btn-outline-primary" id="btnRange" type="button">Anwenden</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header py-2">📅 Monatsvergleich – Energie, Kosten & Verbrauch</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped align-middle mb-0" id="tblMonatsvergleich">
+        <thead class="sticky-header table-light">
+          <tr>
+            <th>Monat</th>
+            <th class="text-end">gefahrene km</th>
+            <th class="text-end">geladene kWh Home</th>
+            <th class="text-end">geladene kWh Extern</th>
+            <th class="text-end">Kosten Home €</th>
+            <th class="text-end">Kosten Extern €</th>
+            <th class="text-end">Ø Verbrauch kWh/100km</th>
+            <th class="text-end">Ø Kosten €/100km</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-2 text-muted small" id="mvEmpty" style="display:none;">
+    Keine Daten für den gewählten Zeitraum.
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/monatsvergleich.js') }}?v={{ js_version }}"></script>
+{% endblock %}
