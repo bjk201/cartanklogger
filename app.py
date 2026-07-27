@@ -2861,8 +2861,28 @@ def api_merged():
         r["has_raw"] = bool(r.get("raw"))
         r.pop("raw", None)
     
+    # Load Drive km data for the same period
+    drive_km_by_day = {}
+    try:
+        from collections import defaultdict as _dd
+        drive_km_by_day = _dd(float)
+        for dr in _drive_rows(days, from_date, to_date):
+            dk = (dr.get("start_date") or "")[:10]
+            if dk:
+                try:
+                    drive_km_by_day[dk] += float(dr.get("distance_km") or 0)
+                except Exception:
+                    pass
+        drive_km_by_day = dict(drive_km_by_day)
+    except Exception:
+        pass
+    
     sess = {"home": home, "external": ext}
     merged_all = _build_merged(sess)
+    
+    # Add km from drives to each merged day
+    for day_data in merged_all:
+        day_data["km"] = round(drive_km_by_day.get(day_data["day"], 0.0), 1)
     
     # Apply pagination to merged day results
     total = len(merged_all)
@@ -3099,19 +3119,22 @@ def api_charts():
         pass
     
     total_km = drive_km_total if drive_km_total > 0 else round(sum(s["km"] for s in series), 1)
-    # Aktualisiere series km mit Drive-Daten für Charts
-    if drive_days:
-        for s in series:
-            if s["day"] in drive_days:
-                s["km"] = round(drive_days[s["day"]], 1)
+    # Aktualisiere series km NUR für Tage MIT Drive-Daten, andere auf 0 setzen
+    for s in series:
+        if s["day"] in drive_days:
+            s["km"] = round(drive_days[s["day"]], 1)
+        else:
+            s["km"] = 0.0
     
-    # --- JETZT: Verbrauch & Kosten pro 100km für jede Series neu berechnen mit korrigierten km ---
+    # --- JETZT: Verbrauch & Kosten pro 100km für jede Series neu berechnen mit Drive-km ---
+    # Nur an Tagen MIT Fahrten (km > 0) und plausibler kWh/km Relation
     for s in series:
         kwh = s["kwh"]
         cost = s["cost"]
         km_day = s["km"]
-        # Plausibilität: km müssen zur geladenen kWh passen (max 60 kWh/100km)
-        km_plausible = km_day >= (kwh * 100 / 60.0) if kwh > 0 else True
+        # Plausibilität: km müssen zur geladenen kWh passen (max 100 kWh/100km = sehr großzügig)
+        # Erhöht von 60 auf 100, da Laden oft am Vortag/Nachladen für nächste Tage
+        km_plausible = km_day >= (kwh * 100 / 100.0) if kwh > 0 else True
         s["consumption"] = round(kwh / (km_day / 100.0), 2) if (km_day > 0 and km_plausible) else None
         s["cost_per_100"] = round(cost / (km_day / 100.0), 2) if (km_day > 0 and km_plausible) else None
     
