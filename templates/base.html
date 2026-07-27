@@ -32,17 +32,17 @@
       <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
       
       <!-- Navigation (Desktop) -->
-            <nav class="d-none d-md-flex align-items-center gap-1" id="mainNav">
-              <div class="btn-group btn-group-sm" role="group" aria-label="Hauptnavigation">
-                <a class="nav-link btn {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a>
-                <a class="nav-link btn {% if request.path == '/statistik' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/statistik">Statistik</a>
-                <a class="nav-link btn {% if request.path == '/monatsvergleich' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
-                <a class="nav-link btn {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra-Kosten</a>
-                <a class="nav-link btn {% if request.path == '/evcc' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/evcc">EVCC</a>
-                <a class="nav-link btn {% if request.path == '/teslamate' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/teslamate">TeslaMate</a>
-                <a class="nav-link btn {% if request.path == '/admin' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin">Admin</a>
-              </div>
-            </nav>
+      <nav class="d-none d-md-flex align-items-center gap-1" id="mainNav">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Hauptnavigation">
+          <a class="btn {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a>
+          <a class="btn {% if request.path == '/statistik' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/statistik">Statistik</a>
+          <a class="btn {% if request.path == '/monatsvergleich' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
+          <a class="btn {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra-Kosten</a>
+          <a class="btn {% if request.path == '/evcc' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/evcc">EVCC</a>
+          <a class="btn {% if request.path == '/teslamate' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/teslamate">TeslaMate</a>
+          <a class="btn {% if request.path == '/admin' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin">Admin</a>
+        </div>
+      </nav>
       
       <!-- Mobile menu button -->
       <button class="sidebar-toggle d-md-none" id="sidebarToggle" aria-label="Menü öffnen">
