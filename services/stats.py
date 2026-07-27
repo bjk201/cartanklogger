@@ -181,10 +181,16 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
             evcc_windows.append((sdt, edt))
     def _tm_is_home(r):
         cdt = _pd(r.get("started_at"))
+        # FIRST: Check time window match with EVCC (primary detection)
+        # This catches TM home sessions even if mislabeled as Supercharger
         if cdt is not None:
             for sdt, edt in evcc_windows:
                 if sdt <= cdt <= edt:
                     return True
+        # FALLBACK: String-based detection for cases without EVCC overlap
+        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
+            return False  # Definitely not home
         return _is_home_external_row(r)
     ext = [r for r in ext_all if not _tm_is_home(r)]
     extras = [dict(r) for r in extra_rows if in_range(r.get("date"))]
@@ -253,16 +259,17 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
     # tm_home_added << home_kwh und die Differenz ist KEINE Verlust, sondern
     # eine fehlende TM-Ladung. Verlust daher nur ansetzen, wenn TM die EVCC-
     # Wandmenge zu >=70% abdeckt (sonst Datenluecke -> keine Aussage, loss=0).
-    tm_home_rows = [r for r in ext_all if _is_home_external_row(r)]
+    # Nutzt die gleiche Erkennung wie fuer ext-Filterung (_tm_is_home).
+    tm_home_rows = [r for r in ext_all if _tm_is_home(r)]
     tm_home_added = sum(float(r.get("energy_kwh") or 0) for r in tm_home_rows)
     tm_home_used = sum(float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0) for r in tm_home_rows)
     home_loss = 0.0
     if home_kwh > 0 and tm_home_used > 0:
         used_cov = tm_home_used / home_kwh
         if 0.70 <= used_cov <= 1.30:
-            loss = home_kwh - tm_home_added      # Wand(EVCC) - Akku(TM)
+            loss = home_kwh - tm_home_used      # Wand(EVCC) - Wand(TM used) -> wall-to-wall
             loss_pct = loss / home_kwh if home_kwh > 0 else 0
-            if 0 <= loss_pct <= 0.35:            # physikalisch realistisch (<=35%)
+            if -0.05 <= loss_pct <= 0.35:       # erlauben kleiner negativer Werte (Messungenauigkeit)
                 home_loss = round(loss, 2)
 
     netto_is_estimate = True

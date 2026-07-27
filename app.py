@@ -2745,9 +2745,9 @@ def _build_merged(rows):
         if ev_kwh > 0 and tmh_used > 0:
             used_cov = tmh_used / ev_kwh
             if 0.70 <= used_cov <= 1.30:
-                loss = ev_kwh - tmh_added      # Wand(EVCC) - Akku(TM)
+                loss = ev_kwh - tmh_used      # Wand(EVCC) - Wand(TM used) -> wall-to-wall
                 loss_pct = loss / ev_kwh
-                if 0 <= loss_pct <= 0.35:       # physikalisch realistisch
+                if -0.05 <= loss_pct <= 0.35:       # erlauben kleiner negativer Werte (Messungenauigkeit)
                     home_loss = round(loss, 2)
 
         # --- Extern: nur echte Fremdladungen ---
