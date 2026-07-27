@@ -6,7 +6,7 @@
     <title>{% block title %}CarTankLogger{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <meta name="csrf-token" content="">
+    <meta name="csrf-token" content="{{ csrf_token() if csrf_token else '' }}">
     
     <!-- Inline theme init BEFORE body render - prevents flash -->
     <script>
@@ -26,12 +26,56 @@
 
 <header class="app-header fixed-top">
   <div class="container-fluid px-3">
-    <div class="d-flex align-items-center justify-content-between py-2">
-      <!-- Mobile sidebar toggle -->
+    <div class="d-flex align-items-center justify-content-between py-2 flex-wrap gap-2">
+      
+      <!-- Brand -->
+      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+      
+      <!-- Navigation (Desktop) -->
+      <nav class="d-none d-md-flex align-items-center gap-1" id="mainNav">
+        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">Übersicht</a>
+        <a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">Statistik</a>
+        <a class="nav-link {% if request.path == '/monatsvergleich' %}active{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
+        <a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a>
+        <a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">EVCC</a>
+        <a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">TeslaMate</a>
+        <a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">Admin</a>
+      </nav>
+      
+      <!-- Mobile menu button -->
       <button class="sidebar-toggle d-md-none" id="sidebarToggle" aria-label="Menü öffnen">
         <i class="bi bi-list"></i>
       </button>
-      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+      
+      <!-- Theme Toggle + Date Range (right side) -->
+      <div class="d-flex align-items-center gap-2">
+        
+        <!-- Theme Toggle -->
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="themeToggle" title="Theme wechseln">
+          <i class="bi bi-moon-fill" id="themeIcon"></i>
+          <span id="themeLabel" class="d-none d-sm-inline">Dark</span>
+        </button>
+        
+        <!-- Date Range Selector -->
+        <div class="d-none d-sm-flex align-items-center gap-1" id="globalDateRange">
+          <span class="text-muted small" id="globalRangeLabel">Letzte 365 Tage</span>
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-secondary" data-days="1">1 Tag</button>
+            <button class="btn btn-outline-secondary" data-days="30">30 Tage</button>
+            <button class="btn btn-outline-secondary active" data-days="90">90 Tage</button>
+            <button class="btn btn-outline-secondary" data-days="365">Jahr</button>
+            <button class="btn btn-outline-secondary" data-days="9999">Alle</button>
+          </div>
+          <div class="input-group input-group-sm d-none d-lg-flex ms-1" style="width:auto">
+            <span class="input-group-text">Von</span>
+            <input type="date" id="globalRangeFrom" class="form-control form-control-sm" style="width:110px">
+            <span class="input-group-text">Bis</span>
+            <input type="date" id="globalRangeTo" class="form-control form-control-sm" style="width:110px">
+            <button class="btn btn-outline-primary" id="globalRangeApply" type="button">Anwenden</button>
+          </div>
+        </div>
+        
+      </div>
     </div>
   </div>
 </header>
@@ -39,31 +83,31 @@
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
 
+<!-- Mobile Sidebar -->
+<nav class="sidebar-mobile d-md-none" id="sidebarMobile" style="position: fixed; top: 56px; left: 0; right: 0; bottom: 0; z-index: 1040; background: var(--bs-body-bg); transform: translateX(-100%); transition: transform 0.3s ease; overflow-y: auto;">
+  <div class="p-3">
+    <ul class="nav flex-column gap-1">
+      <li><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">Übersicht</a></li>
+      <li><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">Statistik</a></li>
+      <li><a class="nav-link {% if request.path == '/monatsvergleich' %}active{% endif %}" href="/monatsvergleich">Monatsvergleich</a></li>
+      <li><a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a></li>
+      <li><a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">EVCC</a></li>
+      <li><a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">TeslaMate</a></li>
+      <li><a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">Admin</a></li>
+    </ul>
+    <div class="mt-3 pt-3 border-top">
+      <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggleMobile">
+        <i class="bi bi-moon-fill" id="themeIconMobile"></i>
+        <span id="themeLabelMobile">Dark Mode</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
 <div class="container-fluid pt-0">
   <div class="row g-0">
-    <!-- SIDEBAR -->
-    <nav class="col-md-3 col-lg-2 col-xl-2 px-3 py-3 sidebar vh-100 d-none d-md-block" id="sidebar" style="position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;">
-          <ul class="nav flex-column">
-            <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">📋 Übersicht</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">📊 Statistik</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/monatsvergleich' %}active{% endif %}" href="/monatsvergleich">📅 Monatsvergleich</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/evcc' %}active{% endif %}" href="/evcc">Zuhause (EVCC)</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/teslamate' %}active{% endif %}" href="/teslamate">Extern (TeslaMate)</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a></li>
-            <li class="nav-item"><a class="nav-link {% if request.path == '/admin' %}active{% endif %}" href="/admin">⚙️ Verwaltung</a></li>
-          </ul>
-     
-          <!-- Theme Toggle at bottom of sidebar -->
-          <div class="theme-toggle mt-auto pt-3 border-top">
-            <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggle">
-              <i class="bi bi-moon-fill me-2" id="themeIcon"></i>
-              <span id="themeLabel">Dark Mode</span>
-            </button>
-          </div>
-        </nav>
-
     <!-- MAIN CONTENT -->
-    <main class="col-md-9 col-lg-10 col-xl-10 py-3">
+    <main class="col-12 py-3">
       {% block content %}{% endblock %}
     </main>
   </div>
@@ -77,36 +121,41 @@ function initTheme() {
   const themeToggle = document.getElementById('themeToggle');
   const themeIcon = document.getElementById('themeIcon');
   const themeLabel = document.getElementById('themeLabel');
+  const themeToggleMobile = document.getElementById('themeToggleMobile');
+  const themeIconMobile = document.getElementById('themeIconMobile');
+  const themeLabelMobile = document.getElementById('themeLabelMobile');
   
   // Already set by inline script in head, just update UI
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (isDark) {
-    themeIcon.className = 'bi bi-sun-fill me-2';
-    themeLabel.textContent = 'Light Mode';
-  } else {
-    themeIcon.className = 'bi bi-moon-fill me-2';
-    themeLabel.textContent = 'Dark Mode';
+  function updateUI(isDark) {
+    if (themeIcon) themeIcon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    if (themeLabel) themeLabel.textContent = isDark ? 'Light' : 'Dark';
+    if (themeIconMobile) themeIconMobile.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    if (themeLabelMobile) themeLabelMobile.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+  updateUI(isDark);
+  
+  function toggleTheme() {
+    const newDark = document.documentElement.getAttribute('data-theme') !== 'dark';
+    document.documentElement.setAttribute('data-theme', newDark ? 'dark' : 'light');
+    localStorage.setItem('theme', newDark ? 'dark' : 'light');
+    updateUI(newDark);
   }
   
-  themeToggle.addEventListener('click', function() {
-    const isDark = document.documentElement.getAttribute('data-theme') !== 'dark';
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    themeIcon.className = isDark ? 'bi bi-sun-fill me-2' : 'bi bi-moon-fill me-2';
-    themeLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-  });
+  if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+  if (themeToggleMobile) themeToggleMobile.addEventListener('click', toggleTheme);
 }
 
 // Mobile sidebar toggle
 function initSidebar() {
   const sidebarToggle = document.getElementById('sidebarToggle');
-  const sidebar = document.getElementById('sidebar');
+  const sidebar = document.getElementById('sidebarMobile');
   const overlay = document.getElementById('sidebarOverlay');
   
   if (!sidebarToggle || !sidebar || !overlay) return;
   
   function openSidebar() {
-    sidebar.classList.add('show');
+    sidebar.style.transform = 'translateX(0)';
     overlay.classList.add('show');
     sidebarToggle.innerHTML = '<i class="bi bi-x-lg"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü schließen');
@@ -114,7 +163,7 @@ function initSidebar() {
   }
   
   function closeSidebar() {
-    sidebar.classList.remove('show');
+    sidebar.style.transform = 'translateX(-100%)';
     overlay.classList.remove('show');
     sidebarToggle.innerHTML = '<i class="bi bi-list"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü öffnen');
@@ -122,34 +171,26 @@ function initSidebar() {
   }
   
   sidebarToggle.addEventListener('click', function() {
-    if (sidebar.classList.contains('show')) closeSidebar();
+    if (sidebar.style.transform === 'translateX(0)') closeSidebar();
     else openSidebar();
   });
   
   overlay.addEventListener('click', closeSidebar);
   
   // Close sidebar when clicking a nav link on mobile
-  document.querySelectorAll('.sidebar .nav-link').forEach(link => {
-    link.addEventListener('click', function() {
-      if (window.innerWidth < 768) closeSidebar();
-    });
+  document.querySelectorAll('.sidebar-mobile .nav-link').forEach(link => {
+    link.addEventListener('click', closeSidebar);
   });
   
   // Close sidebar on window resize to desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth >= 768 && sidebar.classList.contains('show')) closeSidebar();
+    if (window.innerWidth >= 768 && sidebar.style.transform === 'translateX(0)') closeSidebar();
   });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  initTheme();
-  initSidebar();
-  initGlobalDateRange();
-});
-
 // Global shared date range state
 let globalDateRange = {
-  days: 365,
+  days: 90,
   from: null,
   to: null
 };
@@ -255,6 +296,12 @@ function notifyRangeChange() {
   if (typeof loadTM === 'function') loadTM();
   if (typeof loadExtra === 'function') loadExtra();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  initTheme();
+  initSidebar();
+  initGlobalDateRange();
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>
