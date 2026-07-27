@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}CarTankLogger – Importdaten{% endblock %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col-md-6"><h2 class="h4 mb-0">Importdaten</h2></div>
+</div>
+
+<!-- Zuhause (EVCC) -->
+<div class="card mb-3">
+  <div class="card-header py-2">
+    <span>🏠 Zuhause (EVCC)</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-container">
+      <table class="table table-sm table-striped align-middle mb-0" id="tblHome">
+        <thead class="sticky-header"><tr>
+          <th>Datum</th><th>Ladepunkt</th><th>Fzg</th><th>kWh</th><th>PV%</th>
+          <th>Grid kWh</th><th>PV kWh</th><th>Grid €</th><th>PV €</th>
+          <th>Gesamt €</th><th>€/kWh</th><th>KM-Stand</th><th>Aktion</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-2">
+    <nav id="paginationHome" aria-label="Pagination"></nav>
+  </div>
+</div>
+
+<!-- Extern (TeslaMate) -->
+<div class="card">
+  <div class="card-header py-2">
+    <span>🔌 Extern (TeslaMate)</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-container">
+      <table class="table table-sm table-striped align-middle mb-0" id="tblExt">
+        <thead class="sticky-header"><tr>
+          <th>Datum</th><th>Ort</th><th>Anbieter</th><th>kWh</th>
+          <th>€ gesamt</th><th>€/kWh</th><th>KM-Stand</th><th>Quelle</th><th>Aktion</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-2">
+    <nav id="paginationExt" aria-label="Pagination"></nav>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/shared-modal.js') }}?v={{ js_version }}"></script>
+<script src="{{ url_for('static', filename='js/importdaten.js') }}?v={{ js_version }}"></script>
+{% endblock %}

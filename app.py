@@ -1652,6 +1652,12 @@ def teslamate():
     return render_template("teslamate.html", mock=mock_mode(), js_version=js_ver)
 
 
+@app.route("/importdaten")
+def importdaten():
+    js_ver = os.environ.get("APP_VERSION", "1")
+    return render_template("importdaten.html", mock=mock_mode(), js_version=js_ver)
+
+
 @app.route("/extra")
 def extra():
     js_ver = os.environ.get("APP_VERSION", "1")
