@@ -991,6 +991,24 @@ function renderDriveCompareResult(data) {
   const best = data.best_consumption_id;
   const worst = data.worst_consumption_id;
 
+  if (drives.length === 0) {
+    resultDiv.innerHTML = '<div class="alert alert-warning">Keine Vergleichsdaten</div>';
+    return;
+  }
+
+  // Define metrics to display (key, label, formatter, highlightBestWorst)
+  const metrics = [
+    { key: 'route', label: 'Route', fmt: v => v || '–', highlight: false },
+    { key: 'km', label: 'km', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
+    { key: 'duration_min', label: 'Dauer (min)', fmt: v => v != null ? Math.round(v) : '–', highlight: true },
+    { key: 'speed_avg', label: 'Ø km/h', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
+    { key: 'energy_kwh', label: 'kWh', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
+    { key: 'cons_per_100', label: 'kWh/100km', fmt: v => v != null ? v.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–', highlight: true },
+    { key: 'soc_used', label: 'SoC Δ', fmt: v => v != null ? v + ' %' : '–', highlight: true },
+    { key: 'outside_temp_avg', label: 'Temp °C', fmt: v => v != null ? Math.round(v) : '–', highlight: false },
+  ];
+
+  // Build transposed table: columns = drives + Ø, rows = metrics
   let html = `
     <h6>Vergleichsergebnis</h6>
     <div class="table-responsive">
@@ -998,68 +1016,76 @@ function renderDriveCompareResult(data) {
         <thead class="table-light">
           <tr>
             <th>Kennzahl</th>
-            <th>Ø</th>
             ${drives.map(d => `
-              <th class="${d.is_best ? 'bg-success-subtle' : ''} ${d.is_worst ? 'bg-danger-subtle' : ''}">
+              <th class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">
                 ${d.start_date ? d.start_date.slice(0,10) : ''}
                 ${d.is_best ? ' 🏆' : ''}
                 ${d.is_worst ? ' ⚠️' : ''}
               </th>
             `).join('')}
+            <th>Ø</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Datum</td><td>–</td>${drives.map(d => `<td>${d.start_date ? d.start_date.slice(0,10) : ''}</td>`).join('')}</tr>
-          <tr><td>Route</td><td>–</td>${drives.map(d => `<td>${d.route || '–'}</td>`).join('')}</tr>
-          <tr><td>km</td><td>${averages.km != null ? averages.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle' : ''} ${d.id === worst ? 'bg-danger-subtle' : ''}">${d.km != null ? d.km.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>Dauer (min)</td><td>${averages.duration_min != null ? Math.round(averages.duration_min) : '–'}</td>${drives.map(d => `<td>${d.duration_min != null ? Math.round(d.duration_min) : '–'}</td>`).join('')}</tr>
-          <tr><td>Ø km/h</td><td>${averages.speed_avg != null ? averages.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.speed_avg != null ? d.speed_avg.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>kWh</td><td>${averages.energy_kwh != null ? averages.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>${drives.map(d => `<td>${d.energy_kwh != null ? d.energy_kwh.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td><strong>kWh/100km</strong></td><td><strong>${averages.cons_per_100 != null ? averages.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</strong></td>${drives.map(d => `<td class="${d.id === best ? 'bg-success-subtle fw-bold' : ''} ${d.id === worst ? 'bg-danger-subtle fw-bold' : ''}">${d.cons_per_100 != null ? d.cons_per_100.toLocaleString('de-DE', {minimumFractionDigits:1}) : '–'}</td>`).join('')}</tr>
-          <tr><td>SoC Δ</td><td>${averages.soc_used != null ? averages.soc_used + ' %' : '–'}</td>${drives.map(d => `<td>${d.soc_used != null ? d.soc_used + ' %' : '–'}</td>`).join('')}</tr>
-          <tr><td>Temp °C</td><td>${averages.outside_temp_avg != null ? Math.round(averages.outside_temp_avg) : '–'}</td>${drives.map(d => `<td>${d.outside_temp_avg != null ? Math.round(d.outside_temp_avg) : '–'}</td>`).join('')}</tr>
+  `;
+
+  metrics.forEach(m => {
+    const isConsumption = m.key === 'cons_per_100';
+    const rowClass = isConsumption ? 'fw-bold' : '';
+    html += `
+      <tr class="${rowClass}">
+        <td class="fw-semibold">${m.label}</td>
+        ${drives.map(d => {
+          const val = d[m.key];
+          const cls = (m.highlight && d.id === best) ? 'bg-success-subtle' : 
+                      (m.highlight && d.id === worst) ? 'bg-danger-subtle' : '';
+          return `<td class="${cls}">${m.fmt(val)}</td>`;
+        }).join('')}
+        <td>${m.fmt(averages[m.key])}</td>
+      </tr>
+    `;
+  });
+
+  html += `
         </tbody>
       </table>
-    `;
+    </div>
+  `;
 
   // Add bar chart for consumption comparison
-  if (drives.length > 0) {
-    html += `
-      <div class="card mb-3">
-        <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
-        <div class="card-body">
-          <canvas id="driveConsChart" height="120"></canvas>
-        </div>
+  html += `
+    <div class="card mb-3">
+      <div class="card-header py-2">Verbrauch pro Fahrt (kWh/100km)</div>
+      <div class="card-body">
+        <canvas id="driveConsChart" height="120"></canvas>
       </div>
-    `;
+    </div>
+  `;
 
-    resultDiv.innerHTML = html;
+  resultDiv.innerHTML = html;
 
-    // Render bar chart
-    const ctx = document.getElementById('driveConsChart');
-    if (ctx && window.Chart) {
-      const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
-      const consData = drives.map(d => d.cons_per_100);
-      const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
-      
-      // Safely destroy previous instance
-      if (window.driveConsChart) {
-        try { if (window.driveConsChart instanceof Chart) window.driveConsChart.destroy(); } catch(e) {}
-        window.driveConsChart = null;
-      }
-      window.driveConsChart = new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh/100km' } } }
-        }
-      });
+  // Render bar chart
+  const ctx = document.getElementById('driveConsChart');
+  if (ctx && window.Chart) {
+    const labels = drives.map(d => d.start_date ? d.start_date.slice(5,10) : '');
+    const consData = drives.map(d => d.cons_per_100);
+    const colors = drives.map(d => d.is_best ? '#198754' : (d.is_worst ? '#dc3545' : '#0d6efd'));
+    
+    // Safely destroy previous instance
+    if (window.driveConsChart) {
+      try { if (window.driveConsChart instanceof Chart) window.driveConsChart.destroy(); } catch(e) {}
+      window.driveConsChart = null;
     }
-  } else {
-    resultDiv.innerHTML = '<div class="alert alert-warning">Keine Vergleichsdaten</div>';
+    window.driveConsChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'kWh/100km', data: consData, backgroundColor: colors }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh/100km' } } }
+      }
+    });
   }
 }
 
