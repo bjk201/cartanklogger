@@ -180,17 +180,20 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
         if sdt is not None:
             evcc_windows.append((sdt, edt))
     def _tm_is_home(r):
+        # FIRST: String-based exclusion (definitely NOT home)
+        # This prevents real Superchargers from being misclassified as home
+        # just because they happen to overlap with an EVCC time window.
+        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
+            return False  # Definitely not home
+        # SECOND: Check time window match with EVCC (primary detection)
+        # This catches TM home sessions even if mislabeled (e.g., as "Oeffentliche Ladestation")
         cdt = _pd(r.get("started_at"))
-        # FIRST: Check time window match with EVCC (primary detection)
-        # This catches TM home sessions even if mislabeled as Supercharger
         if cdt is not None:
             for sdt, edt in evcc_windows:
                 if sdt <= cdt <= edt:
                     return True
-        # FALLBACK: String-based detection for cases without EVCC overlap
-        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
-        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
-            return False  # Definitely not home
+        # FALLBACK: String-based home detection (zuhause, garage, wallbox, home)
         return _is_home_external_row(r)
     ext = [r for r in ext_all if not _tm_is_home(r)]
     extras = [dict(r) for r in extra_rows if in_range(r.get("date"))]

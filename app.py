@@ -1495,11 +1495,20 @@ def build_stats(days=365, from_date=None, to_date=None):
         if sdt is not None:
             evcc_windows.append((sdt, edt))
     def _tm_is_home(r):
+        # FIRST: String-based exclusion (definitely NOT home)
+        # This prevents real Superchargers from being misclassified as home
+        # just because they happen to overlap with an EVCC time window.
+        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
+            return False  # Definitely not home
+        # SECOND: Check time window match with EVCC (primary detection)
+        # This catches TM home sessions even if mislabeled (e.g., as "Oeffentliche Ladestation")
         cdt = _pd(r.get("started_at"))
         if cdt is not None:
             for sdt, edt in evcc_windows:
                 if sdt <= cdt <= edt:
                     return True
+        # FALLBACK: String-based home detection (zuhause, garage, wallbox, home)
         return _is_home_external_row(dict(r))
     ext = [dict(r) for r in external_rows if not _tm_is_home(dict(r))]
     # Tages-Aggregation für Chart-Series
@@ -2679,21 +2688,27 @@ def _build_merged(rows):
     # oft falsche Labels wie "Oeffentliche Ladestation"). Stattdessen wird jede
     # TM-Ladung via Zeitfenster-Matching EVCC zugeordnet: liegt sie im Fenster
     # einer EVCC-Wallbox-Sitzung -> Zuhause (doppeltes Tracking, NICHT extern).
-    # Nur TM-Ladungen OHNE passendes EVCC-Fenster sind echte Externe.
-    home_rows, ext_rows = [], []
-    for r in rows.get("external", []):
+    # ABER: String-basierter Ausschluss ZUERST, damit echte Supercharger nicht
+    # durch Zeitfenster-Overlap als Home klassifiziert werden.
+    # Nur TM-Ladungen OHNE passendes EVCC-Fenster UND ohne Home-Label sind echte Externe.
+    def _is_tm_home(r):
+        # FIRST: String-based exclusion (definitely NOT home)
+        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
+            return False  # Definitely not home
+        # SECOND: Check time window match with EVCC (primary detection)
         start_iso = r.get("started_at")
-        assigned = False
         cdt = _parse_dt(start_iso)
         if cdt is not None:
             for sdt, edt, _day in evcc_windows:
                 if sdt <= cdt <= edt:
-                    assigned = True
-                    break
-        if assigned:
-            home_rows.append(r)
-        elif _is_home_address(r.get("location_name"), r.get("address")):
-            # Fallback: kein EVCC-Fenster, aber eindeutig als Zuhause gelabelt
+                    return True
+        # FALLBACK: String-based home detection (zuhause, garage, wallbox, home)
+        return _is_home_address(r.get("location_name"), r.get("address"))
+
+    home_rows, ext_rows = [], []
+    for r in rows.get("external", []):
+        if _is_tm_home(r):
             home_rows.append(r)
         else:
             ext_rows.append(r)
@@ -3162,11 +3177,20 @@ def api_statistics():
     # Erkennung von TM-Zuhause wie in build_stats: Adress-/Geofence-Match
     # ODER zeitliche Ueberlappung mit einem EVCC-Wallbox-Ladevorgang.
     def _tm_is_home(r):
+        # FIRST: String-based exclusion (definitely NOT home)
+        # This prevents real Superchargers from being misclassified as home
+        # just because they happen to overlap with an EVCC time window.
+        loc = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+        if "supercharger" in loc or "ladestation" in loc or "öffentliche" in loc:
+            return False  # Definitely not home
+        # SECOND: Check time window match with EVCC (primary detection)
+        # This catches TM home sessions even if mislabeled (e.g., as "Oeffentliche Ladestation")
         cdt = _pd(r.get("started_at"))
         if cdt is not None:
             for sdt, edt in evcc_windows:
                 if sdt <= cdt <= edt:
                     return True
+        # FALLBACK: String-based home detection (address-based)
         return _is_home_address(r.get("location_name"), r.get("address"))
     def _is_real_external(r):
         if (r.get("provider") or "") == "Road Trip":
