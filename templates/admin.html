@@ -194,15 +194,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-const $ = (id) => document.getElementById(id);
-const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
-
-// --- CSRF: Token laden + fetch-Helfer ---
+// --- CSRF: Token laden + sicherer fetch-Helfer ---
 let _csrf = "";
 async function ensureCsrf() {
-  try { const d = await (await fetch("/api/csrf", {credentials: "same-origin"})).json(); _csrf = d.csrf_token; }
+  try { const d = await fetchJson("/api/csrf", {credentials: "same-origin"}); _csrf = d.csrf_token; }
   catch (e) { _csrf = document.querySelector('meta[name="csrf-token"]')?.content || ""; }
   if (_csrf) document.querySelector('meta[name="csrf-token"]').content = _csrf;
   return _csrf;
@@ -224,8 +219,60 @@ async function csrfFetch(url, opts = {}) {
   return res;
 }
 
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+
+  const body = await response.text();
+  const type = response.headers.get('content-type') || '';
+
+  if (!response.ok) {
+    console.error('API request failed', {
+      url,
+      status: response.status,
+      contentType: type,
+      body: body.slice(0, 500)
+    });
+    throw new Error(`API ${response.status}: ${url}`);
+  }
+
+  if (!type.includes('application/json')) {
+    console.error('Expected JSON, received:', {
+      url,
+      contentType: type,
+      body: body.slice(0, 500)
+    });
+    throw new Error(`Expected JSON from ${url}, got ${type}`);
+  }
+
+  return JSON.parse(body);
+}
+
+const $ = (id) => document.getElementById(id);
+const fmtEUR = (v) => Number(v||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
+
+      contentType: type,
+      body: body.slice(0, 500)
+    });
+    throw new Error(`API ${response.status}: ${url}`);
+  }
+
+  if (!type.includes('application/json')) {
+    console.error('Expected JSON, received:', {
+      url,
+      contentType: type,
+      body: body.slice(0, 500)
+    });
+    throw new Error(`Expected JSON from ${url}, got ${type}`);
+  }
+
+  return JSON.parse(body);
+}
+
 async function loadCfg() {
-  const c = await (await fetch("/api/config", {credentials: "same-origin"})).json();
+  const c = await fetchJson("/api/config", {credentials: "same-origin"});
   $("evcc_host").value = c.evcc?.host||"";
   $("evcc_port").value = c.evcc?.port||"";
   $("evcc_password").value = "";
@@ -273,8 +320,7 @@ $("syncAll").onclick = () => doSync("/api/sync/all","Sync alle");
 $("syncEvcc").onclick = () => doSync("/api/sync/evcc","EVCC");
 $("syncTm").onclick = () => doSync("/api/sync/teslamate","TeslaMate");
 
-async function loadPrices() {
-  const rows = await (await fetch("/api/price-periods", {credentials: "same-origin"})).json();
+const rows = await fetchJson("/api/price-periods", {credentials: "same-origin"});
   const lbl = {grid:"Netz", feedin:"Einspeisung"};
   $("tblPrices").querySelector("tbody").innerHTML = rows.map(r => `<tr data-id="${r.id}">
     <td>${lbl[r.kind]||r.kind}</td><td>${(r.valid_from||"").slice(0,10)}</td><td>${(r.valid_to||"").slice(0,10) || "offen"}</td>
@@ -293,7 +339,7 @@ $("addPrice").onclick = async () => {
   loadPrices();
 };
 function openPriceModal(id) {
-  fetch("/api/price-periods").then(r=>r.json()).then(rows => {
+  fetch("/api/price-periods").then(r=>fetchJson(r.url||r)).then(rows => {
     const r = rows.find(x => String(x.id) === String(id));
     if (!r) return;
     $("pp_id").value = r.id;
@@ -322,8 +368,7 @@ document.addEventListener("click", async (e) => {
   loadPrices();
 });
 
-async function loadExtras() {
-  const rows = await (await fetch("/api/extra-costs", {credentials: "same-origin"})).json();
+const rows = await fetchJson("/api/extra-costs", {credentials: "same-origin"});
   const lbl = {purchase:"Anschaffung", service:"Service", accessory:"Zubehör", insurance:"Versicherung", tax:"Steuer", other:"Sonstiges"};
   const tbody = $("tblExtra").querySelector("tbody");
   tbody.innerHTML = rows.map(r => `<tr data-id="${r.id}">
