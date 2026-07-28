@@ -1,130 +1,318 @@
 {% extends "base.html" %}
 {% block title %}CarTankLogger – Statistik{% endblock %}
 {% block content %}
+
+<!-- ===== KPI Row ===== -->
 <div class="row g-2 mb-3" id="statsKpis"></div>
 
+<!-- ===== Charts Grid ===== -->
 <div class="row g-3">
+  <!-- Verbrauch Chart -->
   <div class="col-lg-6">
-    <div class="card h-100"><div class="card-header py-2 d-flex align-items-center justify-content-between">⚡ Verbrauch (kWh/100 km)
-      <div class="btn-group btn-group-sm" role="group">
-        <button class="btn btn-outline-secondary" id="maCons" data-chart="chartCons" title="Mittelwert ein/aus" style="min-width: 32px;">📈</button>
-      </div>
-    </div>
-      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCons"></span><span class="text-muted small ms-1">Ø</span></div>
-      <canvas id="chartCons" height="180"></canvas></div></div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card h-100"><div class="card-header py-2 d-flex align-items-center justify-content-between">💶 Energiepreis (€/kWh)
-      <div class="btn-group btn-group-sm" role="group">
-        <button class="btn btn-outline-secondary" id="maPrice" data-chart="chartPrice" title="Mittelwert ein/aus" style="min-width: 32px;">📈</button>
-      </div>
-    </div>
-      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiPrice"></span><span class="text-muted small ms-1">Ø</span></div>
-      <canvas id="chartPrice" height="180"></canvas></div></div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card h-100"><div class="card-header py-2 d-flex align-items-center justify-content-between">💡 Kosten (€/100 km)
-      <div class="btn-group btn-group-sm" role="group">
-        <button class="btn btn-outline-secondary" id="maCost100" data-chart="chartCost100" title="Mittelwert ein/aus" style="min-width: 32px;">📈</button>
-      </div>
-    </div>
-      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiCost100"></span><span class="text-muted small ms-1">Ø</span></div>
-      <canvas id="chartCost100" height="180"></canvas></div></div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card h-100"><div class="card-header py-2 d-flex align-items-center justify-content-between">🛣️ Kilometer (kumuliert)
-      <div class="btn-group btn-group-sm" role="group">
-        <button class="btn btn-outline-secondary" id="maKm" data-chart="chartKm" title="Mittelwert ein/aus" style="min-width: 32px;">📈</button>
-      </div>
-    </div>
-      <div class="card-body"><div class="d-flex align-items-baseline"><span class="fs-3 fw-bold" id="kpiKm"></span><span class="text-muted small ms-1">km</span></div>
-      <canvas id="chartKm" height="180"></canvas></div></div>
-  </div>
-</div>
-<div class="row g-2 mt-2" id="statsSecondary"></div>
-
-<!-- Heatmaps Section -->
-<div class="row g-2 mt-3" id="heatmapsSection" style="display: none;">
-  <div class="col-12">
-    <div class="card h-100">
-      <div class="card-header py-2">
-        <div class="d-flex align-items-center justify-content-between">
-          <span>🗓️ Heatmaps</span>
-          <div class="btn-group btn-group-sm" role="group">
-            <button class="btn btn-outline-secondary active" data-hm="heatmapLaden">Laden</button>
-            <button class="btn btn-outline-secondary" data-hm="heatmapVerbrauch">Verbrauch</button>
-            <button class="btn btn-outline-secondary" data-hm="heatmapKosten">Kosten</button>
-            <button class="btn btn-outline-secondary" data-hm="heatmapKm">Kilometer</button>
-          </div>
+    <div class="card dashboard-card stats-chart-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span>⚡ Verbrauch (kWh/100 km)</span>
+        <div class="chart-controls">
+          <select class="chart-type-select" data-chart="chartCons">
+            <option value="line">Linie</option>
+            <option value="bar">Balken</option>
+            <option value="pie">Kreis</option>
+          </select>
+          <select class="average-mode-select" data-chart="chartCons">
+            <option value="mean">Ø Zeitraum</option>
+            <option value="moving">Gleitender Ø</option>
+            <option value="off">Ohne Ø</option>
+          </select>
         </div>
       </div>
-      <div class="card-body p-2">
-        <canvas id="chartHeatmap" height="280"></canvas>
+      <div class="card-body py-2">
+        <canvas id="chartCons"></canvas>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Fahrtenvergleich -->
-<div class="card mt-4" id="driveCompareSection">
-  <div class="card-header py-2 d-flex align-items-center justify-content-between">
-    <span>🚗 Fahrtenvergleich</span>
-    <div class="btn-group btn-group-sm" role="group">
-      <button class="btn btn-outline-secondary" id="driveCompareLoad">Laden</button>
-      <button class="btn btn-outline-primary" id="driveCompareRun" disabled>Vergleichen</button>
-    </div>
-  </div>
-  <div class="card-body">
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label class="form-label small">Zeitraum</label>
-        <div class="input-group input-group-sm">
-          <input type="date" id="driveCompareFrom" class="form-control form-control-sm">
-          <span class="input-group-text">bis</span>
-          <input type="date" id="driveCompareTo" class="form-control form-control-sm">
+  <!-- Energiepreis Chart -->
+  <div class="col-lg-6">
+    <div class="card dashboard-card stats-chart-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span>💶 Energiepreis (€/kWh)</span>
+        <div class="chart-controls">
+          <select class="chart-type-select" data-chart="chartPrice">
+            <option value="line">Linie</option>
+            <option value="bar">Balken</option>
+            <option value="pie">Kreis</option>
+          </select>
+          <select class="average-mode-select" data-chart="chartPrice">
+            <option value="mean">Ø Zeitraum</option>
+            <option value="moving">Gleitender Ø</option>
+            <option value="off">Ohne Ø</option>
+          </select>
         </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label small">Suche (Start/Ziel)</label>
-        <input type="text" id="driveCompareSearch" class="form-control form-control-sm" placeholder="z.B. Arbeit, Zuhause...">
+      <div class="card-body py-2">
+        <canvas id="chartPrice"></canvas>
       </div>
     </div>
-    <div class="mb-3">
-      <small class="text-muted">Klicken Sie auf Fahrten zum Auswählen (Checkbox links). Mindestens 2 für Vergleich.</small>
+  </div>
+
+  <!-- Kosten Chart -->
+  <div class="col-lg-6">
+    <div class="card dashboard-card stats-chart-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span>💡 Kosten (€/100 km)</span>
+        <div class="chart-controls">
+          <select class="chart-type-select" data-chart="chartCost100">
+            <option value="line">Linie</option>
+            <option value="bar">Balken</option>
+            <option value="pie">Kreis</option>
+          </select>
+          <select class="average-mode-select" data-chart="chartCost100">
+            <option value="mean">Ø Zeitraum</option>
+            <option value="moving">Gleitender Ø</option>
+            <option value="off">Ohne Ø</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="chartCost100"></canvas>
+      </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-sm table-striped align-middle mb-0" id="tblDrives">
-        <thead class="sticky-header">
-          <tr>
-            <th style="width:40px"><input type="checkbox" id="driveSelectAll" title="Alle auswählen"></th>
-            <th>Datum</th>
-            <th>Route</th>
-            <th>km</th>
-            <th>Dauer</th>
-            <th>Ø km/h</th>
-            <th>kWh</th>
-            <th>kWh/100km</th>
-            <th>SoC Δ</th>
-            <th>Temp °C</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <!-- Pagination -->
-      <nav aria-label="Drive comparison pagination">
-        <ul class="pagination pagination-sm justify-content-center mt-2" id="driveComparePagination"></ul>
-      </nav>
+  </div>
+
+  <!-- Kilometer Chart -->
+  <div class="col-lg-6">
+    <div class="card dashboard-card stats-chart-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span>🛣️ Kilometer (kumuliert)</span>
+        <div class="chart-controls">
+          <select class="chart-type-select" data-chart="chartKm">
+            <option value="line">Linie</option>
+            <option value="bar">Balken</option>
+            <option value="pie">Kreis</option>
+          </select>
+          <select class="average-mode-select" data-chart="chartKm">
+            <option value="mean">Ø Zeitraum</option>
+            <option value="moving">Gleitender Ø</option>
+            <option value="off">Ohne Ø</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="chartKm"></canvas>
+      </div>
     </div>
-    <div id="driveCompareResult" class="mt-3" style="display:none;"></div>
   </div>
 </div>
 
-<!-- Data Quality Warnings -->
-<div id="dataQualityWarnings" class="mt-3" style="display:none;"></div>
+<script>
+// Chart States for Statistics Page
+const chartStates = {};
 
-<!-- Vehicle Charts Section (TeslaMate Quick Wins) -->
-<div id="vehicleChartsSection"></div>
+function initStatsCharts() {
+  // Initialize each chart based on its data attribute
+  ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(chartId => {
+    initChart(chartId);
+  });
+}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="{{ url_for('static', filename='js/statistik.js') }}?v={{ js_version }}"></script>
+function initChart(chartId) {
+  const canvas = document.getElementById(chartId);
+  if (!canvas) return;
+
+  // Default data until loaded
+  const defaultData = {
+    labels: [],
+    datasets: [{ data: [], backgroundColor: [], borderColor: [], label: '' }]
+  };
+
+  const initialChart = {
+    id: chartId,
+    type: 'line',
+    data: defaultData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { display: true },
+        y: { display: true }
+      }
+    }
+  };
+
+  chartStates[chartId] = initialChart;
+}
+
+function renderChart(chartId) {
+  const canvas = document.getElementById(chartId);
+  if (!canvas) return;
+
+  // Load data from API based on chart type and average mode
+  const typeSelect = document.querySelector(`.chart-type-select[data-chart="${chartId}"]`);
+  const averageSelect = document.querySelector(`.average-mode-select[data-chart="${chartId}"]`);
+  
+  if (!typeSelect || !averageSelect) return;
+
+  const chartType = typeSelect.value;
+  const averageMode = averageSelect.value;
+
+  // Determine API endpoint based on chart ID
+  let apiUrl = `/api/stats/${chartId.replace('chart', '')}`;
+  if (averageMode !== 'off') {
+    apiUrl += `?average=${averageMode}`;
+  }
+
+  fetch(apiUrl)
+    .then(response => response.json())
+    .then(data => {
+      // Check if this is a pie chart (aggregated categorical data)
+      if (chartType === 'pie' && data.categories) {
+        renderPieChart(canvas, chartId, data.categories, data.values);
+      } else {
+        // Time series chart
+        renderTimeSeriesChart(canvas, chartId, chartType, data.labels, data.values, averageMode);
+      }
+    })
+    .catch(error => console.error(`Error loading ${chartId}:`, error));
+}
+
+function renderTimeSeriesChart(canvas, chartId, type, labels, values, averageMode) {
+  // Sort chronologically (oldest → newest)
+  const dataPoints = labels.map((label, index) => ({
+    label: label,
+    value: values[index] || 0
+  })).sort((a, b) => {
+    const dateA = new Date(a.label);
+    const dateB = new Date(b.label);
+    return dateA - dateB;
+  });
+
+  const chartData = {
+    labels: dataPoints.map(d => d.label),
+    datasets: [{
+      label: chartId,
+      data: dataPoints.map(d => d.value),
+      backgroundColor: type === 'bar' ? 'rgba(22, 119, 255, 0.7)' : 'rgba(24, 191, 216, 0.1)',
+      borderColor: type === 'bar' ? '#1677ff' : '#18bfd8',
+      borderWidth: 1,
+      tension: 0.28,
+      spanGaps: true,
+      pointRadius: 2,
+      fill: type === 'line'
+    }]
+  };
+
+  // Add average line if requested
+  if (averageMode === 'mean' && values.length) {
+    const meanValue = values.reduce((a, b) => a + b, 0) / values.length;
+    if (!chartData.datasets[0].borderDash) chartData.datasets[0].borderDash = [5, 5];
+    chartData.datasets[0].borderColor = type === 'bar' ? '#1677ff' : '#999';
+    chartData.datasets[0].borderWidth = 2;
+  }
+
+  if (averageMode === 'moving' && values.length >= 7) {
+    const movingAvg = calculateMovingAverage(values, 7);
+    chartData.datasets.push({
+      label: 'Gleitender Ø',
+      data: movingAvg,
+      type: 'line',
+      borderColor: '#df3046',
+      backgroundColor: 'rgba(223, 48, 70, 0.1)',
+      borderWidth: 2,
+      tension: 0.28,
+      fill: false,
+      pointRadius: 0,
+      borderDash: [3, 3]
+    });
+  }
+
+  // Initialize or update chart
+  if (Chart.getChart(canvas)) {
+    Chart.getChart(canvas).destroy();
+  }
+
+  new Chart(canvas, {
+    type: type,
+    data: chartData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: 'Datum' } },
+        y: { title: { display: true, text: chartId.includes('km') ? 'km' : 'Wert' } }
+      }
+    }
+  });
+}
+
+function renderPieChart(canvas, chartId, categories, values) {
+  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
+
+  new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: categories,
+      datasets: [{
+        data: values,
+        backgroundColor: categories.map((_, index) => {
+          const colors = ['#18bfd8', '#1677ff', '#32a96c', '#b9b845', '#e78b43', '#d95656'];
+          return colors[index % colors.length];
+        }),
+        borderColor: '#fff',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${ctx.raw}`
+          }
+        }
+      }
+    }
+  });
+}
+
+function calculateMovingAverage(data, windowSize) {
+  const averages = [];
+  for (let i = 0; i <= data.length - windowSize; i++) {
+    const window = data.slice(i, i + windowSize);
+    averages.push(window.reduce((a, b) => a + b, 0) / windowSize);
+  }
+  return averages;
+}
+
+// Event listeners for chart controls
+function setupChartControls() {
+  document.querySelectorAll('.chart-type-select, .average-mode-select').forEach(select => {
+    select.addEventListener('change', function() {
+      const chartId = this.dataset.chart;
+      renderChart(chartId);
+    });
+  });
+}
+
+// Load data for statistics page
+function loadStats() {
+  // This would load data via AJAX and populate charts
+  console.log('Loading statistics data...');
+  // In a real implementation, this would:
+  // 1. Fetch data from /api/stats/* endpoints
+  // 2. Populate the charts with data
+  // 3. Initialize Chart.js instances
+  
+  // For now, initialize empty charts
+  setTimeout(() => {
+    initStatsCharts();
+    setupChartControls();
+  }, 100);
+}
+
+// Expose functions globally
+window.loadStats = loadStats;
+</script>
 {% endblock %}

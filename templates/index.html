@@ -7,8 +7,8 @@
 <!-- ===== ZEILE 2: Analyse-Bereich (Charts + Donut + Heatmaps) ===== -->
 <div class="dashboard-analysis" id="analysisArea">
   <!-- Linke Spalte: 3 Zeitreihen-Charts übereinander -->
-  <section class="dashboard-column dashboard-column--charts">
-    <!-- Verbrauch -->
+  <div class="col-12 col-lg-6">
+    <!-- Verbrauch Chart -->
     <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
@@ -19,7 +19,7 @@
       </div>
     </div>
 
-    <!-- Kosten -->
+    <!-- Kosten Chart -->
     <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
@@ -30,7 +30,7 @@
       </div>
     </div>
 
-    <!-- Kilometer -->
+    <!-- Kilometer Chart -->
     <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">🛣️ Kilometer (km)</span>
@@ -40,10 +40,10 @@
         <canvas id="chartKm"></canvas>
       </div>
     </div>
-  </section>
+  </div>
 
   <!-- Rechte Spalte: Donut oben, 2 Heatmaps unten -->
-  <section class="dashboard-column dashboard-column--insights">
+  <div class="col-12 col-lg-6">
     <!-- Home vs. Extern -->
     <div class="card dashboard-card split-card mb-3">
       <div class="card-header py-2">
@@ -71,30 +71,36 @@
     </div>
 
     <!-- UNTEN: 2 Heatmaps nebeneinander -->
-    <div class="insight-bottom-grid">
-      <!-- Fahrtenvergleich -->
-      <article class="card dashboard-card comparison-card">
-        <div class="card-header py-2">
-          <span class="fw-medium small">🚗 Fahrtenvergleich</span>
+    <div class="row g-2">
+      <!-- Heatmap links: Verbrauch / Temperatur -->
+      <div class="col-12 col-md-6">
+        <div class="card dashboard-card heatmap-card">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
+            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="heatmapTempConsumption"></canvas>
+            <div class="mt-2 small" id="legendTempConsumption"></div>
+          </div>
         </div>
-        <div class="card-body py-2">
-          <div id="tripComparison">Keine Vergleichsdaten verfügbar</div>
-        </div>
-      </article>
+      </div>
 
-      <!-- Quadratische Wochentags-Heatmap -->
-      <article class="card dashboard-card heatmap-card">
-        <div class="card-header py-2 d-flex align-items-center justify-content-between">
-          <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
-          <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+      <!-- Heatmap rechts: Verbrauch / Wochentag -->
+      <div class="col-12 col-md-6">
+        <div class="card dashboard-card heatmap-card">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
+            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="heatmapWeekdayConsumption"></canvas>
+            <div class="mt-2 small" id="legendWeekdayConsumption"></div>
+          </div>
         </div>
-        <div class="card-body py-2">
-          <div id="weekdayHeatmap" class="heatmap-grid"></div>
-          <div class="mt-2 small" id="legendWeekdayConsumption"></div>
-        </div>
-      </article>
+      </div>
     </div>
-  </section>
+  </div>
 </div>
 
 <!-- ===== Trip Cards (Fahrten) ===== -->
