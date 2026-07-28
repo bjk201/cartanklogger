@@ -1,0 +1,92 @@
+{
+  "Overview": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 17446,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  },
+  "Statistics": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 18225,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  },
+  "Month Comparison": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 13264,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  },
+  "EVCC": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 13020,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  },
+  "TeslaMate": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 12963,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  },
+  "Admin": {
+    "success": true,
+    "status_code": 200,
+    "page_size": 35780,
+    "checks": {
+      "has_body": true,
+      "has_main": true,
+      "has_container": true,
+      "has_row": true,
+      "has_col": true,
+      "has_script": true,
+      "has_css": true
+    },
+    "all_checks_pass": true
+  }
+}

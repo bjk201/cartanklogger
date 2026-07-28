@@ -4,12 +4,12 @@
 <!-- ===== ZEILE 1: 5 KPIs (volle Breite, responsive) ===== -->
 <div class="row g-2 mb-3" id="summaryCards"></div>
 
-<!-- ===== ANALYSEBEREICH: 2 Spalten (Links Charts, Rechts Donut + Heatmaps) ===== -->
-<div class="row g-3 mb-3" id="analysisArea">
-  <!-- LINKE SPALTE: 3 Zeitreihen-Charts übereinander -->
+<!-- ===== ZEILE 2: Analyse-Bereich (Charts + Donut + Heatmaps) ===== -->
+<div class="dashboard-analysis" id="analysisArea">
+  <!-- Linke Spalte: 3 Zeitreihen-Charts übereinander -->
   <div class="col-12 col-lg-6">
     <!-- Verbrauch Chart -->
-    <div class="card mb-3 chart-card">
+    <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
         <span class="badge bg-info text-dark" id="avgConsumptionBadge">Ø –</span>
@@ -20,7 +20,7 @@
     </div>
 
     <!-- Kosten Chart -->
-    <div class="card mb-3 chart-card">
+    <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
         <span class="badge bg-warning text-dark" id="avgCostBadge">Ø –</span>
@@ -31,7 +31,7 @@
     </div>
 
     <!-- Kilometer Chart -->
-    <div class="card mb-3 chart-card">
+    <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span class="fw-medium">🛣️ Kilometer (km)</span>
         <span class="badge bg-primary" id="totalKmBadge">Σ –</span>
@@ -42,10 +42,10 @@
     </div>
   </div>
 
-  <!-- RECHTE SPALTE: Donut oben, 2 Heatmaps unten -->
+  <!-- Rechte Spalte: Donut oben, 2 Heatmaps unten -->
   <div class="col-12 col-lg-6">
     <!-- Home vs Extern Donut -->
-    <div class="card mb-3 donut-card">
+    <div class="card dashboard-card split-card mb-3">
       <div class="card-header py-2">
         <span class="fw-medium">🏠🔌 Home vs. Extern (kWh)</span>
       </div>
@@ -74,7 +74,7 @@
     <div class="row g-2">
       <!-- Heatmap links: Verbrauch / Temperatur -->
       <div class="col-12 col-md-6">
-        <div class="card chart-card heatmap-card">
+        <div class="card dashboard-card heatmap-card">
           <div class="card-header py-2 d-flex align-items-center justify-content-between">
             <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
@@ -88,7 +88,7 @@
 
       <!-- Heatmap rechts: Verbrauch / Wochentag -->
       <div class="col-12 col-md-6">
-        <div class="card chart-card heatmap-card">
+        <div class="card dashboard-card heatmap-card">
           <div class="card-header py-2 d-flex align-items-center justify-content-between">
             <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>

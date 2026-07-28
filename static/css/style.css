@@ -1,753 +1,304 @@
-/* CarTankLogger - Base Styles */
+/* CarTankLogger - Material Design 3 Dashboard - Complete Layout Reset */
+
 :root {
-  --bg-light: #f6f7f9;
-  --bg-dark: #0f172a;
-  --bg-header-light: #f8fafc;
-  --bg-header-dark: #1e293b;
-  --border-light: #e2e8f0;
-  --border-dark: #334155;
-  --card-light: #ffffff;
-  --card-dark: #1e293b;
-  --card-header-light: #f0f1f3;
-  --card-header-dark: #334155;
-  --text-light: #0f172a;
-  --text-dark: #e2e8f0;
-  --text-muted-light: #64748b;
-  --text-muted-dark: #94a3b8;
-  --sidebar-link-light: #64748b;
-  --sidebar-link-hover-bg-light: #f1f5f9;
-  --sidebar-link-hover-text-light: #0f172a;
-  --sidebar-link-dark: #cbd5e1;
-  --sidebar-link-hover-bg-dark: #334155;
-  --sidebar-link-hover-text-dark: #f1f5f9;
-  --sidebar-active-bg: #2563eb;
-  --sidebar-active-bg-dark: #3b82f6;
-  --table-bg-dark: #1e293b;
-  --table-text-dark: #e2e8f0;
-  --table-header-bg-dark: #334155;
-  --form-bg-dark: #1e293b;
-  --form-text-dark: #f1f5f9;
-  --form-border-dark: #475569;
-  --btn-secondary-bg-dark: #334155;
-  --btn-secondary-border-dark: #475569;
-  --btn-secondary-text-dark: #e2e8f0;
-  --dropdown-bg-dark: #1e293b;
-  --dropdown-border-dark: #334155;
-  --modal-bg-dark: #1e293b;
-  --modal-border-dark: #334155;
-  --input-placeholder-dark: #94a3b8;
-  --header-height: 68px;
-  --header-height-mobile: 56px;
-  --card-radius: 0.75rem;
-  --card-padding: 1rem;
-  --card-gap: 0.75rem;
-  --card-inner-padding: 1rem;
-  --card-inner-padding-sm: 0.75rem;
-  --card-inner-padding-xs: 0.5rem;
-  --chart-min-height: 200px;
-  --chart-max-height: 320px;
-  --kpi-value-size: 1.4rem;
-  --kpi-label-size: 0.72rem;
-  --kpi-sub-size: 0.68rem;
-  --kpi-icon-size: 1.1rem;
+  --ctl-header-height: 58px;
+  --ctl-page-max-width: 1600px;
+
+  --ctl-bg: #f6f8fb;
+  --ctl-surface: #ffffff;
+  --ctl-surface-subtle: #f8fafc;
+  --ctl-border: #dfe5ec;
+
+  --ctl-text: #172033;
+  --ctl-muted: #657084;
+
+  --ctl-primary: #1677ff;
+  --ctl-cyan: #18bfd8;
+  --ctl-green: #188b57;
+  --ctl-amber: #f5aa12;
+  --ctl-red: #df3046;
+
+  --ctl-radius: 12px;
+  --ctl-radius-small: 8px;
+  --ctl-shadow: 0 2px 7px rgba(20, 35, 55, 0.08);
 }
 
-html {
-  background: var(--bg-light);
-  color: var(--text-light);
-  min-height: 100vh;
-}
-
+/* ---------- Globale Seite ---------- */
+html,
 body {
-  background: var(--bg-light);
-  color: var(--text-light);
-  min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100%;
+  background: var(--ctl-bg) !important;
+  color: var(--ctl-text) !important;
+  overflow-x: hidden !important;
 }
 
-html[data-theme="dark"] {
-  background: var(--bg-dark);
-  color: var(--text-dark);
-}
-
-html[data-theme="dark"] body {
-  background: var(--bg-dark);
-  color: var(--text-dark);
-}
-
-/* ============================================================
-  HEADER - Compact, mobile-first
-  ============================================================ */
-.app-header {
-  background: var(--bg-header-light);
-  border-bottom: 1px solid var(--border-light);
-  height: var(--header-height-mobile);
-  z-index: 1030;
-  padding: 0 0.75rem;
-}
-
-.app-header .navbar-brand {
-  color: var(--text-light) !important;
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
-html[data-theme="dark"] .app-header {
-  background: var(--bg-header-dark);
-  border-bottom-color: var(--border-dark);
-}
-
-html[data-theme="dark"] .app-header .navbar-brand {
-  color: var(--text-dark) !important;
-}
-
-.app-header .navbar-nav .nav-link {
-  color: var(--text-light);
-  font-size: 0.85rem;
-  padding: 0.25rem 0.5rem;
-}
-
-html[data-theme="dark"] .app-header .navbar-nav .nav-link {
-  color: var(--text-dark);
-}
-
-.app-header .btn-group-sm .btn {
-  padding: 0.25rem 0.4rem;
-  font-size: 0.75rem;
-}
-
-.app-header .input-group-sm {
-  width: 100%;
-  margin-top: 0.25rem;
-}
-
-/* ============================================================
-  MAIN CONTENT - Offset below header
-  ============================================================ */
-main {
-  padding-top: calc(var(--header-height-mobile) + 0.5rem) !important;
-  width: 100%;
-}
-
-@media (min-width: 768px) {
-  main {
-    padding-top: calc(var(--header-height) + 1rem) !important;
-  }
-}
-
-/* ============================================================
-  CARDS - Unified system with flexbox
-  ============================================================ */
-.card {
-  border-radius: var(--card-radius);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
-  background: var(--card-light);
-  border: 1px solid var(--border-light);
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
-}
-
-.card-header {
-  font-weight: 600;
-  background: var(--card-header-light);
-  border-bottom: 1px solid var(--border-light);
-  padding: 0.5rem 0.75rem;
-  flex-shrink: 0;
-}
-
-.card-body {
-  padding: var(--card-inner-padding);
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  position: relative;
-}
-
-.card-body.py-2 {
-  padding-top: var(--card-inner-padding-sm);
-  padding-bottom: var(--card-inner-padding-sm);
-}
-
-.card-body.p-0 {
-  padding: 0;
-}
-
-.card-footer {
-  padding: 0.5rem 0.75rem;
-  background: transparent;
-  border-top: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-
-html[data-theme="dark"] .card {
-  background: var(--card-dark) !important;
-  border-color: var(--border-dark) !important;
-}
-
-html[data-theme="dark"] .card-header {
-  background: var(--card-header-dark) !important;
-  color: var(--text-dark) !important;
-  border-bottom-color: var(--border-dark) !important;
-}
-
-html[data-theme="dark"] .card-body {
-  color: var(--text-dark) !important;
-}
-
-/* ============================================================
-  KPI CARDS - Summary row
-  ============================================================ */
-#summaryCards .card {
-  min-height: auto;
-  max-height: none;
-  height: 100%;
-}
-
-#summaryCards .card:hover {
-  transform: translateY(-2px);
-}
-
-.kpi-label {
-  font-size: var(--kpi-label-size);
-  letter-spacing: 0.02em;
-  margin-bottom: 0.15rem;
-  color: var(--text-muted-light);
-}
-
-html[data-theme="dark"] .kpi-label {
-  color: var(--text-muted-dark);
-}
-
-.kpi-value {
-  font-size: var(--kpi-value-size);
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.kpi-sub {
-  font-size: var(--kpi-sub-size);
-  opacity: 0.8;
-  margin-top: 0.1rem;
-}
-
-.kpi-icon {
-  font-size: var(--kpi-icon-size);
-}
-
-@media (max-width: 576px) {
-  .kpi-value {
-    font-size: 1.1rem;
-  }
-}
-
-/* ============================================================
-  CHART CARDS
-  ============================================================ */
-.chart-card {
-  height: 100%;
-  max-height: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.chart-card .card-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  position: relative;
-  padding: var(--card-inner-padding-sm);
-}
-
-.chart-card canvas {
+/* Haupt Content Wrapper - der einzige Offset für fixed header */
+.app-main {
+  padding-top: calc(var(--ctl-header-height) + 24px) !important;
+  max-width: var(--ctl-page-max-width) !important;
   width: 100% !important;
+  margin: 0 auto !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  margin-bottom: 24px !important;
+}
+
+/* Override Bootstrap - eliminate problematic h-100 classes on cards */
+.card,
+.chart-card,
+.donut-card,
+.heatmap-card,
+.split-card,
+.stats-chart-card,
+.kpi-card {
   height: auto !important;
-  max-height: var(--chart-max-height);
+  min-height: 0 !important;
+  max-height: none !important;
+  box-shadow: var(--ctl-shadow) !important;
+  border-radius: var(--ctl-radius) !important;
 }
 
-/* ============================================================
-  DONUT CARD - Home vs Extern
-  ============================================================ */
-.donut-card {
-  height: 100%;
-  max-height: none;
-  display: flex;
-  flex-direction: column;
+/* Analysis area - 2-column layout with proper spacing */
+.dashboard-analysis,
+.row.g-3#analysisArea,
+#analysisArea {
+  display: grid !important;
+  gap: var(--ctl-card-gap) !important;
+  margin: 16px auto 24px !important;
+  max-width: var(--ctl-page-max-width) !important;
 }
 
-.donut-card .card-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--card-inner-padding-sm);
+/* Cards within analysis area - maintain natural heights */
+.dashboard-analysis .card,
+#analysisArea .chart-card,
+#analysisArea .donut-card,
+#analysisArea .heatmap-card,
+#analysisArea .split-card {
+  height: auto !important;
+  min-height: 0 !important;
+  margin-bottom: 16px !important;
 }
 
-.donut-card canvas {
-  max-width: 140px;
-  max-height: 140px;
-  margin: 0 auto;
-  display: block;
-}
-
-.donut-card .row.g-0.align-items-center {
-  gap: 0.5rem;
-}
-
-.donut-card .col-5,
-.donut-card .col-2,
-.donut-card .col-5 {
-  min-width: 0;
-}
-
-/* ============================================================
-  HEATMAP CARDS
-  ============================================================ */
-.heatmap-card {
-  height: 100%;
-  max-height: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.heatmap-card .card-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--card-inner-padding-sm);
-}
-
-.heatmap-card canvas {
+/* Ensure grid columns stack appropriately */
+.dashboard-analysis > [class*="col-"],
+#analysisArea > .col-12,
+#analysisArea > .col-lg-6 {
   width: 100% !important;
-  height: auto !important;
-  max-height: 280px;
+  margin-bottom: 0 !important;
 }
 
-.heatmap-card .mt-2.small {
-  flex-shrink: 0;
-  margin-top: 0.5rem !important;
+/* KPI cards - compact sizing */
+.dashboard-analysis .kpi-card,
+#summaryCards .card,
+#statsKpis .card {
+  height: 96px !important;
+  min-height: 96px !important;
+  border-radius: var(--ctl-radius) !important;
+  box-shadow: var(--ctl-shadow) !important;
 }
 
-/* ============================================================
-  RESPONSIVE GRID - Mobile-first
-  ============================================================ */
-
-/* Base: Mobile-first - all columns full width */
-.row.g-2 > [class*="col-"],
-.row.g-3 > [class*="col-"] {
-  width: 100%;
-  flex: 0 0 100%;
-  max-width: 100%;
+/* Chart cards - controlled heights */
+.dashboard-analysis .chart-card,
+#analysisArea .chart-card,
+.stats-chart-card {
+  height: 276px !important;
+  margin-bottom: 16px !important;
 }
 
-/* Summary Cards - 2 cols sm, 3 cols md, 5 cols lg */
-#summaryCards > .col-6 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-#summaryCards > .col-md-4 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-#summaryCards > .col-lg-2 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
+/* Chart card bodies */
+.dashboard-analysis .card-body,
+#analysisArea .card-body,
+.stats-chart-card .card-body {
+  height: calc(276px - 44px) !important;
+  padding: 12px 14px !important;
 }
 
-@media (min-width: 576px) {
-  #summaryCards > .col-6 {
-    width: 50%; flex: 0 0 50%; max-width: 50%;
-  }
+/* Split card (Home vs. Extern) */
+.dashboard-analysis .split-card,
+#analysisArea .split-card {
+  height: 280px !important;
+  margin-bottom: 16px !important;
 }
 
-@media (min-width: 768px) {
-  #summaryCards > .col-md-4 {
-    width: 33.333333%; flex: 0 0 33.333333%; max-width: 33.333333%;
-  }
-  #summaryCards > .col-6 {
-    width: 50%; flex: 0 0 50%; max-width: 50%;
-  }
-}
-
-@media (min-width: 992px) {
-  #summaryCards > .col-lg-2 {
-    width: 20%; flex: 0 0 20%; max-width: 20%;
-  }
-  #summaryCards > .col-md-4,
-  #summaryCards > .col-6 {
-    width: 20%; flex: 0 0 20%; max-width: 20%;
-  }
-}
-
-/* Analysis Area - Left column */
-#analysisArea > .col-12.col-lg-6 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-
-@media (min-width: 992px) {
-  #analysisArea > .col-12.col-lg-6 {
-    width: 50%; flex: 0 0 50%; max-width: 50%;
-  }
-}
-
-/* Analysis Area - Right column heatmaps */
-#analysisArea > .col-12.col-lg-6 > .row.g-2 > .col-12.col-md-6 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-
-@media (min-width: 768px) {
-  #analysisArea > .col-12.col-lg-6 > .row.g-2 > .col-12.col-md-6 {
-    width: 50%; flex: 0 0 50%; max-width: 50%;
-  }
-}
-
-/* Chart cards in left column - spacing */
-#analysisArea > .col-lg-6 > .chart-card {
-  margin-bottom: var(--card-gap);
-}
-
-/* Donut card - full width inside its column */
-.donut-card {
-  width: 100%;
-  margin-bottom: var(--card-gap);
+.dashboard-analysis .split-card .card-body,
+#analysisArea .split-card .card-body {
+  height: calc(280px - 44px) !important;
+  padding: 12px 14px !important;
 }
 
 /* Heatmap cards */
-.heatmap-card {
-  width: 100%;
-  margin-bottom: 0;
+.dashboard-analysis .heatmap-card,
+#analysisArea .heatmap-card {
+  height: 300px !important;
+  margin-bottom: 16px !important;
 }
 
-/* Trip cards - 1 col mobile, 2 on md, 3 on lg */
-#tripCards > .col-12 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-#tripCards > .col-md-6 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
-}
-#tripCards > .col-lg-4 {
-  width: 100%; flex: 0 0 100%; max-width: 100%;
+.dashboard-analysis .heatmap-card .card-body,
+#analysisArea .heatmap-card .card-body {
+  height: calc(300px - 44px) !important;
+  padding: 10px 12px !important;
 }
 
-@media (min-width: 768px) {
-  #tripCards > .col-md-6 {
-    width: 50%; flex: 0 0 50%; max-width: 50%;
-  }
+.dashboard-analysis .heatmap-card canvas,
+#analysisArea .heatmap-card canvas {
+  height: 205px !important;
+  width: 100% !important;
 }
 
-@media (min-width: 992px) {
-  #tripCards > .col-lg-4 {
-    width: 33.333333%; flex: 0 0 33.333333%; max-width: 33.333333%;
-  }
-  #tripCards > .col-md-6 {
-    width: 33.333333%; flex: 0 0 33.333333%; max-width: 33.333333%;
-  }
+.dashboard-analysis .split-card canvas,
+#analysisArea .split-card canvas {
+  height: 140px !important;
+  width: 140px !important;
+  max-height: 140px !important;
 }
 
-/* ============================================================
-  TABLE - Horizontal scroll on mobile
-  ============================================================ */
-.table-container {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  margin: 0;
-  padding: 0;
-  width: 100%;
+/* Chart.js canvas - no max-height constraints */
+canvas {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: auto !important;
 }
 
-.table {
-  margin-bottom: 0;
-  min-width: 680px;
-  width: max-content;
+/* Stats page charts */
+#statsChartPage .stats-chart-card {
+  height: 330px !important;
 }
 
-.sticky-first-col td:first-child,
-.sticky-first-col th:first-child {
-  position: sticky;
-  left: 0;
-  background: var(--card-light);
-  z-index: 3;
-  font-weight: 500;
+#statsChartPage .stats-chart-card .card-body {
+  height: calc(330px - 44px) !important;
 }
 
-html[data-theme="dark"] .sticky-first-col td:first-child,
-html[data-theme="dark"] .sticky-first-col th:first-child {
-  background: var(--card-dark);
-}
-
-.sticky-header th {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--card-header-light);
-}
-
-html[data-theme="dark"] .sticky-header th {
-  background: var(--card-header-dark);
-  color: var(--text-dark);
-}
-
-/* ============================================================
-  MOBILE OVERRIDES
-  ============================================================ */
+/* Mobile viewport overrides */
 @media (max-width: 767.98px) {
-  .app-header {
-    height: var(--header-height-mobile);
-    padding: 0 0.75rem;
-  }
-  .app-header .navbar-brand {
-    font-size: 1.1rem;
-  }
-  .app-header .btn-group-sm .btn {
-    padding: 0.25rem 0.4rem;
-    font-size: 0.75rem;
-  }
-  .app-header .input-group-sm {
-    width: 100%;
-    margin-top: 0.25rem;
+  body,
+  html {
+    background: var(--ctl-bg) !important;
   }
 
-  /* Main content - mobile offset */
-  main {
-    padding-top: calc(var(--header-height-mobile) + 0.5rem) !important;
-    width: 100%;
+  .app-main {
+    padding-top: calc(var(--ctl-header-height) + 12px) !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    margin-bottom: 16px !important;
   }
 
-  /* Sidebar - offcanvas */
-  .sidebar {
-    display: none !important;
-    position: fixed;
-    top: var(--header-height-mobile);
-    left: 0;
-    bottom: 0;
-    width: 280px;
-    max-width: 85vw;
-    z-index: 1040;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
-    box-shadow: 0 0 20px rgba(0,0,0,0.3);
-    min-height: calc(100vh - var(--header-height-mobile));
-    background: var(--card-light);
-    border-right: 1px solid var(--border-light);
-  }
-  html[data-theme="dark"] .sidebar {
-    background: var(--card-dark);
-    border-right-color: var(--border-dark);
-  }
-  .sidebar.show {
-    display: block !important;
-    transform: translateX(0);
+  /* Mobile KPI cards - smaller height */
+  .kpi-card,
+  #summaryCards .card,
+  #statsKpis .card {
+    height: 88px !important;
+    min-height: 88px !important;
   }
 
-  .sidebar-overlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
-    z-index: 1030;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s, visibility 0.3s;
-  }
-  .sidebar-overlay.show {
-    opacity: 1;
-    visibility: visible;
+  /* Mobile chart cards */
+  .chart-card,
+  .stats-chart-card {
+    height: 250px !important;
+    margin-bottom: 12px !important;
   }
 
-  .sidebar-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    background: transparent;
-    border: 1px solid var(--border-light);
-    border-radius: 0.375rem;
-    color: var(--text-light);
-  }
-  html[data-theme="dark"] .sidebar-toggle {
-    border-color: var(--border-dark);
-    color: var(--text-dark);
+  .chart-card .card-body,
+  .stats-chart-card .card-body {
+    height: calc(250px - 44px) !important;
+    padding: 8px 10px !important;
   }
 
-  /* Cards - clean stacking */
-  .row.g-2 > [class*="col-"] {
-    margin-bottom: var(--card-gap);
-  }
-  .row.g-3 > [class*="col-"] {
-    margin-bottom: calc(var(--card-gap) * 1.33);
-  }
-  #summaryCards .card {
-    min-height: auto;
-    max-height: none;
+  .heatmap-card {
+    height: 270px !important;
+    margin-bottom: 12px !important;
   }
 
-  /* KPI values slightly smaller on small screens */
+  .heatmap-card .card-body {
+    height: calc(270px - 44px) !important;
+  }
+
+  .heatmap-card canvas {
+    height: 180px !important;
+  }
+
+  /* Mobile split card */
+  .split-card {
+    height: 270px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .split-card .card-body {
+    height: calc(270px - 44px) !important;
+    padding: 10px !important;
+  }
+
+  .split-card canvas {
+    height: 135px !important;
+    width: 135px !important;
+  }
+
+  /* Mobile text sizing */
   .kpi-value {
-    font-size: 1.2rem;
+    font-size: 22px !important;
   }
 
-  /* Tables - horizontal scroll for mobile */
-  .table-container {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -0.5rem;
-    padding: 0 0.5rem;
-  }
-  .table {
-    min-width: 720px;
-  }
-  .sticky-header th {
-    position: sticky;
-    left: 0;
-    background: var(--card-header-light);
-    z-index: 5;
-  }
-  html[data-theme="dark"] .sticky-header th {
-    background: var(--card-header-dark);
-  }
-
-  /* Touch targets */
-  .btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-  }
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.85rem;
-  }
-  .btn-group .btn {
-    min-height: 44px;
-  }
-
-  /* Form inputs prevent iOS zoom */
-  .form-control, .form-select {
-    padding: 0.625rem 0.75rem;
-    font-size: 1rem;
-  }
-
-  /* Small mobile tweaks */
-  .card-header {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.85rem;
-  }
-  .card-body {
-    padding: var(--card-inner-padding-xs);
-  }
-  .table-sm td, .table-sm th {
-    padding: 0.2rem 0.4rem;
-    font-size: 0.78rem;
-  }
-  .btn {
-    padding: 0.4rem 0.7rem;
-  }
-  .badge {
-    font-size: 0.72rem;
-    padding: 0.3em 0.6em;
-  }
-  .page-header {
-    margin-bottom: 0.75rem;
-  }
-  .page-header h2 {
-    font-size: 1.1rem;
-    margin-bottom: 0.2rem;
-  }
-
-  /* Range picker */
-  .btn-group-sm .btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.78rem;
-  }
-  .input-group-sm .form-control {
-    padding: 0.375rem 0.5rem;
+  .chart-header,
+  .card-title {
+    font-size: 14px !important;
+    margin-bottom: 8px !important;
   }
 }
 
-/* Small phones */
-@media (max-width: 480px) {
-  .app-header .navbar-brand {
-    font-size: 1rem;
+/* Tablet viewport adjustments */
+@media (max-width: 1199.98px) {
+  .app-main {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
   }
-  .kpi-value {
-    font-size: 1rem;
+
+  .chart-card {
+    height: 260px !important;
   }
-  .kpi-label {
-    font-size: 0.65rem;
+
+  .chart-card .card-body {
+    height: calc(260px - 44px) !important;
   }
-  .card-header {
-    padding: 0.35rem 0.5rem;
-    font-size: 0.8rem;
+
+  .heatmap-card {
+    height: 280px !important;
   }
-  .card-body {
-    padding: 0.5rem;
-  }
-  .table-sm td, .table-sm th {
-    padding: 0.15rem 0.3rem;
-    font-size: 0.72rem;
-  }
-  .btn {
-    padding: 0.35rem 0.6rem;
+
+  .heatmap-card .card-body {
+    height: calc(280px - 44px) !important;
   }
 }
 
-/* Landscape phones */
-@media (max-height: 480px) and (orientation: landscape) {
-  .sidebar {
-    max-height: 100vh;
-    overflow-y: auto;
-  }
-  main {
-    min-height: calc(100vh - var(--header-height-mobile));
-  }
+/* Material Design 3 color scheme */
+[data-theme="dark"] .card,
+[data-theme="dark"] .dashboard-card {
+  background: var(--ctl-surface) !important;
+  border-color: var(--ctl-border) !important;
 }
 
-/* Touch hover prevention */
-@media (hover: none) and (pointer: coarse) {
-  .sidebar .nav-link:hover {
-    background: var(--sidebar-link-hover-bg-light);
-    color: var(--sidebar-link-hover-text-light);
-  }
-  html[data-theme="dark"] .sidebar .nav-link:hover {
-    background: var(--sidebar-link-hover-bg-dark);
-    color: var(--sidebar-link-hover-text-dark);
-  }
-  .btn:hover, .nav-link:hover {
-    transform: none;
-  }
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .dashboard-card-header {
+  background: var(--ctl-surface-subtle) !important;
+  color: var(--ctl-text) !important;
 }
 
-/* Print */
-@media print {
-  .sidebar, .app-header, .btn, .theme-toggle, .modal {
-    display: none !important;
-  }
-  main {
-    width: 100%;
-    padding-top: 0 !important;
-  }
-  .table-container {
-    overflow: visible;
-  }
-  .table {
-    min-width: auto;
-  }
+[data-theme="dark"] .kpi-label,
+[data-theme="dark"] .chart-label {
+  color: var(--ctl-muted) !important;
 }
 
-/* ============================================================
-  DARK MODE ADDITIONS
-  ============================================================ */
-html[data-theme="dark"] .table-sm td,
-html[data-theme="dark"] .table-sm th {
-  color: var(--table-text-dark) !important;
-  background: var(--table-bg-dark) !important;
+/* Utility classes for consistent spacing */
+.mb-ctl {
+  margin-bottom: 16px !important;
 }
 
-html[data-theme="dark"] .table th {
-  background: var(--table-header-bg-dark) !important;
-  color: var(--text-dark) !important;
+.mt-ctl {
+  margin-top: 16px !important;
 }
 
-html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
-  background-color: rgba(255,255,255,0.05) !important;
+.p-ctl {
+  padding: 16px !important;
 }
 
-html[data-theme="dark"] .table-hover > tbody > tr:hover > * {
-  background-color: rgba(59,130,246,0.15) !important;
+.gap-ctl {
+  gap: 16px !important;
 }

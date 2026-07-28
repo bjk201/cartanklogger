@@ -48,11 +48,11 @@
         </div>
       </nav>
       
-      <!-- Theme Toggle + Date Range (right side) -->
+      <!-- Mobile sidebar toggle -->
       <div class="d-flex align-items-center gap-1 order-md-2">
         
         <!-- Date Range Selector (right side on desktop) -->
-        <div class="d-none d-sm-flex align-items-center gap-1" id="globalDateRange">
+        <div class="d-none d-sm-flex align-items-center gap-1 pe-1" id="globalDateRange">
           <span class="text-muted small" id="globalRangeLabel">Letzte 365 Tage</span>
           <div class="btn-group btn-group-sm" role="group">
             <button class="btn btn-outline-secondary" data-days="1">1 Tag</button>
@@ -103,9 +103,7 @@
 </nav>
 
 <div class="container-fluid pt-0">
-  <div class="row g-0">
-    <!-- MAIN CONTENT -->
-    <main class="col-12 py-3">
+  <div class="col-12 app-main">
       {% block content %}{% endblock %}
     </main>
   </div>
