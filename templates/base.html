@@ -90,6 +90,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <script>
+// Theme toggle - runs immediately after DOM ready
 function initTheme() {
   const themeToggle = document.getElementById('themeToggle');
   const themeIcon = document.getElementById('themeIcon');
@@ -98,6 +99,7 @@ function initTheme() {
   const themeIconMobile = document.getElementById('themeIconMobile');
   const themeLabelMobile = document.getElementById('themeLabelMobile');
   
+  // Already set by inline script in head, just update UI
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   function updateUI(isDark) {
     if (themeIcon) themeIcon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
@@ -118,6 +120,7 @@ function initTheme() {
   if (themeToggleMobile) themeToggleMobile.addEventListener('click', toggleTheme);
 }
 
+// Mobile sidebar toggle
 function initSidebar() {
   const sidebarToggle = document.getElementById('sidebarToggle');
   const sidebar = document.getElementById('sidebarMobile');
@@ -148,16 +151,23 @@ function initSidebar() {
   
   overlay.addEventListener('click', closeSidebar);
   
+  // Close sidebar when clicking a nav link on mobile
   document.querySelectorAll('.sidebar-mobile .nav-link').forEach(link => {
     link.addEventListener('click', closeSidebar);
   });
   
+  // Close sidebar on window resize to desktop
   window.addEventListener('resize', function() {
     if (window.innerWidth >= 768 && sidebar.style.transform === 'translateX(0)') closeSidebar();
   });
 }
 
-let globalDateRange = { days: 30, from: null, to: null };
+// Global shared date range state
+let globalDateRange = {
+  days: 30,
+  from: null,
+  to: null
+};
 
 function getGlobalRangeParams() {
   if (globalDateRange.from && globalDateRange.to) {
@@ -179,6 +189,7 @@ function updateGlobalRangeLabel() {
 }
 
 function initGlobalDateRange() {
+  // Load saved state
   try {
     const saved = localStorage.getItem('globalDateRange');
     if (saved) {
@@ -186,6 +197,7 @@ function initGlobalDateRange() {
     }
   } catch (e) {}
   
+  // Update button states
   document.querySelectorAll('[data-days]').forEach(btn => {
     const days = parseInt(btn.getAttribute('data-days'), 10);
     if (globalDateRange.from && globalDateRange.to) {
@@ -195,6 +207,7 @@ function initGlobalDateRange() {
     }
   });
   
+  // Update date inputs
   const fromEl = document.getElementById('globalRangeFrom');
   const toEl = document.getElementById('globalRangeTo');
   if (fromEl && globalDateRange.from) fromEl.value = globalDateRange.from;
@@ -202,6 +215,7 @@ function initGlobalDateRange() {
   
   updateGlobalRangeLabel();
   
+  // Day buttons
   document.querySelectorAll('[data-days]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
@@ -217,6 +231,7 @@ function initGlobalDateRange() {
     });
   });
   
+  // Apply custom range
   const applyBtn = document.getElementById('globalRangeApply');
   if (applyBtn) {
     applyBtn.addEventListener('click', () => {
@@ -242,8 +257,12 @@ function saveGlobalRange() {
   } catch (e) {}
 }
 
+// Notify all pages about range change
 function notifyRangeChange() {
+  // Dispatch custom event that pages can listen to
   window.dispatchEvent(new CustomEvent('globalRangeChange', { detail: getGlobalRangeParams() }));
+  
+  // Also trigger reload on current page if it has load function
   if (typeof loadAll === 'function') loadAll();
   if (typeof loadOverview === 'function') loadOverview();
   if (typeof loadStats === 'function') loadStats();
