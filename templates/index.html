@@ -9,37 +9,37 @@
   <!-- LINKE SPALTE: 3 Zeitreihen-Charts übereinander -->
   <div class="col-12 col-lg-6">
     <!-- Verbrauch Chart -->
-    <div class="card h-100 mb-3 chart-card">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
-        <span class="badge bg-info text-dark" id="avgConsumptionBadge">Ø –</span>
-      </div>
-      <div class="card-body py-2">
-        <canvas id="chartConsumption" height="120"></canvas>
-      </div>
-    </div>
+        <div class="card h-100 mb-3 chart-card">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium">⚡ Verbrauch (kWh / 100 km)</span>
+            <span class="badge bg-info text-dark" id="avgConsumptionBadge">Ø –</span>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="chartConsumption"></canvas>
+          </div>
+        </div>
 
-    <!-- Kosten Chart -->
-    <div class="card h-100 mb-3 chart-card">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
-        <span class="badge bg-warning text-dark" id="avgCostBadge">Ø –</span>
-      </div>
-      <div class="card-body py-2">
-        <canvas id="chartCost" height="120"></canvas>
-      </div>
-    </div>
+        <!-- Kosten Chart -->
+        <div class="card h-100 mb-3 chart-card">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium">💶 Kosten (EUR / 100 km)</span>
+            <span class="badge bg-warning text-dark" id="avgCostBadge">Ø –</span>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="chartCost"></canvas>
+          </div>
+        </div>
 
-    <!-- Kilometer Chart -->
-    <div class="card h-100 mb-3 chart-card">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <span class="fw-medium">🛣️ Kilometer (km)</span>
-        <span class="badge bg-primary" id="totalKmBadge">Σ –</span>
-      </div>
-      <div class="card-body py-2">
-        <canvas id="chartKm" height="120"></canvas>
-      </div>
-    </div>
+        <!-- Kilometer Chart -->
+        <div class="card h-100 mb-3 chart-card">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <span class="fw-medium">🛣️ Kilometer (km)</span>
+            <span class="badge bg-primary" id="totalKmBadge">Σ –</span>
+          </div>
+          <div class="card-body py-2">
+            <canvas id="chartKm"></canvas>
+          </div>
+        </div>
   </div>
 
   <!-- RECHTE SPALTE: Donut oben, 2 Heatmaps unten -->
@@ -58,7 +58,7 @@
             <div class="small text-muted" id="homePrice">Ø – €/kWh</div>
           </div>
           <div class="col-2 text-center">
-            <canvas id="chartHomeExtern" height="140" width="140"></canvas>
+            <canvas id="chartHomeExtern"></canvas>
           </div>
           <div class="col-5 ps-2">
             <div class="small text-muted">Extern</div>
@@ -80,7 +80,7 @@
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
           </div>
           <div class="card-body py-2">
-            <canvas id="heatmapTempConsumption" height="180"></canvas>
+            <canvas id="heatmapTempConsumption"></canvas>
             <div class="mt-2 small" id="legendTempConsumption"></div>
           </div>
         </div>
@@ -94,7 +94,7 @@
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
           </div>
           <div class="card-body py-2">
-            <canvas id="heatmapWeekdayConsumption" height="180"></canvas>
+            <canvas id="heatmapWeekdayConsumption"></canvas>
             <div class="mt-2 small" id="legendWeekdayConsumption"></div>
           </div>
         </div>
@@ -112,16 +112,16 @@
     <div class="card h-100">
       <div class="card-header py-2">🔌 Letzte Ladevorgänge</div>
       <div class="card-body p-0">
-        <div class="table-container">
-          <table class="table table-sm table-striped align-middle mb-0" id="tblMerged">
-            <thead class="sticky-header"><tr>
-              <th>Datum</th><th>Stationen</th><th>Zuhause kWh</th><th>Zuhause €</th>
-              <th>PV%</th><th>Ladeverlust</th><th>Extern kWh</th><th>Extern €</th>
-              <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
-            </tr></thead><tbody></tbody>
-          </table>
-        </div>
-      </div>
+                <div class="table-container">
+                  <table class="table table-sm table-striped align-middle mb-0 sticky-first-col" id="tblMerged">
+                    <thead class="sticky-header"><tr>
+                      <th>Datum</th><th>Stationen</th><th>Zuhause kWh</th><th>Zuhause €</th>
+                      <th>PV%</th><th>Ladeverlust</th><th>Extern kWh</th><th>Extern €</th>
+                      <th>Gesamt kWh</th><th>Gesamt €</th><th></th>
+                    </tr></thead><tbody></tbody>
+                  </table>
+                </div>
+              </div>
       <div class="card-footer py-2">
         <nav id="paginationMerged" aria-label="Pagination"></nav>
       </div>
