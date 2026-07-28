@@ -36,7 +36,7 @@
   --modal-bg-dark: #1e293b;
   --modal-border-dark: #334155;
   --input-placeholder-dark: #94a3b8;
-  --header-height: 88px;
+  --header-height: 68px;
   --header-height-mobile: 56px;
   --card-radius: 0.75rem;
   --card-padding: 1rem;
@@ -127,11 +127,6 @@ html[data-theme="dark"] .app-header .navbar-nav .nav-link {
 main {
   padding-top: calc(var(--header-height-mobile) + 0.5rem) !important;
   width: 100%;
-  min-height: calc(100vh - var(--header-height-mobile));
-}
-
-main {
-  padding-top: calc(var(--header-height) + 1rem) !important;
 }
 
 @media (max-width: 767.98px) {
