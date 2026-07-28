@@ -26,38 +26,32 @@
 
 <header class="app-header fixed-top">
   <div class="container-fluid px-3">
-    <div class="d-flex align-items-center justify-content-between py-2 flex-wrap gap-2">
+    <div class="d-flex align-items-center justify-content-between py-1 flex-wrap gap-1">
       
       <!-- Brand -->
-      <span class="navbar-brand mb-0 h1">⚡ CarTankLogger</span>
+      <span class="navbar-brand mb-0 ps-0">⚡ CarTankLogger</span>
+      
+      <!-- Mobile menu button (left-aligned on mobile) -->
+      <button class="sidebar-toggle d-md-none ms-auto order-md-last" id="sidebarToggle" aria-label="Menü öffnen">
+        <i class="bi bi-list"></i>
+      </button>
       
       <!-- Navigation (Desktop) -->
-      <nav class="d-none d-md-flex align-items-center gap-1" id="mainNav">
+      <nav class="d-none d-md-flex align-items-center gap-1 order-md-1" id="mainNav">
         <div class="btn-group btn-group-sm" role="group" aria-label="Hauptnavigation">
           <a class="btn {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a>
           <a class="btn {% if request.path == '/statistik' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/statistik">Statistik</a>
           <a class="btn {% if request.path == '/monatsvergleich' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
-          <a class="btn {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra-Kosten</a>
-          <a class="btn {% if request.path == '/importdaten' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/importdaten">Importdaten</a>
+          <a class="btn {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra</a>
+          <a class="btn {% if request.path == '/importdaten' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/importdaten">Import</a>
           <a class="btn {% if request.path == '/admin' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin">Admin</a>
         </div>
       </nav>
       
-      <!-- Mobile menu button -->
-      <button class="sidebar-toggle d-md-none" id="sidebarToggle" aria-label="Menü öffnen">
-        <i class="bi bi-list"></i>
-      </button>
-      
       <!-- Theme Toggle + Date Range (right side) -->
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-1 order-md-2">
         
-        <!-- Theme Toggle -->
-        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="themeToggle" title="Theme wechseln">
-          <i class="bi bi-moon-fill" id="themeIcon"></i>
-          <span id="themeLabel" class="d-none d-sm-inline">Dark</span>
-        </button>
-        
-        <!-- Date Range Selector -->
+        <!-- Date Range Selector (right side on desktop) -->
         <div class="d-none d-sm-flex align-items-center gap-1" id="globalDateRange">
           <span class="text-muted small" id="globalRangeLabel">Letzte 365 Tage</span>
           <div class="btn-group btn-group-sm" role="group">
@@ -76,6 +70,11 @@
           </div>
         </div>
         
+        <!-- Theme Toggle (right side) -->
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="themeToggle" title="Theme wechseln">
+          <i class="bi bi-moon-fill" id="themeIcon"></i>
+          <span id="themeLabel" class="d-none d-sm-inline">Dark</span>
+        </button>
       </div>
     </div>
   </div>

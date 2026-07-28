@@ -129,10 +129,9 @@ main {
   width: 100%;
 }
 
-@media (max-width: 767.98px) {
+@media (min-width: 768px) {
   main {
-    padding-top: calc(var(--header-height-mobile) + 0.5rem) !important;
-    min-height: calc(100vh - var(--header-height-mobile));
+    padding-top: calc(var(--header-height) + 1rem) !important;
   }
 }
 
@@ -510,7 +509,6 @@ html[data-theme="dark"] .sticky-header th {
   main {
     padding-top: calc(var(--header-height-mobile) + 0.5rem) !important;
     width: 100%;
-    min-height: calc(100vh - var(--header-height-mobile));
   }
 
   /* Sidebar - offcanvas */
