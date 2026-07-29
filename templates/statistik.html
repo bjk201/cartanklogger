@@ -32,7 +32,6 @@
           <select class="chart-type-select" data-chart="chartCons">
             <option value="line">Linie</option>
             <option value="bar">Balken</option>
-            <option value="pie">Kreis</option>
           </select>
           <select class="average-mode-select" data-chart="chartCons">
             <option value="mean">Ø Zeitraum</option>
@@ -56,7 +55,6 @@
           <select class="chart-type-select" data-chart="chartPrice">
             <option value="line">Linie</option>
             <option value="bar">Balken</option>
-            <option value="pie">Kreis</option>
           </select>
           <select class="average-mode-select" data-chart="chartPrice">
             <option value="mean">Ø Zeitraum</option>
@@ -80,7 +78,6 @@
           <select class="chart-type-select" data-chart="chartCost100">
             <option value="line">Linie</option>
             <option value="bar">Balken</option>
-            <option value="pie">Kreis</option>
           </select>
           <select class="average-mode-select" data-chart="chartCost100">
             <option value="mean">Ø Zeitraum</option>
@@ -104,7 +101,6 @@
           <select class="chart-type-select" data-chart="chartKm">
             <option value="line">Linie</option>
             <option value="bar">Balken</option>
-            <option value="pie">Kreis</option>
           </select>
           <select class="average-mode-select" data-chart="chartKm">
             <option value="mean">Ø Zeitraum</option>
@@ -129,7 +125,7 @@
         <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
       </div>
       <div class="card-body py-2">
-        <canvas id="heatmapTempConsumption"></canvas>
+        <canvas id="heatmapTempConsumption" style="height: 180px;"></canvas>
         <div class="mt-2 small" id="legendTempConsumption"></div>
       </div>
     </div>
@@ -142,379 +138,13 @@
         <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
       </div>
       <div class="card-body py-2">
-        <canvas id="heatmapWeekdayConsumption"></canvas>
+        <canvas id="heatmapWeekdayConsumption" style="height: 180px;"></canvas>
         <div class="mt-2 small" id="legendWeekdayConsumption"></div>
       </div>
     </div>
   </div>
 </div>
 
-<script>
-// Chart States for Statistics Page
-let chartStates = {};
-
-function initStatsCharts() {
-  // Initialize each chart based on its data attribute
-  ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(chartId => {
-    initChart(chartId);
-  });
-  
-  // Initialize heatmaps
-  initHeatmap('heatmapTempConsumption');
-  initHeatmap('heatmapWeekdayConsumption');
-}
-
-function initChart(chartId) {
-  const canvas = document.getElementById(chartId);
-  if (!canvas) return;
-
-  // Default data until loaded
-  const defaultData = {
-    labels: [],
-    datasets: [{ data: [], backgroundColor: [], borderColor: [], label: '' }]
-  };
-
-  const initialChart = {
-    id: chartId,
-    type: 'line',
-    data: defaultData,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: { display: true },
-        y: { display: true }
-      }
-    }
-  };
-
-  chartStates[chartId] = initialChart;
-}
-
-function initHeatmap(canvasId) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  
-  chartStates[canvasId] = { initialized: false };
-}
-
-function renderChart(chartId) {
-  const canvas = document.getElementById(chartId);
-  if (!canvas) return;
-
-  // Load data from API based on chart type and average mode
-  const typeSelect = document.querySelector(`.chart-type-select[data-chart="${chartId}"]`);
-  const averageSelect = document.querySelector(`.average-mode-select[data-chart="${chartId}"]`);
-  
-  const days = getCurrentDays();
-  const params = `days=${days}`;
-  
-  if (!typeSelect || !averageSelect) return;
-
-  const chartType = typeSelect.value;
-  const averageMode = averageSelect.value;
-
-  // Determine API endpoint based on chart ID
-  let apiUrl = `/api/stats?${params}`;
-  
-  fetch(apiUrl)
-    .then(response => response.json())
-    .then(data => {
-      // Check if this is a pie chart (aggregated categorical data)
-      if (chartType === 'pie' && data.categories) {
-        renderPieChart(canvas, chartId, data.categories, data.values);
-      } else {
-        // Time series chart
-        renderTimeSeriesChart(canvas, chartId, chartType, data.labels, data.values, averageMode);
-      }
-    })
-    .catch(error => console.error(`Error loading ${chartId}:`, error));
-}
-
-function getCurrentDays() {
-  const activeBtn = document.querySelector('[data-days].active');
-  return activeBtn ? parseInt(activeBtn.getAttribute('data-days'), 10) : 30;
-}
-
-function renderTimeSeriesChart(canvas, chartId, type, labels, values, averageMode) {
-  // Sort chronologically (oldest → newest)
-  const dataPoints = labels.map((label, index) => ({
-    label: label,
-    value: values[index] || 0
-  })).sort((a, b) => {
-    const dateA = new Date(a.label);
-    const dateB = new Date(b.label);
-    return dateA - dateB;
-  });
-
-  const chartData = {
-    labels: dataPoints.map(d => d.label),
-    datasets: [{
-      label: chartId,
-      data: dataPoints.map(d => d.value),
-      backgroundColor: type === 'bar' ? 'rgba(22, 119, 255, 0.7)' : 'rgba(24, 191, 216, 0.1)',
-      borderColor: type === 'bar' ? '#1677ff' : '#18bfd8',
-      borderWidth: 1,
-      tension: 0.28,
-      spanGaps: true,
-      pointRadius: 2,
-      fill: type === 'line'
-    }]
-  };
-
-  // Add average line if requested
-  if (averageMode === 'mean' && dataPoints.length > 0) {
-    const meanValue = dataPoints.reduce((a, b) => a + b.value, 0) / dataPoints.length;
-    chartData.datasets[0].borderDash = [5, 5];
-    chartData.datasets[0].borderColor = type === 'bar' ? '#1677ff' : '#999';
-    chartData.datasets[0].borderWidth = 2;
-  }
-
-  if (averageMode === 'moving' && dataPoints.length >= 7) {
-    const movingAvg = calculateMovingAverage(dataPoints.map(d => d.value), 7);
-    chartData.datasets.push({
-      label: 'Gleitender Ø',
-      data: movingAvg,
-      type: 'line',
-      borderColor: '#df3046',
-      backgroundColor: 'rgba(223, 48, 70, 0.1)',
-      borderWidth: 2,
-      tension: 0.28,
-      fill: false,
-      pointRadius: 0,
-      borderDash: [3, 3]
-    });
-  }
-
-  // Initialize or update chart
-  if (Chart.getChart(canvas)) {
-    Chart.getChart(canvas).destroy();
-  }
-
-  new Chart(canvas, {
-    type: type,
-    data: chartData,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${chartId}: ${ctx.raw}`
-          }
-        }
-      },
-      scales: {
-        x: { title: { display: true, text: 'Datum' } },
-        y: { title: { display: true, text: chartId.includes('km') ? 'km' : 'Wert' } }
-      }
-    }
-  });
-}
-
-function renderPieChart(canvas, chartId, categories, values) {
-  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
-
-  new Chart(canvas, {
-    type: 'doughnut',
-    data: {
-      labels: categories,
-      datasets: [{
-        data: values,
-        backgroundColor: categories.map((_, index) => {
-          const colors = ['#18bfd8', '#1677ff', '#32a96c', '#b9b845', '#e78b43', '#d95656'];
-          return colors[index % colors.length];
-        }),
-        borderColor: '#fff',
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '70%',
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.label}: ${ctx.raw}`
-          }
-        }
-      }
-    }
-  });
-}
-
-function calculateMovingAverage(data, windowSize) {
-  const averages = [];
-  for (let i = 0; i <= data.length - windowSize; i++) {
-    const window = data.slice(i, i + windowSize);
-    averages.push(window.reduce((a, b) => a + b, 0) / windowSize);
-  }
-  return averages;
-}
-
-// Event listeners for chart controls
-function setupChartControls() {
-  document.querySelectorAll('.chart-type-select, .average-mode-select').forEach(select => {
-    select.addEventListener('change', function() {
-      const chartId = this.dataset.chart;
-      renderChart(chartId);
-    });
-  });
-  
-  // Day buttons
-  document.querySelectorAll('[data-days]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadStats();
-    });
-  });
-}
-
-// Load data for statistics page
-function loadStats() {
-  console.log('Loading statistics data...');
-  
-  // Load KPI data
-  const days = getCurrentDays();
-  fetch(`/api/stats?days=${days}`)
-    .then(r => r.json())
-    .then(data => {
-      renderStatsKPIs(data.totals || data.kpis || {});
-      renderHeatmaps(data);
-    })
-    .catch(e => console.error('Stats load error:', e));
-  
-  // Initialize charts
-  setTimeout(() => {
-    initStatsCharts();
-    setupChartControls();
-  }, 100);
-}
-
-function renderStatsKPIs(totals) {
-  const kpiEl = document.getElementById('statsKpis');
-  if (!kpiEl) return;
-  
-  const kpis = [
-    { label: 'Gefahrene km', value: totals.total_km || 0, suffix: 'km' },
-    { label: 'Geladene kWh', value: totals.kwh || 0, suffix: 'kWh' },
-    { label: 'Verbrauch', value: totals.consumption_kwh_per_100km || 0, suffix: 'kWh/100km' },
-    { label: 'Kosten', value: totals.tco || 0, suffix: '€' },
-    { label: 'Ladeverluste', value: totals.home_loss_kwh || 0, suffix: 'kWh' }
-  ];
-  
-  kpiEl.innerHTML = kpis.map(kpi => `
-    <div class="col-md-4 col-lg-2">
-      <div class="card kpi-card h-100">
-        <div class="card-body">
-          <div class="kpi-value" style="color: #667eea; font-weight: 700;">
-            ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 1}) : kpi.value} ${kpi.suffix}
-          </div>
-          <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-function renderHeatmaps(data) {
-  const days = getCurrentDays();
-  fetch(`/api/charts?days=${days}`)
-    .then(r => r.json())
-    .then(chartsData => {
-      const series = chartsData?.series || [];
-      
-      // Render temperature/consumption heatmap
-      if (series.length > 0) {
-        renderTempHeatmap(series);
-        renderWeekdayHeatmap(series);
-      }
-    })
-    .catch(e => console.error('Heatmap load error:', e));
-}
-
-function renderTempHeatmap(series) {
-  const canvas = document.getElementById('heatmapTempConsumption');
-  if (!canvas) return;
-  
-  // Destroy existing chart
-  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
-  
-  // Prepare heatmap data (simplified)
-  const labels = series.slice(0, 10).map(s => s.day || '');
-  const data = series.slice(0, 10).map(s => s.kwh || 0);
-  
-  new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'kWh',
-        data: data,
-        backgroundColor: data.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : '#faad14'),
-        borderColor: '#fff',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { title: { text: 'Datum' } },
-        y: { title: { text: 'kWh' }, beginAtZero: true }
-      }
-    }
-  });
-}
-
-function renderWeekdayHeatmap(series) {
-  const canvas = document.getElementById('heatmapWeekdayConsumption');
-  if (!canvas) return;
-  
-  // Destroy existing chart
-  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
-  
-  // Group by weekday
-  const weekdayData = Array(7).fill(0);
-  const dayNames = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
-  
-  series.forEach(s => {
-    const date = new Date(s.day);
-    if (!isNaN(date.getTime())) {
-      weekdayData[date.getDay()] += s.kwh || 0;
-    }
-  });
-  
-  new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: dayNames,
-      datasets: [{
-        label: 'kWh',
-        data: weekdayData,
-        backgroundColor: weekdayData.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : '#faad14'),
-        borderColor: '#fff',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { title: { text: 'Wochentag' } },
-        y: { title: { text: 'kWh' }, beginAtZero: true }
-      }
-    }
-  });
-}
-
-// Expose functions globally
-window.loadStats = loadStats;
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/statistik.js') }}?v={{ js_version }}"></script>
 {% endblock %}

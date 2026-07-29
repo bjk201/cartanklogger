@@ -52,21 +52,21 @@
       <div class="card-header py-2">
         <span class="fw-medium">🏠🔌 Home vs. Extern (kWh)</span>
       </div>
-      <div class="card-body py-2">
+      <div class="card-body p-0">
         <div class="row g-0 align-items-center">
-          <div class="col-5 text-end pe-2">
+          <div class="col-5 text-end pe-3">
             <div class="small text-muted">Zuhause</div>
-            <div class="fw-bold" id="homeKwh">– kWh</div>
-            <div class="small" id="homePct">–%</div>
+            <div class="h5 mb-1" id="homeKwh">– kWh</div>
+            <div class="small"><span id="homePct">–%</span></div>
             <div class="small text-muted" id="homePrice">Ø – €/kWh</div>
           </div>
-          <div class="col-2 text-center">
-            <canvas id="chartHomeExtern"></canvas>
+          <div class="col-2 d-flex align-items-center justify-content-center">
+            <canvas id="chartHomeExtern" style="width: 80px; height: 80px;"></canvas>
           </div>
-          <div class="col-5 ps-2">
+          <div class="col-5 ps-3">
             <div class="small text-muted">Extern</div>
-            <div class="fw-bold" id="extKwh">– kWh</div>
-            <div class="small" id="extPct">–%</div>
+            <div class="h5 mb-1" id="extKwh">– kWh</div>
+            <div class="small"><span id="extPct">–%</span></div>
             <div class="small text-muted" id="extPrice">Ø – €/kWh</div>
           </div>
         </div>
@@ -83,7 +83,7 @@
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
           </div>
           <div class="card-body py-2">
-            <canvas id="heatmapTempConsumption"></canvas>
+            <canvas id="heatmapTempConsumption" style="height: 180px;"></canvas>
             <div class="mt-2 small" id="legendTempConsumption"></div>
           </div>
         </div>
@@ -97,7 +97,7 @@
             <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
           </div>
           <div class="card-body py-2">
-            <canvas id="heatmapWeekdayConsumption"></canvas>
+            <canvas id="heatmapWeekdayConsumption" style="height: 180px;"></canvas>
             <div class="mt-2 small" id="legendWeekdayConsumption"></div>
           </div>
         </div>

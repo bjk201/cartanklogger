@@ -1,340 +1,330 @@
-// statistik.js - Statistics Page with Material Design 3 Dashboard
+// statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen
 
-// Chart States for Statistics Page - each chart is independent
-const chartStates = {
-  chartCons:   { type: 'line', showMA: true },
-  chartPrice:  { type: 'line', showMA: true },
-  chartCost100:{ type: 'line', showMA: true },
-  chartKm:     { type: 'line', showMA: true }
+let currentDays = 30;
+let currentFrom = null;
+let currentTo = null;
+
+// Chart instances
+let charts = {
+    chartCons: null,
+    chartPrice: null,
+    chartCost100: null,
+    chartKm: null,
+    heatmapTemp: null,
+    heatmapWeekday: null
 };
 
-let currentChartDays = 365;
-let currentChartFrom = null;
-let currentChartTo = null;
-const MOVING_AVG_WINDOW = 7;
-
-function buildChartApiParams() {
-  if (currentChartFrom && currentChartTo) {
-    return `from=${currentChartFrom}&to=${currentChartTo}`;
-  }
-  return `days=${currentChartDays}`;
+function getCurrentDays() {
+    const activeBtn = document.querySelector('[data-days].active');
+    return activeBtn ? parseInt(activeBtn.getAttribute('data-days'), 10) : 30;
 }
 
-function loadStats() {
-  const params = buildChartApiParams();
-
-  // Load chart data (includes KPI stats) via /api/charts endpoint
-  fetch(`/api/charts?${params}`)
-    .then(r => r.json())
-    .then(data => {
-      renderStatsCharts(data);
-      // Also render KPI cards from same data
-      renderStatsKPIs(data);
-    })
-    .catch(e => console.error('Load stats error:', e));
-}
-
-function renderStatsKPIs(statsData) {
-  // Render KPI cards for statistics page
-  const container = document.getElementById('statsKpis');
-  if (!container) return;
-
-  const totals = statsData.totals || {};
-  const home = statsData.home || {};
-  const external = statsData.external || {};
-
-  const kpis = [
-    {
-      icon: '💶',
-      title: 'Kosten diesen Monat',
-      value: formatCurrency(totals.cost_this_month || 0),
-      subtitle: totals.month || '–',
-      class: 'success'
-    },
-    {
-      icon: '⚡',
-      title: 'Geladene Energie',
-      value: formatKWh(totals.total_kwh || 0),
-      subtitle: `Zuhause ${formatKWh(home.home_kwh || 0)} · Extern ${formatKWh(external.ext_kwh || 0)}`,
-      class: 'primary'
-    },
-    {
-      icon: '🛣️',
-      title: 'Gefahrene km',
-      value: formatNumber(totals.total_km || 0) + ' km',
-      subtitle: 'Summe Tagesdistanzen',
-      class: 'secondary'
-    },
-    {
-      icon: '💡',
-      title: 'Kosten / 100 km',
-      value: formatCurrency(totals.tco_per_100km) + ' /100km',
-      subtitle: `TCO ${formatCurrency(totals.tco)}`,
-      class: 'warning'
-    },
-    {
-      icon: '🔋',
-      title: 'Verbrauch',
-      value: formatKWh(totals.consumption_kwh_per_100km) + ' /100km',
-      subtitle: `Akku ≈ ${formatKWh(totals.consumption_net_kwh_per_100km)} (geschätzt)`,
-      class: 'info'
-    },
-    {
-      icon: '☀️',
-      title: 'PV-Anteil',
-      value: formatPercent(home.pv_share_pct),
-      subtitle: `${formatKWh(home.pv_kwh || 0)} PV von ${formatKWh(home.home_kwh)}`,
-      class: 'success'
-    },
-    {
-      icon: '🏠',
-      title: 'Zuhause vs. Extern',
-      value: `${(totals.home_share_pct || 0).toFixed(1)}% Zuhause`,
-      subtitle: `${formatKWh(home.home_kwh)} zu Hause · ${formatKWh(external.ext_kwh)} extern`,
-      class: 'primary'
-    },
-    {
-      icon: '🔌',
-      title: 'Ladeverluste',
-      value: formatKWh(totals.home_loss_kwh),
-      subtitle: 'Wallbox → Akku (Differenz)',
-      class: 'dark'
+async function loadStats() {
+    console.log('Loading stats data...');
+    
+    const days = getCurrentDays();
+    
+    try {
+        // Load stats data
+        const statsResp = await fetch(`/api/stats?days=${days}`, {credentials: "same-origin"});
+        const statsData = await statsResp.json();
+        
+        // Load charts data
+        const chartsResp = await fetch(`/api/charts?days=${days}`, {credentials: "same-origin"});
+        const chartsData = await chartsResp.json();
+        
+        // Load price data
+        const pricesResp = await fetch(`/api/price-periods`, {credentials: "same-origin"});
+        const pricesData = await pricesResp.json();
+        
+        renderKPIs(statsData.totals || {});
+        renderCharts(chartsData, statsData);
+        renderHeatmaps(chartsData);
+        updateRangeLabel();
+        
+    } catch (e) {
+        console.error('Stats load error:', e);
+        document.getElementById('statsKpis').innerHTML = '<div class="col-12"><div class="card"><div class="card-body text-center py-4 text-muted">Fehler beim Laden der Daten</div></div></div>';
     }
-  ];
+}
 
-  container.innerHTML = kpis.map(kpi => `
-    <div class="col">
-      <div class="card kpi-card">
-        <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="me-3 fs-3">
-              ${kpi.icon}
+function updateRangeLabel() {
+    const el = document.getElementById('globalRangeLabel');
+    if (!el) return;
+    el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
+}
+
+function renderKPIs(totals) {
+    const kpiEl = document.getElementById('statsKpis');
+    if (!kpiEl) return;
+    
+    const kpis = [
+        { label: 'Gefahrene km', value: totals.total_km || 0, suffix: 'km' },
+        { label: 'Geladene kWh', value: totals.kwh || totals.home_kwh || 0, suffix: 'kWh' },
+        { label: 'Verbrauch', value: totals.consumption_kwh_per_100km || totals.consumption_net || 0, suffix: 'kWh/100km' },
+        { label: 'Kosten', value: totals.tco || totals.total_cost || 0, suffix: '€' },
+        { label: 'Ladeverluste', value: totals.home_loss_kwh || 0, suffix: 'kWh' }
+    ];
+    
+    kpiEl.innerHTML = kpis.map(kpi => `
+        <div class="col-md-4 col-lg-2">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <div class="kpi-value" style="color: #667eea; font-weight: 700;">
+                        ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 2}) : kpi.value} ${kpi.suffix}
+                    </div>
+                    <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
+                </div>
             </div>
-            <div class="flex-grow-1">
-              <div class="small text-muted mb-1">
-                ${kpi.title}
-              </div>
-              <div class="h5 mb-0">
-                ${kpi.value}
-              </div>
-              <div class="small text-muted">
-                ${kpi.subtitle}
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
-  `).join('');
+    `).join('');
 }
 
-function renderStatsCharts(chartsData) {
-  // Render the 4 main charts with Material Design 3 styling
-  const series = chartsData.series || [];
-
-  // Group series by type
-  const consumptionData = series.filter(item => item.type === 'consumption');
-  const priceData = series.filter(item => item.type === 'price');
-  const costData = series.filter(item => item.type === 'cost100');
-  const kmData = series.filter(item => item.type === 'km');
-
-  // Render each chart
-  renderLineChart('chartCons', consumptionData);
-  renderLineChart('chartPrice', priceData);
-  renderLineChart('chartCost100', costData);
-  renderLineChart('chartKm', kmData);
-}
-
-function renderLineChart(chartId, data) {
-  const canvas = document.getElementById(chartId);
-  if (!canvas) return;
-
-  // Sort chronologically (oldest → newest)
-  const chronologicalData = data.slice().sort((a, b) => {
-    const dateA = new Date(a.day || a.date);
-    const dateB = new Date(b.day || b.date);
-    return dateA - dateB;
-  });
-
-  const labels = chronologicalData.map(d => d.day || d.date);
-  const values = chronologicalData.map(d => d.value || 0);
-
-  // Calculate average if needed
-  const averageValue = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-
-  // Create chart
-  const chartConfig = {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: chartId,
-        data: values,
-        borderColor: '#1677ff',
-        backgroundColor: 'rgba(22, 119, 255, 0.05)',
-        borderWidth: 2,
-        tension: 0.28,
-        spanGaps: true,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          ticks: { font: { size: 10 } },
-          grid: { display: false }
-        },
-        y: {
-          ticks: { font: { size: 10 } },
-          grid: { color: 'rgba(0, 0, 0, 0.05)' }
-        }
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: { mode: 'index', intersect: false }
-      }
+function renderCharts(chartsData, stats) {
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded');
+        return;
     }
-  };
+    
+    const series = chartsData?.series || [];
+    if (!series || series.length === 0) {
+        console.warn('No chart data available');
+        return;
+    }
+    
+    const days = series.map(s => s.day).filter(d => d);
+    const consumptionData = series.map(s => s.consumption || s.kwh || 0);
+    const costData = series.map(s => s.cost || 0);
+    const kmData = series.map(s => s.km || 0);
+    const priceData = series.map(s => s.price_per_kwh || 0);
+    
+    const getColor = (light, dark) => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        return isDark ? dark : light;
+    };
+    
+    // Destroy existing charts
+    Object.values(charts).forEach(c => c && c.destroy());
+    
+    // Consumption Chart
+    const canvasCons = document.getElementById('chartCons');
+    if (canvasCons) {
+        charts.chartCons = new Chart(canvasCons, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Verbrauch (kWh)',
+                    data: consumptionData,
+                    borderColor: getColor('#1976d2', '#90caf9'),
+                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true } }
+            }
+        });
+    }
+    
+    // Price Chart
+    const canvasPrice = document.getElementById('chartPrice');
+    if (canvasPrice) {
+        charts.chartPrice = new Chart(canvasPrice, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Preis (€/kWh)',
+                    data: priceData,
+                    borderColor: getColor('#388e3c', '#66bb6a'),
+                    backgroundColor: 'rgba(56, 142, 60, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true } }
+            }
+        });
+    }
+    
+    // Cost per 100km Chart
+    const canvasCost = document.getElementById('chartCost100');
+    if (canvasCost) {
+        const costPer100 = series.map(s => s.kwh > 0 ? (s.cost || 0) / s.kwh * 100 : 0);
+        charts.chartCost100 = new Chart(canvasCost, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Kosten (€/100km)',
+                    data: costPer100,
+                    borderColor: getColor('#d32f2f', '#ef5350'),
+                    backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true } }
+            }
+        });
+    }
+    
+    // Kilometer Chart
+    const canvasKm = document.getElementById('chartKm');
+    if (canvasKm) {
+        charts.chartKm = new Chart(canvasKm, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Kilometer',
+                    data: kmData,
+                    borderColor: getColor('#388e3c', '#66bb6a'),
+                    backgroundColor: 'rgba(56, 142, 60, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true } }
+            }
+        });
+    }
+}
 
-  // Add moving average line if requested
-  if (chartStates[chartId] && chartStates[chartId].showMA && values.length >= MOVING_AVG_WINDOW) {
-    const movingAverage = calculateMovingAverage(values, MOVING_AVG_WINDOW);
-    chartConfig.data.datasets.push({
-      label: 'Gleitender Ø',
-      data: movingAverage,
-      type: 'line',
-      borderColor: '#df3046',
-      backgroundColor: 'rgba(223, 48, 70, 0.1)',
-      borderWidth: 2,
-      tension: 0.28,
-      spanGaps: true,
-      pointRadius: 0,
-      borderDash: [5, 5]
+function renderHeatmaps(data) {
+    const series = data?.series || [];
+    if (!series || series.length === 0) return;
+    
+    renderTempHeatmap(series);
+    renderWeekdayHeatmap(series);
+}
+
+function renderTempHeatmap(series) {
+    const canvas = document.getElementById('heatmapTempConsumption');
+    if (!canvas) return;
+    
+    if (charts.heatmapTemp) charts.heatmapTemp.destroy();
+    
+    const data = series.slice(-14).reverse();
+    const labels = data.map(s => s.day || '');
+    const kwhValues = data.map(s => s.kwh || 0);
+    
+    charts.heatmapTemp = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'kWh',
+                data: kwhValues,
+                backgroundColor: kwhValues.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
+                borderColor: '#fff',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { title: { text: 'Datum' }, ticks: { maxRotation: 45, minRotation: 45 } }, y: { title: { text: 'kWh' }, beginAtZero: true } }
+        }
     });
-  }
+    
+    const legendEl = document.getElementById('legendTempConsumption');
+    if (legendEl) {
+        const avgKwh = kwhValues.reduce((a, b) => a + b, 0) / kwhValues.length;
+        legendEl.textContent = `Ø: ${avgKwh.toFixed(1)} kWh`;
+    }
+}
 
-  // Add average line if requested
-  if (chartStates[chartId] && chartStates[chartId].showMA) {
-    chartConfig.data.datasets.push({
-      label: 'Durchschnitt',
-      type: 'line',
-      data: Array(values.length).fill(averageValue),
-      borderColor: '#999',
-      backgroundColor: 'rgba(153, 153, 153, 0.1)',
-      borderWidth: 1,
-      tension: 0.28,
-      spanGaps: true,
-      pointRadius: 0,
-      borderDash: [3, 3]
+function renderWeekdayHeatmap(series) {
+    const canvas = document.getElementById('heatmapWeekdayConsumption');
+    if (!canvas) return;
+    
+    if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
+    
+    const weekdayData = Array(7).fill(0);
+    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    
+    series.forEach(s => {
+        const date = new Date(s.day);
+        if (!isNaN(date.getTime())) {
+            weekdayData[date.getDay()] += s.kwh || 0;
+        }
     });
-  }
-
-  // Destroy existing chart
-  if (Chart.getChart(canvas)) {
-    Chart.getChart(canvas).destroy();
-  }
-
-  // Create new chart
-  new Chart(canvas, chartConfig);
-}
-
-function calculateMovingAverage(data, windowSize) {
-  const averages = [];
-  for (let i = 0; i <= data.length - windowSize; i++) {
-    const window = data.slice(i, i + windowSize);
-    const sum = window.reduce((a, b) => a + b, 0);
-    averages.push(sum / windowSize);
-  }
-
-  // Pad with null values for the beginning
-  return new Array(data.length).fill(null).map((_, index) => {
-    if (index < windowSize - 1) return null;
-    return averages[index - windowSize + 1];
-  });
-}
-
-// Chart control functions
-function initChartControls() {
-  document.querySelectorAll('.chart-type-select').forEach(select => {
-    select.addEventListener('change', function() {
-      const chartId = this.dataset.chart;
-      chartStates[chartId].type = this.value;
-      renderChart(chartId);
+    
+    charts.heatmapWeekday = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: dayNames,
+            datasets: [{
+                label: 'kWh',
+                data: weekdayData,
+                backgroundColor: weekdayData.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
+                borderColor: '#fff',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { title: { text: 'Wochentag' } }, y: { title: { text: 'kWh' }, beginAtZero: true } }
+        }
     });
-  });
+}
 
-  document.querySelectorAll('.average-mode-select').forEach(select => {
-    select.addEventListener('change', function() {
-      const chartId = this.dataset.chart;
-      chartStates[chartId].showMA = this.value !== 'off';
-      renderChart(chartId);
+// Event listeners for day buttons
+document.querySelectorAll('[data-days]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentDays = parseInt(btn.getAttribute('data-days'), 10);
+        currentFrom = null;
+        currentTo = null;
+        loadStats();
     });
-  });
-}
+});
 
-function renderChart(chartId) {
-  // Re-render chart based on current state
-  const canvas = document.getElementById(chartId);
-  if (!canvas) return;
-
-  const data = getChartData(chartId);
-
-  // Destroy and re-create chart
-  if (Chart.getChart(canvas)) {
-    Chart.getChart(canvas).destroy();
-  }
-
-  renderLineChart(chartId, data);
-}
-
-function getChartData(chartId) {
-  // Get data from API based on chart ID
-  // This would normally fetch from your backend
-  const mockData = {
-    chartCons: [ { day: '2024-01-01', value: 12 }, { day: '2024-01-02', value: 15 }, { day: '2024-01-03', value: 11 } ],
-    chartPrice: [ { day: '2024-01-01', value: 0.45 }, { day: '2024-01-02', value: 0.47 }, { day: '2024-01-03', value: 0.44 } ],
-    chartCost100: [ { day: '2024-01-01', value: 45 }, { day: '2024-01-02', value: 52 }, { day: '2024-01-03', value: 48 } ],
-    chartKm: [ { day: '2024-01-01', value: 125 }, { day: '2024-01-02', value: 142 }, { day: '2024-01-03', value: 138 } ]
-  };
-
-  return mockData[chartId] || [];
-}
-
-// Helper formatting functions
-function formatKWh(value) {
-  return value.toLocaleString('de-DE') + ' kWh';
-}
-
-function formatCurrency(value) {
-  return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-}
-
-function formatNumber(value) {
-  return value.toLocaleString('de-DE');
-}
-
-function formatPercent(value) {
-  return value.toFixed(1) + '%';
-}
-
-// Initialize page
-function initStatsPage() {
-  // Initialize chart controls
-  initChartControls();
-
-  // Load initial data
-  loadStats();
-
-  // Update chart when date range changes
-  window.addEventListener('globalRangeChange', function() {
+// Global range listener
+window.addEventListener('globalRangeChange', (e) => {
+    const params = e.detail;
+    if (params.startsWith('from=')) {
+        const urlParams = new URLSearchParams(params);
+        currentFrom = urlParams.get('from');
+        currentTo = urlParams.get('to');
+        currentDays = 365;
+    } else {
+        const urlParams = new URLSearchParams(params);
+        currentDays = parseInt(urlParams.get('days'), 10);
+        currentFrom = null;
+        currentTo = null;
+        document.querySelectorAll('[data-days]').forEach(b => {
+            if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
+    }
     loadStats();
-  });
-}
+});
 
-// Expose functions for main JS
-window.loadStats = loadStats;
-window.initStatsPage = initStatsPage;
+// Initialize
+document.addEventListener('DOMContentLoaded', loadStats);
