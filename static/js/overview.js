@@ -1,8 +1,6 @@
 // overview.js - Dashboard mit korrekten Durchschnittswerten und Layout
 
 let currentDays = 90;
-let currentFrom = null;
-let currentTo = null;
 let currentPageMerged = 1;
 const PER_PAGE = 10;
 
@@ -20,20 +18,30 @@ function safeGet(selector) {
     return el;
 }
 
+function getGlobalDays() {
+    if (typeof globalDateRange !== 'undefined' && globalDateRange.days) {
+        return globalDateRange.days;
+    }
+    return currentDays;
+}
+
 async function loadOverview() {
     try {
-        const days = typeof globalDateRange !== 'undefined' ? globalDateRange.days : 90;
-        const from = typeof globalDateRange !== 'undefined' ? globalDateRange.from : null;
-        const to = typeof globalDateRange !== 'undefined' ? globalDateRange.to : null;
+        const days = getGlobalDays();
         
-        const paramsStats = from && to ? `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : `days=${days}`;
+        const paramsStats = `days=${days}`;
         const paramsMerged = `days=${days}&page=${currentPageMerged}&per_page=${PER_PAGE}`;
+        const paramsCharts = `days=${days}`;
+        
+        console.log('Loading overview data...', { days, paramsStats, paramsMerged, paramsCharts });
         
         const [merged, stats, chartsData] = await Promise.all([
             fetch(`/api/merged?${paramsMerged}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
             fetch(`/api/stats?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {} })),
-            fetch(`/api/charts?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
+            fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
         ]);
+
+        console.log('API responses:', { merged: merged?.rows?.length, stats: stats?.totals, charts: chartsData?.series?.length });
 
         renderMergedTable(merged.rows || merged);
         renderPaginationMerged(merged.pagination?.total || 0);
@@ -272,12 +280,30 @@ function renderCharts(chartsData, stats) {
     }
 }
 
+function renderPaginationMerged(total) {
+    const navEl = safeGet('#paginationMerged');
+    if (!navEl) return;
+    const totalPages = Math.ceil(total / PER_PAGE);
+    if (totalPages <= 1) { navEl.innerHTML = ''; return; }
+    let html = `<ul class="pagination pagination-sm justify-content-center mb-0">`;
+    html += `<li class="page-item ${currentPageMerged === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPageMerged - 1}">«</a></li>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${currentPageMerged === i ? ' active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    }
+    html += `<li class="page-item ${currentPageMerged === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPageMerged + 1}">»</a></li>`;
+    html += '</ul>';
+    navEl.innerHTML = html;
+    document.querySelectorAll('#paginationMerged .page-link').forEach(link => {
+        link.addEventListener('click', (e) => { e.preventDefault(); currentPageMerged = parseInt(link.getAttribute('data-page'), 10); loadOverview(); });
+    });
+}
+
 function updateRangeLabel() {
     const labelEl = safeGet('.range-label');
     if (!labelEl) return;
-    if (typeof globalDateRange !== 'undefined' && globalDateRange.days >= 9999) labelEl.textContent = 'Alle Daten';
-    else if (typeof globalDateRange !== 'undefined') labelEl.textContent = `Letzte ${globalDateRange.days} Tage`;
-    else labelEl.textContent = `Letzte ${currentDays} Tage`;
+    const days = getGlobalDays();
+    if (days >= 9999) labelEl.textContent = 'Alle Daten';
+    else labelEl.textContent = `Letzte ${days} Tage`;
 }
 
 function fmtKwh(v) { return typeof v === 'number' ? v.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' kWh' : v || '–'; }
