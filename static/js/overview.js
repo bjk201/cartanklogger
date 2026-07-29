@@ -32,7 +32,7 @@ async function loadOverview() {
         const [merged, stats, chartsData] = await Promise.all([
             fetch(`/api/merged?${paramsMerged}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
             fetch(`/api/stats?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {} })),
-            fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
+            fetch(`/api/charts?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
         ]);
 
         renderMergedTable(merged.rows || merged);
@@ -108,7 +108,7 @@ function renderKPIs(stats, rows) {
     ];
 
     summaryEl.innerHTML = kpiItems.map(kpi => `
-        <div class="col-12 col-md-2-5 col-lg-2">
+        <div class="col-12 col-sm-6 col-md-2">
             <div class="card kpi-card h-100">
                 <div class="card-body">
                     <div class="kpi-value" style="color: #667eea; font-weight: 700;">
@@ -135,6 +135,10 @@ function renderCharts(chartsData, stats) {
     const costData = series.map(s => s.cost || 0);
     const kmData = series.map(s => s.km || 0);
     const priceData = series.map(s => s.price_per_kwh || 0);
+    
+    // Stats values for Home/Extern
+    const homeKwh = stats.home_kwh || stats.kwh || 0;
+    const extKwh = stats.ext_kwh || 0;
 
     const getColor = (light, dark) => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';

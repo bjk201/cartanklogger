@@ -1,6 +1,7 @@
-// statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen
+// statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen und Typ-Wechsel
 
 let currentDays = 30;
+let charts = {};
 
 function getCurrentDays() {
     const activeBtn = document.querySelector('[data-days].active');
@@ -78,25 +79,27 @@ function renderCharts(chartsData, stats) {
     
     // Destroy existing charts
     ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(id => {
-        if (Chart.getChart(document.getElementById(id))) {
-            Chart.getChart(document.getElementById(id)).destroy();
+        if (charts[id]) {
+            charts[id].destroy();
+            charts[id] = null;
         }
     });
     
     // Consumption Chart
     const canvasCons = document.getElementById('chartCons');
+    const typeCons = document.querySelector('.chart-type-select[data-chart="chartCons"]')?.value || 'line';
     if (canvasCons) {
-        new Chart(canvasCons, {
-            type: 'line',
+        charts.chartCons = new Chart(canvasCons, {
+            type: typeCons,
             data: {
                 labels: days,
                 datasets: [{
-                    label: 'Verbrauch (kWh)',
+                    label: 'Verbrauch',
                     data: consumptionData,
                     borderColor: getColor('#1976d2', '#90caf9'),
-                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                    tension: 0.3,
-                    fill: true
+                    backgroundColor: getColor('#1976d2', '#90caf9'),
+                    fill: typeCons === 'line',
+                    tension: typeCons === 'line' ? 0.3 : 0
                 }]
             },
             options: {
@@ -110,18 +113,19 @@ function renderCharts(chartsData, stats) {
     
     // Price Chart
     const canvasPrice = document.getElementById('chartPrice');
+    const typePrice = document.querySelector('.chart-type-select[data-chart="chartPrice"]')?.value || 'line';
     if (canvasPrice) {
-        new Chart(canvasPrice, {
-            type: 'line',
+        charts.chartPrice = new Chart(canvasPrice, {
+            type: typePrice,
             data: {
                 labels: days,
                 datasets: [{
                     label: 'Preis (€/kWh)',
                     data: priceData,
                     borderColor: getColor('#388e3c', '#66bb6a'),
-                    backgroundColor: 'rgba(56, 142, 60, 0.1)',
-                    tension: 0.3,
-                    fill: true
+                    backgroundColor: getColor('#388e3c', '#66bb6a'),
+                    fill: typePrice === 'line',
+                    tension: typePrice === 'line' ? 0.3 : 0
                 }]
             },
             options: {
@@ -135,19 +139,20 @@ function renderCharts(chartsData, stats) {
     
     // Cost per 100km Chart
     const canvasCost = document.getElementById('chartCost100');
+    const typeCost = document.querySelector('.chart-type-select[data-chart="chartCost100"]')?.value || 'line';
     if (canvasCost) {
         const costPer100 = series.map(s => s.kwh > 0 ? (s.cost || 0) / s.kwh * 100 : 0);
-        new Chart(canvasCost, {
-            type: 'line',
+        charts.chartCost100 = new Chart(canvasCost, {
+            type: typeCost,
             data: {
                 labels: days,
                 datasets: [{
                     label: 'Kosten (€/100km)',
                     data: costPer100,
                     borderColor: getColor('#d32f2f', '#ef5350'),
-                    backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                    tension: 0.3,
-                    fill: true
+                    backgroundColor: getColor('#d32f2f', '#ef5350'),
+                    fill: typeCost === 'line',
+                    tension: typeCost === 'line' ? 0.3 : 0
                 }]
             },
             options: {
@@ -161,18 +166,19 @@ function renderCharts(chartsData, stats) {
     
     // KM Chart
     const canvasKm = document.getElementById('chartKm');
+    const typeKm = document.querySelector('.chart-type-select[data-chart="chartKm"]')?.value || 'line';
     if (canvasKm) {
-        new Chart(canvasKm, {
-            type: 'line',
+        charts.chartKm = new Chart(canvasKm, {
+            type: typeKm,
             data: {
                 labels: days,
                 datasets: [{
                     label: 'Kilometer',
                     data: kmData,
                     borderColor: getColor('#388e3c', '#66bb6a'),
-                    backgroundColor: 'rgba(56, 142, 60, 0.1)',
-                    tension: 0.3,
-                    fill: true
+                    backgroundColor: getColor('#388e3c', '#66bb6a'),
+                    fill: typeKm === 'line',
+                    tension: typeKm === 'line' ? 0.3 : 0
                 }]
             },
             options: {
@@ -192,6 +198,13 @@ document.querySelectorAll('[data-days]').forEach(btn => {
         btn.classList.add('active');
         currentDays = parseInt(btn.getAttribute('data-days'), 10);
         loadStats();
+    });
+});
+
+// Event listeners for chart type selectors
+document.querySelectorAll('.chart-type-select').forEach(select => {
+    select.addEventListener('change', () => {
+        loadStats(); // Re-render with new type
     });
 });
 
