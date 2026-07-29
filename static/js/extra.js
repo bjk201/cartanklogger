@@ -3,6 +3,19 @@
 let currentExtraPage = 1;
 const PER_PAGE = 10;
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
+async function csrfFetch(url, opts = {}) {
+    const csrf = getCsrfToken();
+    opts.headers = opts.headers || {};
+    opts.headers['Content-Type'] = 'application/json';
+    opts.headers['X-CSRFToken'] = csrf;
+    opts.credentials = 'same-origin';
+    return fetch(url, opts);
+}
+
 async function loadExtra() {
     try {
         const resp = await fetch('/api/extra-costs', {credentials: "same-origin"});
@@ -58,8 +71,7 @@ function renderExtraTable(rows) {
                 category: row.cells[1].textContent,
                 description: row.cells[2].textContent,
                 amount: row.cells[3].textContent.replace(' €', ''),
-                odometer: row.cells[4].textContent,
-                note: ''
+                odometer: row.cells[4].textContent
             };
             openEditModal('extra', id, data);
         });
@@ -92,7 +104,6 @@ function openEditModal(type, id, data) {
     document.getElementById('amount').value = data.amount || '';
     document.getElementById('odometer').value = data.odometer || '';
     document.getElementById('note').value = data.note || '';
-    document.getElementById('csrfToken').value = getCsrfToken();
     
     // Show modal
     const bsModal = new bootstrap.Modal(modal);
@@ -116,38 +127,18 @@ document.getElementById('saveExtraBtn')?.addEventListener('click', async () => {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        if (!resp.ok) throw new Error('Speichern fehlgeschlagen');
         const result = await resp.json();
         if (result.ok) {
             const bsModal = bootstrap.Modal.getInstance(document.getElementById('addExtraModal'));
             bsModal.hide();
             loadExtra();
+        } else {
+            alert('Fehler: ' + (result.error || 'unbekannt'));
         }
     } catch (e) {
         alert('Fehler: ' + e.message);
     }
 });
-
-// CSRF helper
-async function csrfFetch(url, opts = {}) {
-    let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    if (!csrf) {
-        try {
-            const resp = await fetch('/api/csrf', {credentials: "same-origin"});
-            const data = await resp.json();
-            csrf = data.csrf_token;
-        } catch (e) {}
-    }
-    opts.headers = opts.headers || {};
-    opts.headers['Content-Type'] = 'application/json';
-    opts.headers['X-CSRFToken'] = csrf;
-    opts.credentials = 'same-origin';
-    return fetch(url, opts);
-}
-
-function getCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || '';
-}
 
 function fmtEUR(v) {
     if (v == null) return '–';
