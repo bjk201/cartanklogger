@@ -35,11 +35,18 @@ function safeGet(selector) {
 
 async function loadOverview() {
     try {
-        const params = buildApiParams(currentPageMerged);
+        // Use global date range from base.html if available
+        const days = typeof globalDateRange !== 'undefined' ? globalDateRange.days : 90;
+        const from = typeof globalDateRange !== 'undefined' ? globalDateRange.from : null;
+        const to = typeof globalDateRange !== 'undefined' ? globalDateRange.to : null;
+        
+        const paramsStats = from && to ? `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : `days=${days}`;
+        const paramsCharts = paramsStats;
+        
         const [merged, stats, chartsData] = await Promise.all([
-            fetch(`/api/merged?${params}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
-            fetch(`/api/stats?days=${currentDays}${currentFrom ? '&from=' + currentFrom + '&to=' + currentTo : ''}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {}, home: {}, external: {}, monthly: [] })),
-            fetch(`/api/charts?days=${currentDays}${currentFrom ? '&from=' + currentFrom + '&to=' + currentTo : ''}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [], kpis: {} }))
+            fetch(`/api/merged?days=${days}${from ? '&from=' + from + '&to=' + to : ''}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
+            fetch(`/api/stats?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {}, home: {}, external: {}, monthly: [] })),
+            fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [], kpis: {} }))
         ]);
 
         renderMergedTable(merged.rows || merged);
@@ -235,69 +242,67 @@ function renderCharts(chartsData, stats) {
 }
 
 function renderOverviewCharts(series, stats) {
-    // Extract data from series for the three main charts
-    // This is based on the API response structure from the working version
-    const consumptionSeries = series.find(s => s.name === 'Verbrauch') || { data: [] };
-    const costSeries = series.find(s => s.name === 'Kosten') || { data: [] };
-    const kmSeries = series.find(s => s.name === 'km') || { data: [] };
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded');
+        chartContainer.innerHTML = '<div class="text-center text-muted py-4">Chart.js nicht geladen</div>';
+        return;
+    }
 
-    // Simplified chart rendering - in a real implementation, you'd use Chart.js
+    // Extract daily data from series
+    const days = series.map(s => s.day).filter(d => d);
+    const consumptionData = series.map(s => s.consumption || s.kwh || 0);
+    const costData = series.map(s => s.cost || 0);
+    const kmData = series.map(s => s.km || 0);
+
+    // Helper to get color from CSS variable (dark mode aware)
+    const getColor = (light, dark) => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        return isDark ? dark : light;
+    };
+
+    // Create HTML structure with canvas elements
     const chartHtml = `
-        <div class="row">
+        <div class="row g-3">
             <div class="col-lg-4">
-                <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>Verbrauch (kWh/100km)</h5>
+                <div class="card chart-card h-100">
+                    <div class="card-header py-2">
+                        <h6 class mb-0">⚡ Verbrauch (kWh/100km)</h6>
                     </div>
-                    <div class="card-body">
-                        <div style="height: 250px; display: flex; align-items: center; justify-content: center;">
-                            <div style="text-align: center;">
-                                <div style="font-size: 2rem; font-weight: bold; color: #1976d2;">${stats?.totals?.consumption_kwh_per_100km?.toFixed(2) || '0.00'}</div>
-                                <div style="font-size: 0.9rem; color: #6c757d;">Durchschnitt</div>
-                                <div style="margin-top: 1rem; font-size: 0.85rem;">
-                                    <div>Min: ${Math.min(...(consumptionSeries.data || [])).toFixed(2)} kWh</div>
-                                    <div>Max: ${Math.max(...(consumptionSeries.data || [])).toFixed(2)} kWh</div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="card-body py-2">
+                        <canvas id="chartConsumption" height="180"></canvas>
                     </div>
                 </div>
             </div>
             <div class="col-lg-4">
-                <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>Kosten (€)</h5>
+                <div class="card chart-card h-100">
+                    <div class="card-header py-2">
+                        <h6 class mb-0">💶 Kosten (€)</h6>
                     </div>
-                    <div class="card-body">
-                        <div style="height: 250px; display: flex; align-items: center; justify-content: center;">
-                            <div style="text-align: center;">
-                                <div style="font-size: 2rem; font-weight: bold; color: #d32f2f;">${stats?.totals?.tco?.toFixed(2) || '0.00'}</div>
-                                <div style="font-size: 0.9rem; color: #6c757d;">Gesamt</div>
-                                <div style="margin-top: 1rem; font-size: 0.85rem;">
-                                    <div>Heute: ${stats?.totals?.today_cost?.toFixed(2) || '0.00'} €</div>
-                                    <div>PV-Anteil: ${stats?.totals?.pv_share_pct?.toFixed(1) || '0.0'}%</div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="card-body py-2">
+                        <canvas id="chartCost" height="180"></canvas>
                     </div>
                 </div>
             </div>
             <div class="col-lg-4">
-                <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>km (Tag)</h5>
+                <div class="card chart-card h-100">
+                    <div class="card-header py-2">
+                        <h6 class mb-0">🛣️ Kilometer (km)</h6>
                     </div>
-                    <div class="card-body">
-                        <div style="height: 250px; display: flex; align-items: center; justify-content: center;">
-                            <div style="text-align: center;">
-                                <div style="font-size: 2rem; font-weight: bold; color: #388e3c;">${stats?.totals?.daily_km?.toFixed(0) || '0'}</div>
-                                <div style="font-size: 0.9rem; color: #6c757d;">Durchschnitt</div>
-                                <div style="margin-top: 1rem; font-size: 0.85rem;">
-                                    <div>Min: ${Math.min(...(kmSeries.data || [])).toFixed(0)} km</div>
-                                    <div>Max: ${Math.max(...(kmSeries.data || [])).toFixed(0)} km</div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="card-body py-2">
+                        <canvas id="chartKm" height="180"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-3 mt-2">
+            <div class="col-12 col-lg-6">
+                <div class="card chart-card h-100">
+                    <div class="card-header py-2">
+                        <h6 class mb-0">🏠🔌 Home vs. Extern (kWh)</h6>
+                    </div>
+                    <div class="card-body py-2">
+                        <canvas id="chartHomeExtern" height="180"></canvas>
                     </div>
                 </div>
             </div>
@@ -305,6 +310,137 @@ function renderOverviewCharts(series, stats) {
     `;
 
     chartContainer.innerHTML = chartHtml;
+
+    // Get canvas elements
+    const canvasConsumption = document.getElementById('chartConsumption');
+    const canvasCost = document.getElementById('chartCost');
+    const canvasKm = document.getElementById('chartKm');
+    const canvasHomeExtern = document.getElementById('chartHomeExtern');
+
+    // Destroy existing charts to prevent memory leaks
+    if (charts.consumption) charts.consumption.destroy();
+    if (charts.cost) charts.cost.destroy();
+    if (charts.km) charts.km.destroy();
+    if (charts.homeExtern) charts.homeExtern.destroy();
+
+    // Create line chart for consumption
+    if (canvasConsumption) {
+        charts.consumption = new Chart(canvasConsumption, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Verbrauch (kWh)',
+                    data: consumptionData,
+                    borderColor: getColor('#1976d2', '#90caf9'),
+                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 7 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Create line chart for cost
+    if (canvasCost) {
+        charts.cost = new Chart(canvasCost, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Kosten (€)',
+                    data: costData,
+                    borderColor: getColor('#d32f2f', '#ef5350'),
+                    backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 7 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Create line chart for km
+    if (canvasKm) {
+        charts.km = new Chart(canvasKm, {
+            type: 'line',
+            data: {
+                labels: days,
+                datasets: [{
+                    label: 'Kilometer',
+                    data: kmData,
+                    borderColor: getColor('#388e3c', '#66bb6a'),
+                    backgroundColor: 'rgba(56, 142, 60, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 7 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Create pie/donut chart for Home vs Extern
+    if (canvasHomeExtern) {
+        const homeKwh = stats?.totals?.home_kwh || 0;
+        const extKwh = stats?.totals?.ext_kwh || 0;
+        const totalKwh = homeKwh + extKwh;
+        const homePct = totalKwh > 0 ? (homeKwh / totalKwh * 100) : 0;
+        const extPct = totalKwh > 0 ? (extKwh / totalKwh * 100) : 0;
+
+        charts.homeExtern = new Chart(canvasHomeExtern, {
+            type: 'doughnut',
+            data: {
+                labels: ['Zuhause', 'Extern'],
+                datasets: [{
+                    data: [homeKwh, extKwh],
+                    backgroundColor: [getColor('#4CAF50', '#81c784'), getColor('#2196F3', '#64b5f6')],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                return `${label}: ${value.toFixed(1)} kWh (${(value/totalKwh*100).toFixed(1)}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 function updateRangeLabel() {

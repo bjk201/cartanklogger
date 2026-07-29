@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<header class="app-header fixed-top">
+<header class="app-header fixed-top" style="background: var(--bs-body-bg) !important; z-index: 1050;">
   <div class="container-fluid px-3">
     <div class="d-flex align-items-center justify-content-between py-1 flex-wrap gap-1">
       <span class="navbar-brand mb-0 ps-0">⚡ CarTankLogger</span>
@@ -32,7 +32,7 @@
       
       <div class="d-flex align-items-center gap-1 order-md-2">
         <div class="d-none d-sm-flex align-items-center gap-1 pe-1" id="globalDateRange">
-          <span class="text-muted small" id="globalRangeLabel">Letzte 365 Tage</span>
+          <span class="text-muted small range-label" id="globalRangeLabel">Letzte 365 Tage</span>
           <div class="btn-group btn-group-sm" role="group">
             <button class="btn btn-outline-secondary" data-days="7">7 Tage</button>
             <button class="btn btn-outline-secondary active" data-days="30">30 Tage</button>
@@ -98,6 +98,12 @@ function initTheme() {
   const themeToggleMobile = document.getElementById('themeToggleMobile');
   const themeIconMobile = document.getElementById('themeIconMobile');
   const themeLabelMobile = document.getElementById('themeLabelMobile');
+  
+  // Load theme from localStorage on page load
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
   
   // Already set by inline script in head, just update UI
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
