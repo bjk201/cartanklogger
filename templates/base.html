@@ -11,6 +11,15 @@
 <body>
 
 <header class="app-header fixed-top" style="background: var(--bs-body-bg) !important; z-index: 1050;">
+  <!-- Dark mode override: force dark background -->
+  <style>
+    html[data-theme="dark"] .app-header {
+      background: #212529 !important;
+    }
+    html[data-theme="dark"] .app-header * {
+      color: #ffffff !important;
+    }
+  </style>
   <div class="container-fluid px-3">
     <div class="d-flex align-items-center justify-content-between py-1 flex-wrap gap-1">
       <span class="navbar-brand mb-0 ps-0">⚡ CarTankLogger</span>
