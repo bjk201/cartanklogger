@@ -139,10 +139,12 @@ function renderCharts(chartsData, stats) {
     }
 
     const days = series.map(s => s.day).filter(d => d);
-    const consumptionData = series.map(s => s.consumption || s.kwh || 0);
-    const costData = series.map(s => s.cost || 0);
-    const kmData = series.map(s => s.km || 0);
-    const priceData = series.map(s => s.price_per_kwh || 0);
+    // Verbrauch: verwende kwh falls consumption null ist
+    const consumptionData = series.map(s => s.consumption ?? s.kwh ?? 0);
+    const costData = series.map(s => s.cost ?? 0);
+    // Kilometer: verwende cum_km (kumuliert) falls km 0 ist
+    const kmData = series.map(s => s.km > 0 ? s.km : (s.cum_km ?? 0));
+    const priceData = series.map(s => s.price_per_kwh ?? 0);
     
     // Stats values for Home/Extern
     const homeKwh = stats.home_kwh || stats.kwh || 0;
