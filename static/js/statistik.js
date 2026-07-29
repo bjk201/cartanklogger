@@ -1,4 +1,4 @@
-// statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen und Typ-Wechsel
+// statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen
 
 let currentDays = 30;
 let charts = {};
@@ -9,7 +9,7 @@ function getCurrentDays() {
 }
 
 async function loadStats() {
-    console.log('Loading stats data...');
+    console.log('Loading stats data...', { days: getCurrentDays() });
     const days = getCurrentDays();
     
     try {
@@ -19,12 +19,18 @@ async function loadStats() {
         const chartsResp = await fetch(`/api/charts?days=${days}`, {credentials: "same-origin"});
         const chartsData = await chartsResp.json();
         
+        console.log('Stats data:', statsData);
+        console.log('Charts data:', chartsData?.series?.length, 'entries');
+        
         renderKPIs(statsData.totals || {});
         renderCharts(chartsData, statsData);
         updateRangeLabel();
     } catch (e) {
         console.error('Stats load error:', e);
-        document.getElementById('statsKpis').innerHTML = '<div class="col-12"><div class="card"><div class="card-body text-center py-4 text-muted">Fehler beim Laden der Daten</div></div></div>';
+        const kpiEl = document.getElementById('statsKpis');
+        if (kpiEl) {
+            kpiEl.innerHTML = '<div class="col-12"><div class="card"><div class="card-body text-center py-4 text-muted">Fehler beim Laden der Daten</div></div></div>';
+        }
     }
 }
 
@@ -47,7 +53,7 @@ function renderKPIs(totals) {
     ];
     
     kpiEl.innerHTML = kpis.map(kpi => `
-        <div class="col-md-4 col-lg-2">
+        <div class="col-12 col-sm-6 col-md-2">
             <div class="card kpi-card h-100">
                 <div class="card-body">
                     <div class="kpi-value" style="color: #667eea; font-weight: 700;">
@@ -61,17 +67,41 @@ function renderKPIs(totals) {
 }
 
 function renderCharts(chartsData, stats) {
-    if (typeof Chart === 'undefined') return;
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded');
+        return;
+    }
     
     const series = chartsData?.series || [];
-    if (!series || series.length === 0) return;
+    if (!series || series.length === 0) {
+        console.warn('No chart data');
+        return;
+    }
     
-    const days = series.map(s => s.day).filter(d => d);
-    const consumptionData = series.map(s => s.consumption || s.kwh || 0);
-    const costData = series.map(s => s.cost || 0);
-    const kmData = series.map(s => s.km || 0);
-    const priceData = series.map(s => s.price_per_kwh || 0);
+    const days = series.map(s => s.day || '').filter(d => d);
     
+    // Verbrauch: verwende kwh falls consumption null/undefined ist
+    const consumptionData = series.map(s => {
+        const val = s.consumption ?? s.kwh;
+        return val != null ? Number(val) : 0;
+    });
+    
+    const costData = series.map(s => {
+        const val = s.cost;
+        return val != null ? Number(val) : 0;
+    });
+    
+    // Kilometer: verwende cum_km (kumuliert) falls km 0 oder null ist
+    const kmData = series.map(s => {
+        if (s.km != null && Number(s.km) > 0) return Number(s.km);
+        return s.cum_km != null ? Number(s.cum_km) : 0;
+    });
+    
+    const priceData = series.map(s => {
+        const val = s.price_per_kwh;
+        return val != null ? Number(val) : 0;
+    });
+
     const getColor = (light, dark) => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         return isDark ? dark : light;
@@ -85,10 +115,15 @@ function renderCharts(chartsData, stats) {
         }
     });
     
+    // Get chart types from dropdowns
+    const typeCons = document.querySelector('.chart-type-select[data-chart="chartCons"]')?.value || 'line';
+    const typePrice = document.querySelector('.chart-type-select[data-chart="chartPrice"]')?.value || 'line';
+    const typeCost = document.querySelector('.chart-type-select[data-chart="chartCost100"]')?.value || 'line';
+    const typeKm = document.querySelector('.chart-type-select[data-chart="chartKm"]')?.value || 'line';
+    
     // Consumption Chart
     const canvasCons = document.getElementById('chartCons');
-    const typeCons = document.querySelector('.chart-type-select[data-chart="chartCons"]')?.value || 'line';
-    if (canvasCons) {
+    if (canvasCons && days.length > 0) {
         charts.chartCons = new Chart(canvasCons, {
             type: typeCons,
             data: {
@@ -113,8 +148,7 @@ function renderCharts(chartsData, stats) {
     
     // Price Chart
     const canvasPrice = document.getElementById('chartPrice');
-    const typePrice = document.querySelector('.chart-type-select[data-chart="chartPrice"]')?.value || 'line';
-    if (canvasPrice) {
+    if (canvasPrice && days.length > 0) {
         charts.chartPrice = new Chart(canvasPrice, {
             type: typePrice,
             data: {
@@ -139,9 +173,12 @@ function renderCharts(chartsData, stats) {
     
     // Cost per 100km Chart
     const canvasCost = document.getElementById('chartCost100');
-    const typeCost = document.querySelector('.chart-type-select[data-chart="chartCost100"]')?.value || 'line';
-    if (canvasCost) {
-        const costPer100 = series.map(s => s.kwh > 0 ? (s.cost || 0) / s.kwh * 100 : 0);
+    if (canvasCost && days.length > 0) {
+        const costPer100 = series.map((s, i) => {
+            const kwh = consumptionData[i] || 0;
+            const cost = costData[i] || 0;
+            return kwh > 0 ? cost / kwh * 100 : 0;
+        });
         charts.chartCost100 = new Chart(canvasCost, {
             type: typeCost,
             data: {
@@ -166,8 +203,7 @@ function renderCharts(chartsData, stats) {
     
     // KM Chart
     const canvasKm = document.getElementById('chartKm');
-    const typeKm = document.querySelector('.chart-type-select[data-chart="chartKm"]')?.value || 'line';
-    if (canvasKm) {
+    if (canvasKm && days.length > 0) {
         charts.chartKm = new Chart(canvasKm, {
             type: typeKm,
             data: {

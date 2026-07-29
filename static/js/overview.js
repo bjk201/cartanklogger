@@ -41,7 +41,11 @@ async function loadOverview() {
             fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
         ]);
 
-        console.log('API responses:', { merged: merged?.rows?.length, stats: stats?.totals, charts: chartsData?.series?.length });
+        console.log('API responses:', { 
+            merged: merged?.rows?.length, 
+            stats: stats?.totals ? 'present' : 'empty',
+            charts: chartsData?.series?.length 
+        });
 
         renderMergedTable(merged.rows || merged);
         renderPaginationMerged(merged.pagination?.total || 0);
@@ -68,10 +72,10 @@ function renderMergedTable(rows) {
             <td>${r.stations || '–'}</td>
             <td>${fmtKwh(r.home_kwh)}</td>
             <td>${fmtEUR(r.home_cost)}</td>
-            <td>${r.home_solar_pct ? fmtPct(r.home_solar_pct) : '–'}</td>
-            <td>${r.home_loss ? fmtKwh(r.home_loss) : '–'}</td>
-            <td>${r.ext_kwh ? fmtKwh(r.ext_kwh) : '–'}</td>
-            <td>${r.ext_cost ? fmtEUR(r.ext_cost) : '–'}</td>
+            <td>${r.home_solar_pct != null ? fmtPct(r.home_solar_pct) : '–'}</td>
+            <td>${r.home_loss != null ? fmtKwh(r.home_loss) : '–'}</td>
+            <td>${r.ext_kwh != null ? fmtKwh(r.ext_kwh) : '–'}</td>
+            <td>${r.ext_cost != null ? fmtEUR(r.ext_cost) : '–'}</td>
             <td><strong>${fmtKwh(r.total_kwh)}</strong></td>
             <td><strong>${fmtEUR(r.total_cost)}</strong></td>
             <td><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#m${i}">▾</button></td>
@@ -86,12 +90,12 @@ function buildDetail(r) {
     if (!r) return '';
     return `
         <div class="row mb-2">
-            <div class="col-md-4"><strong>EVCC:</strong> ${fmtKwh(r.evcc_kwh || 0)} kWh (${fmtEUR(r.evcc_cost || 0)})</div>
-            <div class="col-md-4"><strong>TeslaMate:</strong> ${fmtKwh(r.teslamate_kwh || 0)} kWh (${fmtEUR(r.teslamate_cost || 0)})</div>
-            <div class="col-md-4"><strong>Plus:</strong> ${fmtKwh(r.extra_kwh || 0)} (${fmtEUR(r.extra || 0)})</div>
-            <div class="col-md-4"><strong>PV-Anteil:</strong> ${r.home_solar_pct ? fmtPct(r.home_solar_pct) : '–'}</div>
-            <div class="col-md-4"><strong>Range:</strong> ${r.range_km || 0} km</div>
-            <div class="col-md-4"><strong>EVCC-Radius:</strong> ${r.evcc_range || 0} km</div>
+            <div class="col-md-4"><strong>EVCC:</strong> ${fmtKwh(r.evcc_kwh)} kWh (${fmtEUR(r.evcc_cost)})</div>
+            <div class="col-md-4"><strong>TeslaMate:</strong> ${fmtKwh(r.teslamate_kwh)} kWh (${fmtEUR(r.teslamate_cost)})</div>
+            <div class="col-md-4"><strong>Plus:</strong> ${fmtKwh(r.extra_kwh)} (${fmtEUR(r.extra)})</div>
+            <div class="col-md-4"><strong>PV-Anteil:</strong> ${r.home_solar_pct != null ? fmtPct(r.home_solar_pct) : '–'}</div>
+            <div class="col-md-4"><strong>Range:</strong> ${r.range_km} km</div>
+            <div class="col-md-4"><strong>EVCC-Radius:</strong> ${r.evcc_range} km</div>
         </div>
     `;
 }
@@ -130,7 +134,10 @@ function renderKPIs(stats, rows) {
 }
 
 function renderCharts(chartsData, stats) {
-    if (typeof Chart === 'undefined') return;
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded');
+        return;
+    }
 
     const series = chartsData?.series || [];
     if (!series || series.length === 0) {
@@ -138,13 +145,29 @@ function renderCharts(chartsData, stats) {
         return;
     }
 
-    const days = series.map(s => s.day).filter(d => d);
-    // Verbrauch: verwende kwh falls consumption null ist
-    const consumptionData = series.map(s => s.consumption ?? s.kwh ?? 0);
-    const costData = series.map(s => s.cost ?? 0);
-    // Kilometer: verwende cum_km (kumuliert) falls km 0 ist
-    const kmData = series.map(s => s.km > 0 ? s.km : (s.cum_km ?? 0));
-    const priceData = series.map(s => s.price_per_kwh ?? 0);
+    const days = series.map(s => s.day || '').filter(d => d);
+    
+    // Verbrauch: verwende kwh falls consumption null/undefined ist
+    const consumptionData = series.map(s => {
+        const val = s.consumption ?? s.kwh;
+        return val != null ? Number(val) : 0;
+    });
+    
+    const costData = series.map(s => {
+        const val = s.cost;
+        return val != null ? Number(val) : 0;
+    });
+    
+    // Kilometer: verwende cum_km (kumuliert) falls km 0 oder null ist
+    const kmData = series.map(s => {
+        if (s.km != null && Number(s.km) > 0) return Number(s.km);
+        return s.cum_km != null ? Number(s.cum_km) : 0;
+    });
+    
+    const priceData = series.map(s => {
+        const val = s.price_per_kwh;
+        return val != null ? Number(val) : 0;
+    });
     
     // Stats values for Home/Extern
     const homeKwh = stats.home_kwh || stats.kwh || 0;
@@ -160,7 +183,7 @@ function renderCharts(chartsData, stats) {
 
     // Consumption Chart
     const canvasConsumption = document.getElementById('chartConsumption');
-    if (canvasConsumption) {
+    if (canvasConsumption && days.length > 0) {
         const avgConsumption = consumptionData.reduce((a, b) => a + b, 0) / consumptionData.length;
         charts.consumption = new Chart(canvasConsumption, {
             type: 'line',
@@ -195,7 +218,7 @@ function renderCharts(chartsData, stats) {
 
     // Cost Chart
     const canvasCost = document.getElementById('chartCost');
-    if (canvasCost) {
+    if (canvasCost && days.length > 0) {
         const avgCost = costData.reduce((a, b) => a + b, 0) / costData.length;
         charts.cost = new Chart(canvasCost, {
             type: 'line',
@@ -223,7 +246,8 @@ function renderCharts(chartsData, stats) {
 
     // KM Chart
     const canvasKm = document.getElementById('chartKm');
-    if (canvasKm) {
+    if (canvasKm && days.length > 0) {
+        const totalKm = kmData.reduce((a, b) => a + b, 0);
         charts.km = new Chart(canvasKm, {
             type: 'line',
             data: {
@@ -245,7 +269,7 @@ function renderCharts(chartsData, stats) {
             }
         });
         const badge = document.getElementById('totalKmBadge');
-        if (badge) badge.textContent = `Σ ${kmData.reduce((a, b) => a + b, 0).toLocaleString('de-DE')}`;
+        if (badge) badge.textContent = `Σ ${totalKm.toLocaleString('de-DE')}`;
     }
 
     // Home/Extern Donut
@@ -308,9 +332,23 @@ function updateRangeLabel() {
     else labelEl.textContent = `Letzte ${days} Tage`;
 }
 
-function fmtKwh(v) { return typeof v === 'number' ? v.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' kWh' : v || '–'; }
-function fmtEUR(v) { return typeof v === 'number' ? v.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' €' : v || '–'; }
-function fmtPct(v) { return typeof v === 'number' ? v.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + '%' : v || '–'; }
+function fmtKwh(v) { 
+    if (v == null) return '–';
+    if (typeof v === 'number') return v.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' kWh';
+    return v;
+}
+
+function fmtEUR(v) { 
+    if (v == null) return '–';
+    if (typeof v === 'number') return v.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' €';
+    return v;
+}
+
+function fmtPct(v) { 
+    if (v == null) return '–';
+    if (typeof v === 'number') return v.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + '%';
+    return v;
+}
 
 window.loadOverview = loadOverview;
 
