@@ -1,16 +1,13 @@
 {% extends "base.html" %}
 {% block title %}CarTankLogger – Übersicht{% endblock %}
 {% block content %}
-<!-- ===== ZEILE 1: 5 KPIs (volle Breite, responsive) ===== -->
+<!-- ===== ZEILE 1: 5 KPIs in einer Reihe (Desktop) ===== -->
 <div class="row g-2 mb-3" id="summaryCards"></div>
 
-<!-- ===== ZEILE 2: Chart-Container ===== -->
-<div id="chartContainer" class="row g-0 mb-3"></div>
-
-<!-- ===== ZEILE 3: Analyse-Bereich (Charts + Donut + Heatmaps) ===== -->
-<div class="dashboard-analysis" id="analysisArea">
-  <!-- Linke Spalte: 3 Zeitreihen-Charts übereinander -->
-  <div class="col-12 col-lg-6">
+<!-- ===== ZEILE 2: Charts und Home/Extern ===== -->
+<div class="row g-3">
+  <!-- Linke Spalte: 3 Charts übereinander + Heatmaps darunter -->
+  <div class="col-12 col-lg-8">
     <!-- Verbrauch Chart -->
     <div class="card dashboard-card chart-card mb-3">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
@@ -45,27 +42,27 @@
     </div>
   </div>
 
-  <!-- Rechte Spalte: Donut oben, 2 Heatmaps unten -->
-  <div class="col-12 col-lg-6">
-    <!-- Home vs. Extern -->
+  <!-- Rechte Spalte: Home/Extern Donut + Heatmaps ===== -->
+  <div class="col-12 col-lg-4">
+    <!-- Home vs. Extern Donut -->
     <div class="card dashboard-card split-card mb-3">
       <div class="card-header py-2">
         <span class="fw-medium">🏠🔌 Home vs. Extern (kWh)</span>
       </div>
-      <div class="card-body p-0">
-        <div class="row g-0 align-items-center">
-          <div class="col-5 text-end pe-3">
+      <div class="card-body p-2">
+        <div class="text-center">
+          <canvas id="chartHomeExtern" style="width: 100px; height: 100px; margin: 0 auto;"></canvas>
+        </div>
+        <div class="row text-center mt-2">
+          <div class="col-6">
             <div class="small text-muted">Zuhause</div>
-            <div class="h5 mb-1" id="homeKwh">– kWh</div>
+            <div class="h6 mb-1" id="homeKwh">– kWh</div>
             <div class="small"><span id="homePct">–%</span></div>
             <div class="small text-muted" id="homePrice">Ø – €/kWh</div>
           </div>
-          <div class="col-2 d-flex align-items-center justify-content-center">
-            <canvas id="chartHomeExtern" style="width: 80px; height: 80px;"></canvas>
-          </div>
-          <div class="col-5 ps-3">
+          <div class="col-6">
             <div class="small text-muted">Extern</div>
-            <div class="h5 mb-1" id="extKwh">– kWh</div>
+            <div class="h6 mb-1" id="extKwh">– kWh</div>
             <div class="small"><span id="extPct">–%</span></div>
             <div class="small text-muted" id="extPrice">Ø – €/kWh</div>
           </div>
@@ -73,34 +70,27 @@
       </div>
     </div>
 
-    <!-- UNTEN: 2 Heatmaps nebeneinander -->
-    <div class="row g-2">
-      <!-- Heatmap links: Verbrauch / Temperatur -->
-      <div class="col-12 col-md-6">
-        <div class="card dashboard-card heatmap-card">
-          <div class="card-header py-2 d-flex align-items-center justify-content-between">
-            <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
-            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
-          </div>
-          <div class="card-body py-2">
-            <canvas id="heatmapTempConsumption" style="height: 180px;"></canvas>
-            <div class="mt-2 small" id="legendTempConsumption"></div>
-          </div>
-        </div>
+    <!-- Heatmap 1: Verbrauch / Temperatur -->
+    <div class="card dashboard-card heatmap-card mb-3">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
+        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Temperatur & Verbrauch über die Zeit"><i class="bi bi-info-circle"></i></button>
       </div>
+      <div class="card-body py-2">
+        <canvas id="heatmapTempConsumption" style="height: 150px;"></canvas>
+        <div class="mt-2 small" id="legendTempConsumption"></div>
+      </div>
+    </div>
 
-      <!-- Heatmap rechts: Verbrauch / Wochentag -->
-      <div class="col-12 col-md-6">
-        <div class="card dashboard-card heatmap-card">
-          <div class="card-header py-2 d-flex align-items-center justify-content-between">
-            <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
-            <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
-          </div>
-          <div class="card-body py-2">
-            <canvas id="heatmapWeekdayConsumption" style="height: 180px;"></canvas>
-            <div class="mt-2 small" id="legendWeekdayConsumption"></div>
-          </div>
-        </div>
+    <!-- Heatmap 2: Verbrauch / Wochentag -->
+    <div class="card dashboard-card heatmap-card mb-3">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
+        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Verbrauch nach Wochentagen"><i class="bi bi-info-circle"></i></button>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="heatmapWeekdayConsumption" style="height: 150px;"></canvas>
+        <div class="mt-2 small" id="legendWeekdayConsumption"></div>
       </div>
     </div>
   </div>

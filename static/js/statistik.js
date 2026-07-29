@@ -1,18 +1,6 @@
 // statistik.js - Statistik Seite mit vollständigen Chart-Implementierungen
 
 let currentDays = 30;
-let currentFrom = null;
-let currentTo = null;
-
-// Chart instances
-let charts = {
-    chartCons: null,
-    chartPrice: null,
-    chartCost100: null,
-    chartKm: null,
-    heatmapTemp: null,
-    heatmapWeekday: null
-};
 
 function getCurrentDays() {
     const activeBtn = document.querySelector('[data-days].active');
@@ -21,27 +9,18 @@ function getCurrentDays() {
 
 async function loadStats() {
     console.log('Loading stats data...');
-    
     const days = getCurrentDays();
     
     try {
-        // Load stats data
         const statsResp = await fetch(`/api/stats?days=${days}`, {credentials: "same-origin"});
         const statsData = await statsResp.json();
         
-        // Load charts data
         const chartsResp = await fetch(`/api/charts?days=${days}`, {credentials: "same-origin"});
         const chartsData = await chartsResp.json();
         
-        // Load price data
-        const pricesResp = await fetch(`/api/price-periods`, {credentials: "same-origin"});
-        const pricesData = await pricesResp.json();
-        
         renderKPIs(statsData.totals || {});
         renderCharts(chartsData, statsData);
-        renderHeatmaps(chartsData);
         updateRangeLabel();
-        
     } catch (e) {
         console.error('Stats load error:', e);
         document.getElementById('statsKpis').innerHTML = '<div class="col-12"><div class="card"><div class="card-body text-center py-4 text-muted">Fehler beim Laden der Daten</div></div></div>';
@@ -71,7 +50,7 @@ function renderKPIs(totals) {
             <div class="card kpi-card h-100">
                 <div class="card-body">
                     <div class="kpi-value" style="color: #667eea; font-weight: 700;">
-                        ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 2}) : kpi.value} ${kpi.suffix}
+                        ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 1}) : kpi.value} ${kpi.suffix}
                     </div>
                     <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
                 </div>
@@ -81,16 +60,10 @@ function renderKPIs(totals) {
 }
 
 function renderCharts(chartsData, stats) {
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js not loaded');
-        return;
-    }
+    if (typeof Chart === 'undefined') return;
     
     const series = chartsData?.series || [];
-    if (!series || series.length === 0) {
-        console.warn('No chart data available');
-        return;
-    }
+    if (!series || series.length === 0) return;
     
     const days = series.map(s => s.day).filter(d => d);
     const consumptionData = series.map(s => s.consumption || s.kwh || 0);
@@ -104,12 +77,16 @@ function renderCharts(chartsData, stats) {
     };
     
     // Destroy existing charts
-    Object.values(charts).forEach(c => c && c.destroy());
+    ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(id => {
+        if (Chart.getChart(document.getElementById(id))) {
+            Chart.getChart(document.getElementById(id)).destroy();
+        }
+    });
     
     // Consumption Chart
     const canvasCons = document.getElementById('chartCons');
     if (canvasCons) {
-        charts.chartCons = new Chart(canvasCons, {
+        new Chart(canvasCons, {
             type: 'line',
             data: {
                 labels: days,
@@ -134,7 +111,7 @@ function renderCharts(chartsData, stats) {
     // Price Chart
     const canvasPrice = document.getElementById('chartPrice');
     if (canvasPrice) {
-        charts.chartPrice = new Chart(canvasPrice, {
+        new Chart(canvasPrice, {
             type: 'line',
             data: {
                 labels: days,
@@ -160,7 +137,7 @@ function renderCharts(chartsData, stats) {
     const canvasCost = document.getElementById('chartCost100');
     if (canvasCost) {
         const costPer100 = series.map(s => s.kwh > 0 ? (s.cost || 0) / s.kwh * 100 : 0);
-        charts.chartCost100 = new Chart(canvasCost, {
+        new Chart(canvasCost, {
             type: 'line',
             data: {
                 labels: days,
@@ -182,10 +159,10 @@ function renderCharts(chartsData, stats) {
         });
     }
     
-    // Kilometer Chart
+    // KM Chart
     const canvasKm = document.getElementById('chartKm');
     if (canvasKm) {
-        charts.chartKm = new Chart(canvasKm, {
+        new Chart(canvasKm, {
             type: 'line',
             data: {
                 labels: days,
@@ -208,96 +185,12 @@ function renderCharts(chartsData, stats) {
     }
 }
 
-function renderHeatmaps(data) {
-    const series = data?.series || [];
-    if (!series || series.length === 0) return;
-    
-    renderTempHeatmap(series);
-    renderWeekdayHeatmap(series);
-}
-
-function renderTempHeatmap(series) {
-    const canvas = document.getElementById('heatmapTempConsumption');
-    if (!canvas) return;
-    
-    if (charts.heatmapTemp) charts.heatmapTemp.destroy();
-    
-    const data = series.slice(-14).reverse();
-    const labels = data.map(s => s.day || '');
-    const kwhValues = data.map(s => s.kwh || 0);
-    
-    charts.heatmapTemp = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'kWh',
-                data: kwhValues,
-                backgroundColor: kwhValues.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
-                borderColor: '#fff',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { title: { text: 'Datum' }, ticks: { maxRotation: 45, minRotation: 45 } }, y: { title: { text: 'kWh' }, beginAtZero: true } }
-        }
-    });
-    
-    const legendEl = document.getElementById('legendTempConsumption');
-    if (legendEl) {
-        const avgKwh = kwhValues.reduce((a, b) => a + b, 0) / kwhValues.length;
-        legendEl.textContent = `Ø: ${avgKwh.toFixed(1)} kWh`;
-    }
-}
-
-function renderWeekdayHeatmap(series) {
-    const canvas = document.getElementById('heatmapWeekdayConsumption');
-    if (!canvas) return;
-    
-    if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
-    
-    const weekdayData = Array(7).fill(0);
-    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    
-    series.forEach(s => {
-        const date = new Date(s.day);
-        if (!isNaN(date.getTime())) {
-            weekdayData[date.getDay()] += s.kwh || 0;
-        }
-    });
-    
-    charts.heatmapWeekday = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: dayNames,
-            datasets: [{
-                label: 'kWh',
-                data: weekdayData,
-                backgroundColor: weekdayData.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
-                borderColor: '#fff',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { title: { text: 'Wochentag' } }, y: { title: { text: 'kWh' }, beginAtZero: true } }
-        }
-    });
-}
-
 // Event listeners for day buttons
 document.querySelectorAll('[data-days]').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentDays = parseInt(btn.getAttribute('data-days'), 10);
-        currentFrom = null;
-        currentTo = null;
         loadStats();
     });
 });
@@ -305,26 +198,17 @@ document.querySelectorAll('[data-days]').forEach(btn => {
 // Global range listener
 window.addEventListener('globalRangeChange', (e) => {
     const params = e.detail;
-    if (params.startsWith('from=')) {
-        const urlParams = new URLSearchParams(params);
-        currentFrom = urlParams.get('from');
-        currentTo = urlParams.get('to');
-        currentDays = 365;
-    } else {
-        const urlParams = new URLSearchParams(params);
-        currentDays = parseInt(urlParams.get('days'), 10);
-        currentFrom = null;
-        currentTo = null;
-        document.querySelectorAll('[data-days]').forEach(b => {
-            if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
-                b.classList.add('active');
-            } else {
-                b.classList.remove('active');
-            }
-        });
-    }
+    const urlParams = new URLSearchParams(params);
+    currentDays = parseInt(urlParams.get('days'), 10);
+    document.querySelectorAll('[data-days]').forEach(b => {
+        if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
+            b.classList.add('active');
+        } else {
+            b.classList.remove('active');
+        }
+    });
     loadStats();
 });
 
-// Initialize
+// Init
 document.addEventListener('DOMContentLoaded', loadStats);

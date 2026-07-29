@@ -28,17 +28,10 @@
     <div class="card dashboard-card stats-chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span>⚡ Verbrauch (kWh/100 km)</span>
-        <div class="chart-controls">
-          <select class="chart-type-select" data-chart="chartCons">
-            <option value="line">Linie</option>
-            <option value="bar">Balken</option>
-          </select>
-          <select class="average-mode-select" data-chart="chartCons">
-            <option value="mean">Ø Zeitraum</option>
-            <option value="moving">Gleitender Ø</option>
-            <option value="off">Ohne Ø</option>
-          </select>
-        </div>
+        <select class="chart-type-select" data-chart="chartCons">
+          <option value="line">Linie</option>
+          <option value="bar">Balken</option>
+        </select>
       </div>
       <div class="card-body py-2">
         <canvas id="chartCons"></canvas>
@@ -51,17 +44,10 @@
     <div class="card dashboard-card stats-chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span>💶 Energiepreis (€/kWh)</span>
-        <div class="chart-controls">
-          <select class="chart-type-select" data-chart="chartPrice">
-            <option value="line">Linie</option>
-            <option value="bar">Balken</option>
-          </select>
-          <select class="average-mode-select" data-chart="chartPrice">
-            <option value="mean">Ø Zeitraum</option>
-            <option value="moving">Gleitender Ø</option>
-            <option value="off">Ohne Ø</option>
-          </select>
-        </div>
+        <select class="chart-type-select" data-chart="chartPrice">
+          <option value="line">Linie</option>
+          <option value="bar">Balken</option>
+        </select>
       </div>
       <div class="card-body py-2">
         <canvas id="chartPrice"></canvas>
@@ -74,17 +60,10 @@
     <div class="card dashboard-card stats-chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span>💡 Kosten (€/100 km)</span>
-        <div class="chart-controls">
-          <select class="chart-type-select" data-chart="chartCost100">
-            <option value="line">Linie</option>
-            <option value="bar">Balken</option>
-          </select>
-          <select class="average-mode-select" data-chart="chartCost100">
-            <option value="mean">Ø Zeitraum</option>
-            <option value="moving">Gleitender Ø</option>
-            <option value="off">Ohne Ø</option>
-          </select>
-        </div>
+        <select class="chart-type-select" data-chart="chartCost100">
+          <option value="line">Linie</option>
+          <option value="bar">Balken</option>
+        </select>
       </div>
       <div class="card-body py-2">
         <canvas id="chartCost100"></canvas>
@@ -97,49 +76,13 @@
     <div class="card dashboard-card stats-chart-card">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <span>🛣️ Kilometer (kumuliert)</span>
-        <div class="chart-controls">
-          <select class="chart-type-select" data-chart="chartKm">
-            <option value="line">Linie</option>
-            <option value="bar">Balken</option>
-          </select>
-          <select class="average-mode-select" data-chart="chartKm">
-            <option value="mean">Ø Zeitraum</option>
-            <option value="moving">Gleitender Ø</option>
-            <option value="off">Ohne Ø</option>
-          </select>
-        </div>
+        <select class="chart-type-select" data-chart="chartKm">
+          <option value="line">Linie</option>
+          <option value="bar">Balken</option>
+        </select>
       </div>
       <div class="card-body py-2">
         <canvas id="chartKm"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== Heatmap Grid ===== -->
-<div class="row g-3 mt-3">
-  <div class="col-12 col-md-6">
-    <div class="card dashboard-card heatmap-card">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
-        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
-      </div>
-      <div class="card-body py-2">
-        <canvas id="heatmapTempConsumption" style="height: 180px;"></canvas>
-        <div class="mt-2 small" id="legendTempConsumption"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-6">
-    <div class="card dashboard-card heatmap-card">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
-        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
-      </div>
-      <div class="card-body py-2">
-        <canvas id="heatmapWeekdayConsumption" style="height: 180px;"></canvas>
-        <div class="mt-2 small" id="legendWeekdayConsumption"></div>
       </div>
     </div>
   </div>
