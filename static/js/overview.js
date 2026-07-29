@@ -1,10 +1,10 @@
 // overview.js - Übersichtsseite (Dashboard mit 5 KPIs, 3 Charts links, Donut + 2 Heatmaps rechts)
-// Refactored from version 9857467, the last working version before MD3 changes
+// Refactored for full Chart.js rendering
 let currentDays = 90;
 let currentFrom = null;
 let currentTo = null;
 let currentPageMerged = 1;
-const PER_PAGE = 20;
+const PER_PAGE = 10;
 
 // Chart instances for cleanup
 let charts = {
@@ -15,16 +15,6 @@ let charts = {
     heatmapTemp: null,
     heatmapWeekday: null
 };
-
-function buildApiParams(page) {
-    if (typeof getGlobalRangeParams === 'function') {
-        return getGlobalRangeParams() + `&page=${page}&per_page=${PER_PAGE}`;
-    }
-    if (currentFrom && currentTo) {
-        return `from=${currentFrom}&to=${currentTo}&page=${page}&per_page=${PER_PAGE}`;
-    }
-    return `days=${currentDays}&page=${page}&per_page=${PER_PAGE}`;
-}
 
 // Defensive DOM helpers - ensure all getElementById calls are safe
 function safeGet(selector) {
@@ -42,9 +32,10 @@ async function loadOverview() {
         
         const paramsStats = from && to ? `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : `days=${days}`;
         const paramsCharts = paramsStats;
+        const paramsMerged = `days=${days}${from ? '&from=' + from + '&to=' + to : ''}&page=${currentPageMerged}&per_page=${PER_PAGE}`;
         
         const [merged, stats, chartsData] = await Promise.all([
-            fetch(`/api/merged?days=${days}${from ? '&from=' + from + '&to=' + to : ''}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
+            fetch(`/api/merged?${paramsMerged}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
             fetch(`/api/stats?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {}, home: {}, external: {}, monthly: [] })),
             fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [], kpis: {} }))
         ]);
@@ -223,33 +214,19 @@ function renderKPIs(stats, rows) {
 }
 
 function renderCharts(chartsData, stats) {
-    const chartContainer = safeGet('#chartContainer');
-    if (!chartContainer) return;
-
-    // Clear existing charts
-    chartContainer.innerHTML = '';
-
-    // Use the charts data from the API
-    const series = chartsData?.series || chartsData?.data?.series || [];
-
-    if (!series || series.length === 0) {
-        chartContainer.innerHTML = '<div class="text-center text-muted py-4">Keine Chart-Daten verfügbar</div>';
-        return;
-    }
-
-    // Render chart based on data structure
-    renderOverviewCharts(series, stats);
-}
-
-function renderOverviewCharts(series, stats) {
     // Check if Chart.js is available
     if (typeof Chart === 'undefined') {
         console.warn('Chart.js not loaded');
-        chartContainer.innerHTML = '<div class="text-center text-muted py-4">Chart.js nicht geladen</div>';
         return;
     }
 
     // Extract daily data from series
+    const series = chartsData?.series || [];
+    if (!series || series.length === 0) {
+        console.warn('No chart data available');
+        return;
+    }
+
     const days = series.map(s => s.day).filter(d => d);
     const consumptionData = series.map(s => s.consumption || s.kwh || 0);
     const costData = series.map(s => s.cost || 0);
@@ -261,62 +238,6 @@ function renderOverviewCharts(series, stats) {
         return isDark ? dark : light;
     };
 
-    // Create HTML structure with canvas elements
-    const chartHtml = `
-        <div class="row g-3">
-            <div class="col-lg-4">
-                <div class="card chart-card h-100">
-                    <div class="card-header py-2">
-                        <h6 class mb-0">⚡ Verbrauch (kWh/100km)</h6>
-                    </div>
-                    <div class="card-body py-2">
-                        <canvas id="chartConsumption" height="180"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card chart-card h-100">
-                    <div class="card-header py-2">
-                        <h6 class mb-0">💶 Kosten (€)</h6>
-                    </div>
-                    <div class="card-body py-2">
-                        <canvas id="chartCost" height="180"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card chart-card h-100">
-                    <div class="card-header py-2">
-                        <h6 class mb-0">🛣️ Kilometer (km)</h6>
-                    </div>
-                    <div class="card-body py-2">
-                        <canvas id="chartKm" height="180"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="row g-3 mt-2">
-            <div class="col-12 col-lg-6">
-                <div class="card chart-card h-100">
-                    <div class="card-header py-2">
-                        <h6 class mb-0">🏠🔌 Home vs. Extern (kWh)</h6>
-                    </div>
-                    <div class="card-body py-2">
-                        <canvas id="chartHomeExtern" height="180"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    chartContainer.innerHTML = chartHtml;
-
-    // Get canvas elements
-    const canvasConsumption = document.getElementById('chartConsumption');
-    const canvasCost = document.getElementById('chartCost');
-    const canvasKm = document.getElementById('chartKm');
-    const canvasHomeExtern = document.getElementById('chartHomeExtern');
-
     // Destroy existing charts to prevent memory leaks
     if (charts.consumption) charts.consumption.destroy();
     if (charts.cost) charts.cost.destroy();
@@ -324,6 +245,7 @@ function renderOverviewCharts(series, stats) {
     if (charts.homeExtern) charts.homeExtern.destroy();
 
     // Create line chart for consumption
+    const canvasConsumption = document.getElementById('chartConsumption');
     if (canvasConsumption) {
         charts.consumption = new Chart(canvasConsumption, {
             type: 'line',
@@ -351,6 +273,7 @@ function renderOverviewCharts(series, stats) {
     }
 
     // Create line chart for cost
+    const canvasCost = document.getElementById('chartCost');
     if (canvasCost) {
         charts.cost = new Chart(canvasCost, {
             type: 'line',
@@ -378,6 +301,7 @@ function renderOverviewCharts(series, stats) {
     }
 
     // Create line chart for km
+    const canvasKm = document.getElementById('chartKm');
     if (canvasKm) {
         charts.km = new Chart(canvasKm, {
             type: 'line',
@@ -405,12 +329,11 @@ function renderOverviewCharts(series, stats) {
     }
 
     // Create pie/donut chart for Home vs Extern
+    const canvasHomeExtern = document.getElementById('chartHomeExtern');
     if (canvasHomeExtern) {
         const homeKwh = stats?.totals?.home_kwh || 0;
         const extKwh = stats?.totals?.ext_kwh || 0;
         const totalKwh = homeKwh + extKwh;
-        const homePct = totalKwh > 0 ? (homeKwh / totalKwh * 100) : 0;
-        const extPct = totalKwh > 0 ? (extKwh / totalKwh * 100) : 0;
 
         charts.homeExtern = new Chart(canvasHomeExtern, {
             type: 'doughnut',
@@ -433,13 +356,24 @@ function renderOverviewCharts(series, stats) {
                             label: function(context) {
                                 const label = context.label || '';
                                 const value = context.parsed;
-                                return `${label}: ${value.toFixed(1)} kWh (${(value/totalKwh*100).toFixed(1)}%)`;
+                                return `${label}: ${value.toFixed(1)} kWh (${totalKwh > 0 ? (value/totalKwh*100).toFixed(1) : '0'}%)`;
                             }
                         }
                     }
                 }
             }
         });
+
+        // Update the static labels in the Home vs Extern card
+        const homeKwhEl = document.getElementById('homeKwh');
+        const extKwhEl = document.getElementById('extKwh');
+        const homePctEl = document.getElementById('homePct');
+        const extPctEl = document.getElementById('extPct');
+
+        if (homeKwhEl) homeKwhEl.textContent = `${homeKwh.toFixed(1)} kWh`;
+        if (extKwhEl) extKwhEl.textContent = `${extKwh.toFixed(1)} kWh`;
+        if (homePctEl) homePctEl.textContent = `${totalKwh > 0 ? (homeKwh/totalKwh*100).toFixed(1) : '0'}%`;
+        if (extPctEl) extPctEl.textContent = `${totalKwh > 0 ? (extKwh/totalKwh*100).toFixed(1) : '0'}%`;
     }
 }
 
@@ -450,6 +384,10 @@ function updateRangeLabel() {
     let labelText = 'Letzte 90 Tage';
     if (currentFrom && currentTo) {
         labelText = `${currentFrom} bis ${currentTo}`;
+    } else if (typeof globalDateRange !== 'undefined' && globalDateRange.days >= 9999) {
+        labelText = 'Alle Daten';
+    } else if (typeof globalDateRange !== 'undefined') {
+        labelText = `Letzte ${globalDateRange.days} Tage`;
     }
 
     labelEl.textContent = labelText;
@@ -457,10 +395,11 @@ function updateRangeLabel() {
 
 // Global Range Handler - this should be loaded from the main JS
 function getGlobalRangeParams() {
-    const from = safeGet('#rangeFrom');
-    const to = safeGet('#rangeTo');
-    if (from && from.value && to && to.value) {
-        return `from=${from.value}&to=${to.value}`;
+    if (typeof globalDateRange !== 'undefined') {
+        if (globalDateRange.from && globalDateRange.to) {
+            return `from=${encodeURIComponent(globalDateRange.from)}&to=${encodeURIComponent(globalDateRange.to)}`;
+        }
+        return `days=${globalDateRange.days}`;
     }
     return `days=90`;
 }
@@ -488,6 +427,18 @@ function attachEventListeners() {
             });
         });
     }
+
+    // Day buttons
+    document.querySelectorAll('[data-days]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentDays = parseInt(btn.getAttribute('data-days'), 10);
+            currentFrom = null;
+            currentTo = null;
+            loadOverview();
+        });
+    });
 }
 
 // Initialize when DOM is ready
