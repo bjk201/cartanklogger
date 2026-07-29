@@ -23,21 +23,15 @@ function buildChartApiParams() {
 function loadStats() {
   const params = buildChartApiParams();
 
-  // Load stats data for KPIs
-  fetch(`/api/stats?${params}`)
-    .then(r => r.json())
-    .then(data => {
-      renderStatsKPIs(data);
-    })
-    .catch(e => console.error('Load stats KPIs error:', e));
-
-  // Load chart data via separate endpoint
+  // Load chart data (includes KPI stats) via /api/charts endpoint
   fetch(`/api/charts?${params}`)
     .then(r => r.json())
     .then(data => {
       renderStatsCharts(data);
+      // Also render KPI cards from same data
+      renderStatsKPIs(data);
     })
-    .catch(e => console.error('Load stats charts error:', e));
+    .catch(e => console.error('Load stats error:', e));
 }
 
 function renderStatsKPIs(statsData) {

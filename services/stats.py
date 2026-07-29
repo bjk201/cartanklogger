@@ -39,90 +39,12 @@ def _parse_dt(val):
             return None
 
 
-def build_cable_sessions_from_rows(home_rows, external_rows, home_geofences,
-                                    start_tolerance_min=120, end_tolerance_min=120):
-    """Baut echte CableSessions aus DB-Rows (EVCC home_sessions + TM external_sessions).
-
-    Nutzt services.matching.match_evcc_to_teslamate, um 1 EVCC-Session mit
-    n TeslaMate-Teilcharges (innerhalb des Kabel-Zeitfensters) zu gruppieren.
-
-    Liefert (cable_sessions, unmatched_evcc, external_unified):
-      cable_sessions   : Liste von CableSession (EVCC + gruppierte TM)
-      unmatched_evcc   : EVCC-Sessions ohne TM-Gegenstück
-      external_unified : Liste von UnifiedCharge (teslamate_only) für externe Charges
-    """
-    from services.matching import (
-        TeslaMateCharge, EVCCSession, match_evcc_to_teslamate,
-        build_unified_home_charge, build_unified_external_charge,
-    )
-
-    ev_sessions = []
-    for r in home_rows:
-        created = _parse_dt(r.get("created"))
-        if created is None:
-            continue
-        ev_sessions.append(EVCCSession(
-            id=r.get("id"),
-            created=created,
-            finished=_parse_dt(r.get("finished")),
-            loadpoint=r.get("loadpoint"),
-            vehicle=r.get("vehicle"),
-            odometer=r.get("odometer"),
-            meter_start=r.get("meter_start"),
-            meter_stop=r.get("meter_stop"),
-            charged_energy_kwh=float(r.get("charged_kwh") or 0),
-            solar_percentage=r.get("solar_percentage"),
-        ))
-
-    tm_charges = []
-    for r in external_rows:
-        # Home-TM-Charges (Geofence "Zuhause") sind Kandidaten für das CableSession-
-        # Matching mit EVCC. Reine externe (nicht Home) werden separat als
-        # teslamate_only geführt.
-        if _is_home_external_row(r):
-            sd = _parse_dt(r.get("started_at"))
-            if sd is None:
-                continue
-            tm_charges.append(TeslaMateCharge(
-                id=r.get("teslamate_session_id") or r.get("id"),
-                start_date=sd,
-                end_date=_parse_dt(r.get("finished_at")),
-                charge_energy_added=float(r.get("energy_kwh") or 0),
-                charge_energy_used=float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0),
-                odometer=r.get("odometer_start"),
-                geofence_name=r.get("location_name"),
-                address_name=r.get("address"),
-                cost=r.get("cost_total"),
-                car_id=None,
-            ))
-
-    cable_sessions, unmatched_evcc, unmatched_tm = match_evcc_to_teslamate(
-        ev_sessions, tm_charges, home_geofences,
-        start_tolerance_min=start_tolerance_min, end_tolerance_min=end_tolerance_min)
-
-    # Externe Charges (nicht Home) -> teslamate_only
-    external_unified = []
-    for r in external_rows:
-        if not _is_home_external_row(r):
-            sd = _parse_dt(r.get("started_at"))
-            if sd is None:
-                continue
-            external_unified.append(build_unified_external_charge(TeslaMateCharge(
-                id=r.get("teslamate_session_id") or r.get("id"),
-                start_date=sd,
-                end_date=_parse_dt(r.get("finished_at")),
-                charge_energy_added=float(r.get("energy_kwh") or 0),
-                charge_energy_used=float(r.get("energy_used_kwh") or r.get("energy_kwh") or 0),
-                odometer=r.get("odometer_start"),
-                geofence_name=r.get("location_name"),
-                address_name=r.get("address"),
-                cost=r.get("cost_total"),
-                car_id=None,
-            )))
-
-    return cable_sessions, unmatched_evcc, external_unified
-
-
+def _is_home_external_row(r):
+    """True, wenn eine external_sessions-Zeile eine TM-Home-Ladung ist
+    (doppeltes Tracking mit EVCC)."""
+    text = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
+    markers = ["zuhause", "garage", "wallbox", "home"]
+    return any(m in text for m in markers)
 
 
 def compute_home_energy_split(wall_kwh, solar_percentage):
@@ -130,6 +52,32 @@ def compute_home_energy_split(wall_kwh, solar_percentage):
     pv = wall_kwh * solar / 100.0
     grid = max(0.0, wall_kwh - pv)
     return round(pv, 3), round(grid, 3)
+
+
+def compute_home_cost_row(row, price_lookup):
+    """Kosten für eine Home-Session neu berechnen (immer aktuell).
+
+    Nutzt price_lookup(kind, date) -> float für grid/feedin.
+    Liefert Dict mit pv_kwh, grid_kwh, grid_cost, pv_cost, total_cost, price_per_kwh.
+    """
+    created = _parse_dt(row.get("created")) or datetime.now()
+    charged = float(row.get("charged_kwh") or 0)
+    if charged <= 0:
+        return {"pv_kwh": 0, "grid_kwh": 0, "grid_cost": 0, "pv_cost": 0,
+                "total_cost": 0, "price_per_kwh": 0}
+    solar = row.get("solar_percentage") or 0
+    pv_kwh, grid_kwh = compute_home_energy_split(charged, solar)
+    grid_price = price_lookup("grid", created) if price_lookup else 0.32
+    feedin_price = price_lookup("feedin", created) if price_lookup else 0.08
+    grid_cost = round(grid_kwh * grid_price, 4)
+    pv_cost = round(pv_kwh * feedin_price, 4)
+    total = round(grid_cost + pv_cost, 4)
+    price_per_kwh = round(total / charged, 4) if charged else 0
+    return {
+        "pv_kwh": pv_kwh, "grid_kwh": grid_kwh,
+        "grid_cost": grid_cost, "pv_cost": pv_cost,
+        "total_cost": total, "price_per_kwh": price_per_kwh,
+    }
 
 
 def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
@@ -207,7 +155,7 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
         drives_params = [cutoff, end]
     drives_rows = db.execute(drives_q, drives_params).fetchall()
     total_dist = sum(float(r[0] or 0) for r in drives_rows)
-    
+
     # Odometer-Wert für Anzeige (letzter bekannter Stand) - NICHT für Berechnungen!
     odo_dated = []
     for e in home:
@@ -313,8 +261,74 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
             "total_cost": round(a["home_cost"] + a["ext_cost"] + a["extra"], 2),
         })
 
-    return {
-        "kpis": {},  # (von UI aus series berechnet)
+    # ---- Monats-Daten-Auszug für statik.html KPIs ----
+    # Extrahiere aktuellen Monat für statik.html KPIs (month metric = YYYY-MM)
+    current_month = datetime.now().strftime("%Y-%m")
+    # Monat-KPIs für statik.html: berechne Energie und Kosten pro Woche
+    home_this_month = 0
+    home_cost_this_month = 0
+    ext_this_month = 0
+    ext_cost_this_month = 0
+    extra_this_month = 0
+
+    # Durchlaufe alle Daten und aggregiere nur für den aktuellen Monat
+    for r in home:
+        m = (r.get("created") or "")[:7]
+        if m == current_month:
+            home_this_month += float(r.get("charged_kwh") or 0)
+            home_cost_this_month += compute_home_cost_row(r, price_lookup)["total_cost"]
+
+    for r in ext:
+        m = (r.get("started_at") or "")[:7]
+        if m == current_month:
+            ext_this_month += float(r.get("energy_kwh") or 0)
+            ext_cost_this_month += float(r.get("cost_total") or 0)
+
+    for e in extras:
+        m = (e.get("date") or "")[:7]
+        if m == current_month:
+            extra_this_month += float(e.get("amount") or 0)
+
+    # PV-Anteil für statik.html (durchschnittlicher PV-Anteil für den gesamten Zeitraum)
+    total_pv_kwh = home_pv_kwh
+    pv_share_pct = round((total_pv_kwh / home_kwh * 100) if home_kwh > 0 else 0, 1)
+
+    # ----- KPIs für API ---------
+    stats = {
+        "kpis": {
+            'charged_total_kwh': round(total_kwh, 2),
+            'total_cost': round(total_cost, 2),
+            'total_km': round(total_km, 1),
+            'avg_consumption': avg_consumption,
+            'avg_cost_100': avg_cost_100,
+            'avg_co2': avg_co2,
+            'avg_price_kwh': avg_price_kwh,
+            'ac_kwh': round(total_ac, 2),
+            'dc_kwh': round(total_dc, 2),
+            'dc_share_pct': round((total_dc / total_kwh * 100) if total_kwh > 0 else 0, 1),
+            'charging_loss_kwh': total_charging_loss,
+            'charging_loss_pct': round((total_charging_loss / total_kwh * 100) if total_kwh > 0 else 0, 1),
+            'last_range': last_range,
+            'total_kwh': round(total_kwh, 2),
+            'home_kwh': round(home_kwh, 2),
+            'ext_kwh': round(ext_kwh, 2),
+            'home_loss_kwh': home_loss,
+            'cost_home': round(home_cost, 2),
+            'cost_external': round(ext_cost, 2),
+            'cost_extra': round(extra_total, 2),
+            'cost_home_and_external': round(home_cost + ext_cost, 2),
+            'tco': round(tco, 2),
+            'tco_per_100km': round(tco_per_100km, 2),
+            'tco_with_extras': round(tco_with_extras, 2),
+            'tco_without_extras': round(tco_without_extras, 2),
+            'consumption_net_kwh_per_100km': round(consumption_netto, 2),
+            # Monatliche KPIs (für statik.html)
+            'cost_this_month': round(home_cost_this_month + ext_cost_this_month + extra_this_month, 2),
+            'total_kwh_month': round(home_this_month + ext_this_month, 2),
+            'month': current_month,
+            'pv_share_pct': pv_share_pct,
+            'consumption_kwh_per_100km': round(consumption_bruto, 2),
+        },
         "series": [],  # (Tages-Series in app.build_stats ergänzt)
         "totals": {
             "kwh": round(total_kwh, 2),
@@ -340,71 +354,4 @@ def build_stats_from_rows(home_rows, external_rows, extra_rows, price_lookup,
         "plausibility": {"home_loss_kwh": round(home_loss, 2), "netto_is_estimate": netto_is_estimate},
     }
 
-
-def compute_home_cost_row(row, price_lookup):
-    """Kosten für eine Home-Session neu berechnen (immer aktuell).
-
-    Nutzt price_lookup(kind, date) -> float für grid/feedin.
-    Liefert Dict mit pv_kwh, grid_kwh, grid_cost, pv_cost, total_cost, price_per_kwh.
-    """
-    created = _parse_dt(row.get("created")) or datetime.now()
-    charged = float(row.get("charged_kwh") or 0)
-    if charged <= 0:
-        return {"pv_kwh": 0, "grid_kwh": 0, "grid_cost": 0, "pv_cost": 0,
-                "total_cost": 0, "price_per_kwh": 0}
-    solar = row.get("solar_percentage") or 0
-    pv_kwh, grid_kwh = compute_home_energy_split(charged, solar)
-    grid_price = price_lookup("grid", created) if price_lookup else 0.32
-    feedin_price = price_lookup("feedin", created) if price_lookup else 0.08
-    grid_cost = round(grid_kwh * grid_price, 4)
-    pv_cost = round(pv_kwh * feedin_price, 4)
-    total = round(grid_cost + pv_cost, 4)
-    price_per_kwh = round(total / charged, 4) if charged else 0
-    return {
-        "pv_kwh": pv_kwh, "grid_kwh": grid_kwh,
-        "grid_cost": grid_cost, "pv_cost": pv_cost,
-        "total_cost": total, "price_per_kwh": price_per_kwh,
-    }
-
-
-def _is_home_external_row(r):
-    """True, wenn eine external_sessions-Zeile eine TM-Home-Ladung ist
-    (doppeltes Tracking mit EVCC)."""
-    text = f"{r.get('location_name') or ''} {r.get('address') or ''}".lower()
-    markers = ["zuhause", "garage", "wallbox", "home"]
-    return any(m in text for m in markers)
-
-
-def backfill_teslamate_costs(tm_client, matched_home_rows, get_price_at, grid_default, feedin_default):
-    """Schreibt berechnete Home-Kosten zurueck in TeslaMate charging_processes.cost.
-
-    Regel: NUR existierende Charges werden angereichert (kein kuenstliches Anlegen
-    neuer TeslaMate-Charges). tm_client muss eine TeslaMateClient-Instanz sein
-    mit einer Methode update_charging_process_cost(charge_id, cost).
-
-    matched_home_rows: Liste von Dicts mit 'teslamate_session_id' (Charge-ID)
-                       und 'charged_kwh' + 'solar_percentage' (EVCC-Daten).
-
-    Liefert (updated_count, errors).
-    """
-    updated = 0
-    errors = []
-    for row in matched_home_rows:
-        tm_id = row.get("teslamate_session_id") or row.get("teslamate_charge_id")
-        if not tm_id:
-            continue
-        charged = float(row.get("charged_kwh") or 0)
-        if charged <= 0:
-            continue
-        solar = row.get("solar_percentage") or 0
-        pv_kwh, grid_kwh = compute_home_energy_split(charged, solar)
-        created = _parse_dt(row.get("created")) or datetime.now()
-        grid_price = get_price_at("grid", created) if get_price_at else grid_default
-        feedin_price = get_price_at("feedin", created) if get_price_at else feedin_default
-        cost = round(grid_kwh * grid_price + pv_kwh * feedin_price, 2)
-        try:
-            tm_client.update_charging_process_cost(tm_id, cost)
-            updated += 1
-        except Exception as e:
-            errors.append(f"charge {tm_id}: {e}")
-    return updated, errors
+    return stats
