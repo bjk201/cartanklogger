@@ -1,5 +1,5 @@
 // overview.js - Übersichtsseite (Dashboard mit 5 KPIs, 3 Charts links, Donut + 2 Heatmaps rechts)
-// Refactored for full Chart.js rendering
+// Refactored for full Chart.js rendering with heatmaps
 let currentDays = 90;
 let currentFrom = null;
 let currentTo = null;
@@ -44,6 +44,7 @@ async function loadOverview() {
         renderPaginationMerged(merged.pagination?.total || merged.pagination?.merged_total || 0);
         renderKPIs(stats, merged.rows || merged);
         renderCharts(chartsData, stats);
+        renderHeatmaps(chartsData);
         updateRangeLabel();
     } catch (e) {
         console.error('loadOverview failed', e);
@@ -108,15 +109,21 @@ function renderPaginationMerged(totalRows) {
 
 function buildDetail(r) {
     if (!r) return '';
+    const evccKwh = r.evcc_kwh || r.home_kwh || 0;
+    const evccCost = r.evcc_cost || r.home_cost || 0;
+    const teslaKwh = r.teslamate_kwh || r.ext_kwh || 0;
+    const teslaCost = r.teslamate_cost || r.ext_cost || 0;
+    const extraKwh = r.extra_kwh || 0;
+    const extraCost = r.extra || 0;
+    
     return `
         <div class="row mb-2">
-            <div class="col-md-4"><strong>EVCC:</strong> ${fmtKwh(r.evcc_kwh)} kWh (${fmtEUR(r.evcc_cost)})</div>
-            <div class="col-md-4"><strong>TeslaMate:</strong> ${fmtKwh(r.teslamate_kwh)} kWh (${fmtEUR(r.teslamate_cost)})</div>
-            <div class="col-md-4"><strong>Plus:</strong> ${fmtKwh(r.extra_kwh)} (${fmtEUR(r.extra)})</div>
+            <div class="col-md-4"><strong>EVCC:</strong> ${fmtKwh(evccKwh)} kWh (${fmtEUR(evccCost)})</div>
+            <div class="col-md-4"><strong>TeslaMate:</strong> ${fmtKwh(teslaKwh)} kWh (${fmtEUR(teslaCost)})</div>
+            <div class="col-md-4"><strong>Plus:</strong> ${fmtKwh(extraKwh)} (${fmtEUR(extraCost)})</div>
             <div class="col-md-4"><strong>PV-Anteil:</strong> ${r.home_solar_pct ? fmtPct(r.home_solar_pct) : '–'}</div>
-            <div class="col-md-4"><strong>Range:</strong> ${r.range_km} km</div>
-            <div class="col-md-4"><strong>EVCC-Radius:</strong> ${r.evcc_range} km</div>
-            <div class="col-md-4"><strong>TM-Radius:</strong> ${r.teslamate_range} km</div>
+            <div class="col-md-4"><strong>Range:</strong> ${r.range_km || 0} km</div>
+            <div class="col-md-4"><strong>EVCC-Radius:</strong> ${r.evcc_range || 0} km</div>
         </div>
     `;
 }
@@ -374,6 +381,140 @@ function renderCharts(chartsData, stats) {
         if (extKwhEl) extKwhEl.textContent = `${extKwh.toFixed(1)} kWh`;
         if (homePctEl) homePctEl.textContent = `${totalKwh > 0 ? (homeKwh/totalKwh*100).toFixed(1) : '0'}%`;
         if (extPctEl) extPctEl.textContent = `${totalKwh > 0 ? (extKwh/totalKwh*100).toFixed(1) : '0'}%`;
+    }
+}
+
+// Heatmap rendering functions
+function renderHeatmaps(chartsData) {
+    const series = chartsData?.series || [];
+    if (!series || series.length === 0) {
+        console.warn('No heatmap data available');
+        return;
+    }
+
+    // Render Temperature/Consumption heatmap
+    renderTempHeatmap(series);
+    
+    // Render Weekday/Consumption heatmap
+    renderWeekdayHeatmap(series);
+}
+
+function renderTempHeatmap(series) {
+    const canvas = document.getElementById('heatmapTempConsumption');
+    if (!canvas) return;
+    
+    // Destroy existing chart
+    if (charts.heatmapTemp) charts.heatmapTemp.destroy();
+    
+    // Prepare heatmap data - show last 14 days
+    const data = series.slice(-14).reverse();
+    const labels = data.map(s => s.day || '');
+    const kwhValues = data.map(s => s.kwh || 0);
+    const consumptionValues = data.map(s => s.consumption || 0);
+    
+    // Create stacked bar chart for temp/consumption visualization
+    charts.heatmapTemp = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'kWh',
+                    data: kwhValues,
+                    backgroundColor: kwhValues.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
+                    borderColor: '#fff',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `kWh: ${ctx.raw.toFixed(1)}`
+                    }
+                }
+            },
+            scales: {
+                x: { 
+                    title: { text: 'Datum' },
+                    ticks: { maxRotation: 45, minRotation: 45 }
+                },
+                y: { 
+                    title: { text: 'kWh' }, 
+                    beginAtZero: true 
+                }
+            }
+        }
+    });
+    
+    // Update legend
+    const legendEl = document.getElementById('legendTempConsumption');
+    if (legendEl) {
+        const avgKwh = kwhValues.reduce((a, b) => a + b, 0) / kwhValues.length;
+        const avgCons = consumptionValues.filter(v => v > 0).reduce((a, b) => a + b, 0) / (consumptionValues.filter(v => v > 0).length || 1);
+        legendEl.textContent = `Ø: ${avgKwh.toFixed(1)} kWh | Verbrauch: ${avgCons.toFixed(1)} kWh/100km`;
+    }
+}
+
+function renderWeekdayHeatmap(series) {
+    const canvas = document.getElementById('heatmapWeekdayConsumption');
+    if (!canvas) return;
+    
+    // Destroy existing chart
+    if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
+    
+    // Group by weekday
+    const weekdayData = Array(7).fill(0);
+    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    
+    series.forEach(s => {
+        const date = new Date(s.day);
+        if (!isNaN(date.getTime())) {
+            weekdayData[date.getDay()] += s.kwh || 0;
+        }
+    });
+    
+    const totalKwh = weekdayData.reduce((a, b) => a + b, 0);
+    
+    charts.heatmapWeekday = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: dayNames,
+            datasets: [{
+                label: 'kWh',
+                data: weekdayData,
+                backgroundColor: weekdayData.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : v > 10 ? '#faad14' : '#ffccc7'),
+                borderColor: '#fff',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `kWh: ${ctx.raw.toFixed(1)} (${totalKwh > 0 ? (ctx.raw/totalKwh*100).toFixed(1) : '0'}%)`
+                    }
+                }
+            },
+            scales: {
+                x: { title: { text: 'Wochentag' } },
+                y: { title: { text: 'kWh' }, beginAtZero: true }
+            }
+        }
+    });
+    
+    // Update legend
+    const legendEl = document.getElementById('legendWeekdayConsumption');
+    if (legendEl) {
+        const maxIdx = weekdayData.indexOf(Math.max(...weekdayData));
+        legendEl.textContent = `Max: ${dayNames[maxIdx]} (${weekdayData[maxIdx].toFixed(1)} kWh)`;
     }
 }
 

@@ -2,6 +2,22 @@
 {% block title %}CarTankLogger – Statistik{% endblock %}
 {% block content %}
 
+<!-- ===== Zeitraum-Auswahl ===== -->
+<div class="row mb-3">
+  <div class="col-12 col-md-6">
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-muted small">Zeitraum:</span>
+      <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-outline-secondary" data-days="7">7 Tage</button>
+        <button class="btn btn-outline-secondary active" data-days="30">30 Tage</button>
+        <button class="btn btn-outline-secondary" data-days="90">90 Tage</button>
+        <button class="btn btn-outline-secondary" data-days="365">Jahr</button>
+        <button class="btn btn-outline-secondary" data-days="9999">Alle</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== KPI Row ===== -->
 <div class="row g-2 mb-3" id="statsKpis"></div>
 
@@ -104,15 +120,48 @@
   </div>
 </div>
 
+<!-- ===== Heatmap Grid ===== -->
+<div class="row g-3 mt-3">
+  <div class="col-12 col-md-6">
+    <div class="card dashboard-card heatmap-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium small">🌡️ Verbrauch / Temperatur</span>
+        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Temperatur- & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="heatmapTempConsumption"></canvas>
+        <div class="mt-2 small" id="legendTempConsumption"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-6">
+    <div class="card dashboard-card heatmap-card">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <span class="fw-medium small">📅 Verbrauch / Wochentag</span>
+        <button class="btn btn-sm btn-outline-secondary p-0" data-bs-toggle="tooltip" title="Anzahl Fahrten pro Wochentag & Verbrauchsbereich"><i class="bi bi-info-circle"></i></button>
+      </div>
+      <div class="card-body py-2">
+        <canvas id="heatmapWeekdayConsumption"></canvas>
+        <div class="mt-2 small" id="legendWeekdayConsumption"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // Chart States for Statistics Page
-const chartStates = {};
+let chartStates = {};
 
 function initStatsCharts() {
   // Initialize each chart based on its data attribute
   ['chartCons', 'chartPrice', 'chartCost100', 'chartKm'].forEach(chartId => {
     initChart(chartId);
   });
+  
+  // Initialize heatmaps
+  initHeatmap('heatmapTempConsumption');
+  initHeatmap('heatmapWeekdayConsumption');
 }
 
 function initChart(chartId) {
@@ -142,6 +191,13 @@ function initChart(chartId) {
   chartStates[chartId] = initialChart;
 }
 
+function initHeatmap(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  
+  chartStates[canvasId] = { initialized: false };
+}
+
 function renderChart(chartId) {
   const canvas = document.getElementById(chartId);
   if (!canvas) return;
@@ -150,17 +206,17 @@ function renderChart(chartId) {
   const typeSelect = document.querySelector(`.chart-type-select[data-chart="${chartId}"]`);
   const averageSelect = document.querySelector(`.average-mode-select[data-chart="${chartId}"]`);
   
+  const days = getCurrentDays();
+  const params = `days=${days}`;
+  
   if (!typeSelect || !averageSelect) return;
 
   const chartType = typeSelect.value;
   const averageMode = averageSelect.value;
 
   // Determine API endpoint based on chart ID
-  let apiUrl = `/api/stats/${chartId.replace('chart', '')}`;
-  if (averageMode !== 'off') {
-    apiUrl += `?average=${averageMode}`;
-  }
-
+  let apiUrl = `/api/stats?${params}`;
+  
   fetch(apiUrl)
     .then(response => response.json())
     .then(data => {
@@ -173,6 +229,11 @@ function renderChart(chartId) {
       }
     })
     .catch(error => console.error(`Error loading ${chartId}:`, error));
+}
+
+function getCurrentDays() {
+  const activeBtn = document.querySelector('[data-days].active');
+  return activeBtn ? parseInt(activeBtn.getAttribute('data-days'), 10) : 30;
 }
 
 function renderTimeSeriesChart(canvas, chartId, type, labels, values, averageMode) {
@@ -202,15 +263,15 @@ function renderTimeSeriesChart(canvas, chartId, type, labels, values, averageMod
   };
 
   // Add average line if requested
-  if (averageMode === 'mean' && values.length) {
-    const meanValue = values.reduce((a, b) => a + b, 0) / values.length;
-    if (!chartData.datasets[0].borderDash) chartData.datasets[0].borderDash = [5, 5];
+  if (averageMode === 'mean' && dataPoints.length > 0) {
+    const meanValue = dataPoints.reduce((a, b) => a + b.value, 0) / dataPoints.length;
+    chartData.datasets[0].borderDash = [5, 5];
     chartData.datasets[0].borderColor = type === 'bar' ? '#1677ff' : '#999';
     chartData.datasets[0].borderWidth = 2;
   }
 
-  if (averageMode === 'moving' && values.length >= 7) {
-    const movingAvg = calculateMovingAverage(values, 7);
+  if (averageMode === 'moving' && dataPoints.length >= 7) {
+    const movingAvg = calculateMovingAverage(dataPoints.map(d => d.value), 7);
     chartData.datasets.push({
       label: 'Gleitender Ø',
       data: movingAvg,
@@ -236,6 +297,14 @@ function renderTimeSeriesChart(canvas, chartId, type, labels, values, averageMod
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${chartId}: ${ctx.raw}`
+          }
+        }
+      },
       scales: {
         x: { title: { display: true, text: 'Datum' } },
         y: { title: { display: true, text: chartId.includes('km') ? 'km' : 'Wert' } }
@@ -294,22 +363,155 @@ function setupChartControls() {
       renderChart(chartId);
     });
   });
+  
+  // Day buttons
+  document.querySelectorAll('[data-days]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadStats();
+    });
+  });
 }
 
 // Load data for statistics page
 function loadStats() {
-  // This would load data via AJAX and populate charts
   console.log('Loading statistics data...');
-  // In a real implementation, this would:
-  // 1. Fetch data from /api/stats/* endpoints
-  // 2. Populate the charts with data
-  // 3. Initialize Chart.js instances
   
-  // For now, initialize empty charts
+  // Load KPI data
+  const days = getCurrentDays();
+  fetch(`/api/stats?days=${days}`)
+    .then(r => r.json())
+    .then(data => {
+      renderStatsKPIs(data.totals || data.kpis || {});
+      renderHeatmaps(data);
+    })
+    .catch(e => console.error('Stats load error:', e));
+  
+  // Initialize charts
   setTimeout(() => {
     initStatsCharts();
     setupChartControls();
   }, 100);
+}
+
+function renderStatsKPIs(totals) {
+  const kpiEl = document.getElementById('statsKpis');
+  if (!kpiEl) return;
+  
+  const kpis = [
+    { label: 'Gefahrene km', value: totals.total_km || 0, suffix: 'km' },
+    { label: 'Geladene kWh', value: totals.kwh || 0, suffix: 'kWh' },
+    { label: 'Verbrauch', value: totals.consumption_kwh_per_100km || 0, suffix: 'kWh/100km' },
+    { label: 'Kosten', value: totals.tco || 0, suffix: '€' },
+    { label: 'Ladeverluste', value: totals.home_loss_kwh || 0, suffix: 'kWh' }
+  ];
+  
+  kpiEl.innerHTML = kpis.map(kpi => `
+    <div class="col-md-4 col-lg-2">
+      <div class="card kpi-card h-100">
+        <div class="card-body">
+          <div class="kpi-value" style="color: #667eea; font-weight: 700;">
+            ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 1}) : kpi.value} ${kpi.suffix}
+          </div>
+          <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderHeatmaps(data) {
+  const days = getCurrentDays();
+  fetch(`/api/charts?days=${days}`)
+    .then(r => r.json())
+    .then(chartsData => {
+      const series = chartsData?.series || [];
+      
+      // Render temperature/consumption heatmap
+      if (series.length > 0) {
+        renderTempHeatmap(series);
+        renderWeekdayHeatmap(series);
+      }
+    })
+    .catch(e => console.error('Heatmap load error:', e));
+}
+
+function renderTempHeatmap(series) {
+  const canvas = document.getElementById('heatmapTempConsumption');
+  if (!canvas) return;
+  
+  // Destroy existing chart
+  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
+  
+  // Prepare heatmap data (simplified)
+  const labels = series.slice(0, 10).map(s => s.day || '');
+  const data = series.slice(0, 10).map(s => s.kwh || 0);
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'kWh',
+        data: data,
+        backgroundColor: data.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : '#faad14'),
+        borderColor: '#fff',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { text: 'Datum' } },
+        y: { title: { text: 'kWh' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderWeekdayHeatmap(series) {
+  const canvas = document.getElementById('heatmapWeekdayConsumption');
+  if (!canvas) return;
+  
+  // Destroy existing chart
+  if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
+  
+  // Group by weekday
+  const weekdayData = Array(7).fill(0);
+  const dayNames = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+  
+  series.forEach(s => {
+    const date = new Date(s.day);
+    if (!isNaN(date.getTime())) {
+      weekdayData[date.getDay()] += s.kwh || 0;
+    }
+  });
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: dayNames,
+      datasets: [{
+        label: 'kWh',
+        data: weekdayData,
+        backgroundColor: weekdayData.map(v => v > 50 ? '#1677ff' : v > 20 ? '#52c41a' : '#faad14'),
+        borderColor: '#fff',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { text: 'Wochentag' } },
+        y: { title: { text: 'kWh' }, beginAtZero: true }
+      }
+    }
+  });
 }
 
 // Expose functions globally

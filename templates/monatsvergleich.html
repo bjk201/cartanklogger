@@ -2,9 +2,21 @@
 {% block title %}CarTankLogger – Monatsvergleich{% endblock %}
 {% block content %}
 
-<div class="card">
-  <div class="card-header py-2">📅 Monatsvergleich – Energie, Kosten & Verbrauch</div>
-  <div class="card-body p-0">
+<div class="card mb-3">
+  <div class="card-header py-2 d-flex align-items-center justify-content-between">
+    <span>📅 Monatsvergleich – Energie, Kosten & Verbrauch</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary active" data-days="365">Jahr</button>
+      <button class="btn btn-outline-secondary" data-days="9999">Alle</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <!-- Balkendiagramm -->
+    <div class="mb-4">
+      <canvas id="barChart" style="height: 300px;"></canvas>
+    </div>
+    
+    <!-- Tabelle -->
     <div class="table-responsive">
       <table class="table table-sm table-striped align-middle mb-0" id="tblMonatsvergleich">
         <thead class="sticky-header table-light">

@@ -1,64 +1,65 @@
-// extra.js - Extra-Kosten Tabelle
+// extra.js - Extra-Kosten Tabelle mit Hinzufügen-Formular
+
 let currentDays = 365;
 let currentFrom = null;
 let currentTo = null;
 let currentPage = 1;
-const PER_PAGE = 25;
+const PER_PAGE = 10;
 
 function buildApiParams() {
-  // Use global date range if available
-  if (typeof getGlobalRangeParams === 'function') {
-    return getGlobalRangeParams();
-  }
-  if (currentFrom && currentTo) {
-    return `from=${currentFrom}&to=${currentTo}&page=${currentPage}&per_page=${PER_PAGE}`;
-  }
-  return `days=${currentDays}&page=${currentPage}&per_page=${PER_PAGE}`;
+    // Use global date range if available
+    if (typeof getGlobalRangeParams === 'function') {
+        return getGlobalRangeParams();
+    }
+    if (currentFrom && currentTo) {
+        return `from=${currentFrom}&to=${currentTo}&page=${currentPage}&per_page=${PER_PAGE}`;
+    }
+    return `days=${currentDays}&page=${currentPage}&per_page=${PER_PAGE}`;
 }
 
 function updateRangeLabel() {
-  const el = document.getElementById("rangeLabel");
-  if (!el) return;
-  
-  // Try to get global range state
-  if (typeof globalDateRange !== 'undefined') {
-    if (globalDateRange.from && globalDateRange.to) {
-      el.textContent = `${globalDateRange.from} bis ${globalDateRange.to}`;
-    } else if (globalDateRange.days >= 9999) {
-      el.textContent = 'Alle Daten';
+    const el = document.getElementById("rangeLabel");
+    if (!el) return;
+    
+    // Try to get global range state
+    if (typeof globalDateRange !== 'undefined') {
+        if (globalDateRange.from && globalDateRange.to) {
+            el.textContent = `${globalDateRange.from} bis ${globalDateRange.to}`;
+        } else if (globalDateRange.days >= 9999) {
+            el.textContent = 'Alle Daten';
+        } else {
+            el.textContent = `Letzte ${globalDateRange.days} Tage`;
+        }
     } else {
-      el.textContent = `Letzte ${globalDateRange.days} Tage`;
+        el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
     }
-  } else {
-    el.textContent = currentDays >= 9999 ? 'Alle Daten' : `Letzte ${currentDays} Tage`;
-  }
 }
 
 async function loadExtra() {
-  try {
-    const params = buildApiParams();
-    const resp = await fetch(`/api/extra-costs?${params}`, {credentials: "same-origin"});
-    const data = await resp.json();
-    renderExtra(data.rows || [], data.pagination?.total || 0);
-    updateRangeLabel();
-  } catch (e) {
-    console.error('loadExtra failed', e);
-  }
+    try {
+        const params = buildApiParams();
+        const resp = await fetch(`/api/extra-costs?${params}`, {credentials: "same-origin"});
+        const data = await resp.json();
+        renderExtra(data.rows || [], data.pagination?.total || 0);
+        updateRangeLabel();
+    } catch (e) {
+        console.error('loadExtra failed', e);
+    }
 }
 
 function renderExtra(rows, total) {
-  const tb = document.querySelector("#tblExtra tbody");
-  if (!tb) return;
-  
-  if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Keine Daten</td></tr>';
-    renderPagination(1, 1);
-    return;
-  }
-  
-  const labels = {purchase:'Anschaffung', service:'Service', accessory:'Zubehör', insurance:'Versicherung', tax:'Steuer', other:'Sonstiges'};
-  
-  tb.innerHTML = rows.map(r => `
+    const tb = document.querySelector("#tblExtra tbody");
+    if (!tb) return;
+    
+    if (!rows.length) {
+        tb.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Keine Daten</td></tr>';
+        renderPagination(1, 1);
+        return;
+    }
+    
+    const labels = {purchase:'Anschaffung', service:'Service', accessory:'Zubehör', insurance:'Versicherung', tax:'Steuer', other:'Sonstiges'};
+    
+    tb.innerHTML = rows.map(r => `
     <tr data-id="${r.id}">
       <td>${r.date || ''}</td>
       <td>${labels[r.category] || r.category}</td>
@@ -105,124 +106,158 @@ function renderExtra(rows, total) {
 }
 
 function renderPagination(page, totalPages) {
-  const nav = document.getElementById('pagination');
-  if (!nav) return;
-  
-  if (totalPages <= 1) {
-    nav.innerHTML = '';
-    return;
-  }
-  
-  let html = '<ul class="pagination pagination-sm justify-content-center mb-0">';
-  html += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">«</a></li>`;
-  
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-      html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
-    } else if (i === page - 2 || i === page + 2) {
-      html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+    const nav = document.getElementById('pagination');
+    if (!nav) return;
+    
+    if (totalPages <= 1) {
+        nav.innerHTML = '';
+        return;
     }
-  }
-  
-  html += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">»</a></li>`;
-  html += '</ul>';
-  
-  nav.innerHTML = html;
-  
-  nav.querySelectorAll('.page-link[data-page]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const p = parseInt(link.getAttribute('data-page'), 10);
-      if (!isNaN(p) && p >= 1 && p <= totalPages && p !== page) {
-        currentPage = p;
-        loadExtra();
-      }
+    
+    let html = '<ul class="pagination pagination-sm justify-content-center mb-0">';
+    html += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">«</a></li>`;
+    
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+            html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+        } else if (i === page - 2 || i === page + 2) {
+            html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        }
+    }
+    
+    html += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">»</a></li>`;
+    html += '</ul>';
+    
+    nav.innerHTML = html;
+    
+    nav.querySelectorAll('.page-link[data-page]').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const p = parseInt(link.getAttribute('data-page'), 10);
+            if (!isNaN(p) && p >= 1 && p <= totalPages && p !== page) {
+                currentPage = p;
+                loadExtra();
+            }
+        });
     });
-  });
 }
 
+// Add new extra cost
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('[data-days]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentDays = parseInt(btn.getAttribute('data-days'), 10);
-      currentFrom = null;
-      currentTo = null;
-      currentPage = 1;
-      document.getElementById('rangeFrom').value = '';
-      document.getElementById('rangeTo').value = '';
-      loadExtra();
-    });
-  });
-  
-  // Date range picker
-  const btnRange = document.getElementById('btnRange');
-  if (btnRange) {
-    btnRange.addEventListener('click', () => {
-      const from = document.getElementById('rangeFrom').value;
-      const to = document.getElementById('rangeTo').value;
-      if (from && to) {
-        currentFrom = from;
-        currentTo = to;
-        currentPage = 1;
-        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-        loadExtra();
-      }
-    });
-  }
-  
-  // Listen to global date range changes
-  window.addEventListener('globalRangeChange', (e) => {
-    const params = e.detail;
-    if (params.startsWith('from=')) {
-      const urlParams = new URLSearchParams(params);
-      currentFrom = urlParams.get('from');
-      currentTo = urlParams.get('to');
-      currentDays = 365;
-      currentPage = 1;
-      document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-      if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = currentFrom;
-      if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = currentTo;
-    } else {
-      const urlParams = new URLSearchParams(params);
-      currentDays = parseInt(urlParams.get('days'), 10);
-      currentFrom = null;
-      currentTo = null;
-      currentPage = 1;
-      document.getElementById('rangeFrom').value = '';
-      document.getElementById('rangeTo').value = '';
-      document.querySelectorAll('[data-days]').forEach(b => {
-        if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
-          b.classList.add('active');
-        } else {
-          b.classList.remove('active');
-        }
-      });
+    // Save button for new extra
+    const saveBtn = document.getElementById('saveExtraBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const form = document.getElementById('extraForm');
+            const formData = new FormData(form);
+            const body = {};
+            formData.forEach((v, k) => { if (k !== 'csrf_token') body[k] = v; });
+            
+            try {
+                const resp = await csrfFetch('/api/extra-costs', {
+                    method: 'POST',
+                    body: JSON.stringify(body)
+                });
+                if (!resp.ok) throw new Error('Fehler beim Speichern');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addExtraModal'));
+                if (modal) modal.hide();
+                loadExtra();
+            } catch (e) {
+                alert('Fehler: ' + e.message);
+            }
+        });
     }
+    
+    // Day buttons
+    document.querySelectorAll('[data-days]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentDays = parseInt(btn.getAttribute('data-days'), 10);
+            currentFrom = null;
+            currentTo = null;
+            currentPage = 1;
+            if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = '';
+            if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = '';
+            loadExtra();
+        });
+    });
+    
+    // Date range picker
+    const btnRange = document.getElementById('btnRange');
+    if (btnRange) {
+        btnRange.addEventListener('click', () => {
+            const from = document.getElementById('rangeFrom').value;
+            const to = document.getElementById('rangeTo').value;
+            if (from && to) {
+                currentFrom = from;
+                currentTo = to;
+                currentPage = 1;
+                document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+                loadExtra();
+            }
+        });
+    }
+    
+    // Listen to global date range changes
+    window.addEventListener('globalRangeChange', (e) => {
+        const params = e.detail;
+        if (params.startsWith('from=')) {
+            const urlParams = new URLSearchParams(params);
+            currentFrom = urlParams.get('from');
+            currentTo = urlParams.get('to');
+            currentDays = 365;
+            currentPage = 1;
+            document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+            if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = currentFrom;
+            if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = currentTo;
+        } else {
+            const urlParams = new URLSearchParams(params);
+            currentDays = parseInt(urlParams.get('days'), 10);
+            currentFrom = null;
+            currentTo = null;
+            currentPage = 1;
+            if (document.getElementById('rangeFrom')) document.getElementById('rangeFrom').value = '';
+            if (document.getElementById('rangeTo')) document.getElementById('rangeTo').value = '';
+            document.querySelectorAll('[data-days]').forEach(b => {
+                if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
+        }
+        loadExtra();
+    });
+    
     loadExtra();
-  });
-  
-  loadExtra();
 });
 
 // CSRF fetch helper
 async function csrfFetch(url, opts = {}) {
-  let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  if (!csrf) {
-    try {
-      const resp = await fetch('/api/csrf', {credentials: "same-origin"});
-      const data = await resp.json();
-      csrf = data.csrf_token;
-      document.querySelector('meta[name="csrf-token"]').content = csrf;
-    } catch (e) {}
-  }
-  opts.headers = Object.assign({}, opts.headers, {
-    'Content-Type': 'application/json',
-    'X-CSRFToken': csrf
-  });
-  opts.credentials = 'same-origin';
-  return fetch(url, opts);
+    let csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    if (!csrf) {
+        try {
+            const resp = await fetch('/api/csrf', {credentials: "same-origin"});
+            const data = await resp.json();
+            csrf = data.csrf_token;
+            document.querySelector('meta[name="csrf-token"]').content = csrf;
+        } catch (e) {}
+    }
+    opts.headers = Object.assign({}, opts.headers, {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrf
+    });
+    opts.credentials = 'same-origin';
+    return fetch(url, opts);
 }
 
 const fmtEUR = v => v == null ? '–' : Number(v).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+
+// Set date today as default
+document.addEventListener('DOMContentLoaded', () => {
+    const dateInput = document.getElementById('date');
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+});
