@@ -3,17 +3,27 @@
 let currentDays = 30;
 let charts = {};
 
-function getCurrentDays() {
-    const activeBtn = document.querySelector('[data-days].active');
-    return activeBtn ? parseInt(activeBtn.getAttribute('data-days'), 10) : 30;
+function getDaysFromGlobal() {
+    // Try to use global date range if available
+    if (typeof globalDateRange !== 'undefined' && globalDateRange) {
+        if (globalDateRange.from && globalDateRange.to) {
+            // Custom date range - we don't use days in this case
+            return currentDays;
+        }
+        return globalDateRange.days || 30;
+    }
+    return currentDays;
 }
 
 async function loadStats() {
-    console.log('Loading stats data...', { days: getCurrentDays() });
-    const days = getCurrentDays();
+    console.log('Loading stats data...', { days: getDaysFromGlobal() });
+    const days = getDaysFromGlobal();
+    
+    // Build URL with either days or from/to
+    let url = `/api/stats?days=${days}`;
     
     try {
-        const statsResp = await fetch(`/api/stats?days=${days}`, {credentials: "same-origin"});
+        const statsResp = await fetch(url, {credentials: "same-origin"});
         const statsData = await statsResp.json();
         
         const chartsResp = await fetch(`/api/charts?days=${days}`, {credentials: "same-origin"});
@@ -44,26 +54,36 @@ function renderKPIs(totals) {
     const kpiEl = document.getElementById('statsKpis');
     if (!kpiEl) return;
     
+    // Handle null/undefined values properly - don't show 0 for missing data
+    const safeValue = (val, defaultVal = 0) => {
+        if (val == null) return defaultVal;
+        if (typeof val === 'number') return val;
+        return parseFloat(val) || defaultVal;
+    };
+    
     const kpis = [
-        { label: 'Gefahrene km', value: totals.total_km || 0, suffix: 'km' },
-        { label: 'Geladene kWh', value: totals.kwh || totals.home_kwh || 0, suffix: 'kWh' },
-        { label: 'Verbrauch', value: totals.consumption_kwh_per_100km || totals.consumption_net || 0, suffix: 'kWh/100km' },
-        { label: 'Kosten', value: totals.tco || totals.total_cost || 0, suffix: '€' },
-        { label: 'Ladeverluste', value: totals.home_loss_kwh || 0, suffix: 'kWh' }
+        { label: 'Gefahrene km', value: safeValue(totals.total_km, 0), suffix: 'km' },
+        { label: 'Geladene kWh', value: safeValue(totals.home_kwh || totals.kwh, 0), suffix: 'kWh' },
+        { label: 'Verbrauch', value: safeValue(totals.consumption_kwh_per_100km || totals.consumption_net, 0), suffix: 'kWh/100km' },
+        { label: 'Kosten', value: safeValue(totals.tco || totals.total_cost, 0), suffix: '€' },
+        { label: 'Ladeverluste', value: safeValue(totals.home_loss_kwh, 0), suffix: 'kWh' }
     ];
     
-    kpiEl.innerHTML = kpis.map(kpi => `
-        <div class="col-12 col-sm-6 col-md-2">
-            <div class="card kpi-card h-100">
-                <div class="card-body">
-                    <div class="kpi-value" style="color: #667eea; font-weight: 700;">
-                        ${typeof kpi.value === 'number' ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 1}) : kpi.value} ${kpi.suffix}
+    kpiEl.innerHTML = kpis.map(kpi => {
+        const displayValue = kpi.value != null ? kpi.value.toLocaleString('de-DE', {maximumFractionDigits: 1}) : '–';
+        return `
+            <div class="col-12 col-sm-6 col-md-2">
+                <div class="card kpi-card h-100">
+                    <div class="card-body">
+                        <div class="kpi-value" style="color: #667eea; font-weight: 700;">
+                            ${displayValue} ${kpi.suffix}
+                        </div>
+                        <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
                     </div>
-                    <div class="kpi-label" style="color: #6c757d;">${kpi.label}</div>
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function renderCharts(chartsData, stats) {
@@ -124,6 +144,7 @@ function renderCharts(chartsData, stats) {
     // Consumption Chart
     const canvasCons = document.getElementById('chartCons');
     if (canvasCons && days.length > 0) {
+        const avgConsumption = consumptionData.reduce((a, b) => a + b, 0) / consumptionData.length;
         charts.chartCons = new Chart(canvasCons, {
             type: typeCons,
             data: {
@@ -140,7 +161,14 @@ function renderCharts(chartsData, stats) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `Verbrauch: ${ctx.raw.toFixed(2)} kWh`
+                        }
+                    }
+                },
                 scales: { x: { ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true } }
             }
         });
@@ -227,35 +255,15 @@ function renderCharts(chartsData, stats) {
     }
 }
 
-// Event listeners for day buttons
-document.querySelectorAll('[data-days]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentDays = parseInt(btn.getAttribute('data-days'), 10);
-        loadStats();
-    });
-});
+// Export function for global event handler
+window.loadStats = loadStats;
 
-// Event listeners for chart type selectors
-document.querySelectorAll('.chart-type-select').forEach(select => {
-    select.addEventListener('change', () => {
-        loadStats(); // Re-render with new type
-    });
-});
-
-// Global range listener
+// Listen for global date range changes
 window.addEventListener('globalRangeChange', (e) => {
     const params = e.detail;
     const urlParams = new URLSearchParams(params);
-    currentDays = parseInt(urlParams.get('days'), 10);
-    document.querySelectorAll('[data-days]').forEach(b => {
-        if (parseInt(b.getAttribute('data-days'), 10) === currentDays) {
-            b.classList.add('active');
-        } else {
-            b.classList.remove('active');
-        }
-    });
+    const days = parseInt(urlParams.get('days'), 10);
+    currentDays = days;
     loadStats();
 });
 

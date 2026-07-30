@@ -1,4 +1,4 @@
-// overview.js - Dashboard mit korrekten Durchschnittswerten und Layout
+// overview.js - Dashboard mit korrekten Durchschnittswerten, Heatmaps und Layout
 
 let currentDays = 90;
 let currentPageMerged = 1;
@@ -9,7 +9,9 @@ let charts = {
     consumption: null,
     cost: null,
     km: null,
-    homeExtern: null
+    homeExtern: null,
+    heatmapTemp: null,
+    heatmapWeekday: null
 };
 
 function safeGet(selector) {
@@ -32,25 +34,29 @@ async function loadOverview() {
         const paramsStats = `days=${days}`;
         const paramsMerged = `days=${days}&page=${currentPageMerged}&per_page=${PER_PAGE}`;
         const paramsCharts = `days=${days}`;
+        const paramsHeatmap = `days=${days}`;
         
         console.log('Loading overview data...', { days, paramsStats, paramsMerged, paramsCharts });
         
-        const [merged, stats, chartsData] = await Promise.all([
+        const [merged, stats, chartsData, heatmapData] = await Promise.all([
             fetch(`/api/merged?${paramsMerged}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ rows: [], pagination: {} })),
             fetch(`/api/stats?${paramsStats}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ totals: {} })),
-            fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] }))
+            fetch(`/api/charts?${paramsCharts}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ series: [] })),
+            fetch(`/api/statistics?${paramsHeatmap}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => ({ heatmap: [], heatmap_kwh: [] }))
         ]);
 
         console.log('API responses:', { 
             merged: merged?.rows?.length, 
             stats: stats?.totals ? 'present' : 'empty',
-            charts: chartsData?.series?.length 
+            charts: chartsData?.series?.length,
+            heatmap: heatmapData?.heatmap?.length
         });
 
-        renderMergedTable(merged.rows || merged);
+        renderMergedTable(merged.rows || []);
         renderPaginationMerged(merged.pagination?.total || 0);
-        renderKPIs(stats.totals || {}, merged.rows || merged);
+        renderKPIs(stats.totals || {}, merged.rows || []);
         renderCharts(chartsData, stats.totals || {});
+        renderHeatmaps(heatmapData);
         updateRangeLabel();
     } catch (e) {
         console.error('loadOverview failed', e);
@@ -61,12 +67,15 @@ function renderMergedTable(rows) {
     const tb = safeGet('#tblMerged tbody');
     if (!tb) return;
 
-    if (!rows || rows.length === 0) {
+    // Filter out rows that don't have a valid day field
+    const validRows = (rows || []).filter(r => r && r.day);
+
+    if (validRows.length === 0) {
         tb.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">Keine Daten</td></tr>';
         return;
     }
 
-    tb.innerHTML = rows.map((r, i) => `
+    tb.innerHTML = validRows.map((r, i) => `
         <tr>
             <td>${r.day || '–'}</td>
             <td>${r.stations || '–'}</td>
@@ -306,6 +315,144 @@ function renderCharts(chartsData, stats) {
     }
 }
 
+// Heatmap rendering - grafana-style visualization
+function renderHeatmaps(heatmapData) {
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded for heatmaps');
+        return;
+    }
+
+    const heatmap = heatmapData?.heatmap || [];
+    const heatmapKwh = heatmapData?.heatmap_kwh || [];
+
+    const getColorTemp = (value) => {
+        // Temperature consumption heatmap - blue to red gradient
+        if (value === 0) return '#f0f0f0';
+        const intensity = value / 100; // Normalize
+        const r = Math.floor(255 * intensity);
+        const b = Math.floor(255 * (1 - intensity));
+        return `rgb(${r}, 50, ${b})`;
+    };
+
+    const getColorWeekday = (value) => {
+        // Weekday consumption heatmap - green to red gradient
+        if (value === 0) return '#f8f9fa';
+        const intensity = Math.min(value / 150, 1); // Normalize to max ~150 kWh
+        const r = Math.floor(150 + 105 * intensity);
+        const g = Math.floor(150 - 50 * intensity);
+        const b = Math.floor(50 + 50 * (1 - intensity));
+        return `rgb(${r}, ${g}, ${b})`;
+    };
+
+    // Temperature/Consumption Heatmap
+    const canvasTemp = document.getElementById('heatmapTempConsumption');
+    if (canvasTemp && heatmap.length > 0 && heatmapKwh.length > 0) {
+        // Destroy existing
+        if (charts.heatmapTemp) charts.heatmapTemp.destroy();
+
+        // Create heatmap data for Chart.js
+        const labelsTemp = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+        
+        charts.heatmapTemp = new Chart(canvasTemp, {
+            type: 'bar',
+            data: {
+                labels: labelsTemp,
+                datasets: [{
+                    label: 'Verbrauch',
+                    data: heatmapKwh[0] || [], // First row = Monday column
+                    backgroundColor: (context) => {
+                        const value = context.dataset.data[context.dataIndex];
+                        return getColorWeekday(value);
+                    },
+                    borderColor: '#dee2e6',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'Verbrauch nach Wochentagen (kWh)',
+                        font: { size: 10 }
+                    }
+                },
+                scales: {
+                    x: { 
+                        stacked: true,
+                        ticks: { maxRotation: 0, minRotation: 0 }
+                    },
+                    y: { 
+                        stacked: true, 
+                        beginAtZero: true,
+                        title: { display: true, text: 'kWh' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Weekday/Consumption Heatmap
+    const canvasWeekday = document.getElementById('heatmapWeekdayConsumption');
+    if (canvasWeekday && heatmap.length > 0) {
+        // Destroy existing
+        if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
+
+        const labelsWeekday = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+        
+        // Transpose heatmap data for Chart.js
+        const transposed = [];
+        for (let col = 0; col < 7; col++) {
+            transposed[col] = heatmap.map(row => row[col] || 0);
+        }
+
+        charts.heatmapWeekday = new Chart(canvasWeekday, {
+            type: 'bar',
+            data: {
+                labels: labelsWeekday,
+                datasets: transposed.map((colData, idx) => ({
+                    label: `Tag ${idx + 1}`,
+                    data: colData,
+                    backgroundColor: (context) => {
+                        const value = context.dataset.data[context.dataIndex];
+                        return value > 0 ? '#1976d2' : '#f0f0f0';
+                    },
+                    borderColor: '#dee2e6',
+                    borderWidth: 1
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: false,
+						position: 'bottom'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Lademenge nach Tag der Woche',
+                        font: { size: 10 }
+                    }
+                },
+                scales: {
+                    x: { 
+                        stacked: true,
+                        ticks: { maxRotation: 0, minRotation: 0 }
+                    },
+                    y: { 
+                        stacked: true, 
+                        beginAtZero: true,
+                        title: { display: true, text: 'kWh' }
+                    }
+                }
+            }
+        });
+    }
+}
+
 function renderPaginationMerged(total) {
     const navEl = safeGet('#paginationMerged');
     if (!navEl) return;
@@ -350,7 +497,18 @@ function fmtPct(v) {
     return v;
 }
 
+// Listen for global date range changes
 window.loadOverview = loadOverview;
+
+// Listen for range changes from header
+window.addEventListener('globalRangeChange', (e) => {
+    const params = e.detail;
+    const urlParams = new URLSearchParams(params);
+    const days = parseInt(urlParams.get('days'), 10);
+    currentDays = days;
+    currentPageMerged = 1; // Reset to first page
+    loadOverview();
+});
 
 // Init
 if (document.readyState === 'loading') {
