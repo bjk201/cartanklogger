@@ -701,3 +701,65 @@ html[data-theme="dark"] .spinner-grow {
     .table-container { overflow: visible; }
     .table { min-width: auto; }
   }
+/* Dark Mode Header Styles */
+html[data-theme="dark"] .app-header {
+  background: var(--bg-header-dark) !important;
+  color: var(--text-dark) !important;
+}
+
+html[data-theme="dark"] .app-header .navbar-brand,
+html[data-theme="dark"] .app-header .nav-link,
+html[data-theme="dark"] .app-header .btn,
+html[data-theme="dark"] .app-header .text-muted,
+html[data-theme="dark"] .app-header .small {
+  color: var(--text-dark) !important;
+}
+
+html[data-theme="dark"] .app-header .btn-outline-secondary {
+  background-color: var(--btn-secondary-bg-dark) !important;
+  border-color: var(--btn-secondary-border-dark) !important;
+  color: var(--btn-secondary-text-dark) !important;
+}
+
+html[data-theme="dark"] .app-header .btn-primary {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .app-header .btn-outline-primary {
+  background-color: transparent !important;
+  border-color: #2563eb !important;
+  color: #2563eb !important;
+}
+
+html[data-theme="dark"] .app-header .input-group-text,
+html[data-theme="dark"] .app-header input.form-control {
+  background-color: var(--form-bg-dark) !important;
+  border-color: var(--form-border-dark) !important;
+  color: var(--form-text-dark) !important;
+}
+
+html[data-theme="dark"] .app-header .input-group-text::before {
+  border-color: var(--form-border-dark) !important;
+}
+
+html[data-theme="dark"] .app-header .btn-group-sm .btn.active {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile {
+  background: var(--bg-dark) !important;
+  color: var(--text-dark) !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link {
+  color: var(--text-dark) !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link.active {
+  background-color: var(--sidebar-active-bg-dark) !important;
+  color: #ffffff !important;
+}
