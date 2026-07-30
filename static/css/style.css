@@ -813,3 +813,44 @@ body html[data-theme="dark"] .app-header .btn-group-sm .btn-primary {
   border-color: #2563eb !important;
   color: #ffffff !important;
 }
+
+/* Mobile Sidebar Dark Mode - Complete styling */
+html[data-theme="dark"] .sidebar-mobile {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link {
+  color: #e2e8f0 !important;
+  background: transparent !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary {
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary:hover {
+  background-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-overlay.show {
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .border-top {
+  border-color: #334155 !important;
+}
