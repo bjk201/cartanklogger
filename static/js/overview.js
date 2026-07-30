@@ -316,7 +316,7 @@ function renderCharts(chartsData, stats) {
 }
 
 
-// Heatmap rendering - fixed height version
+// Heatmap rendering - fixed height version with proper constraints
 function renderHeatmaps(heatmapData) {
     if (typeof Chart === 'undefined') {
         console.warn('Chart.js not loaded for heatmaps');
@@ -339,56 +339,62 @@ function renderHeatmaps(heatmapData) {
     const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
 
-    // Temperature/Consumption Heatmap - simplified
+    // Temperature/Consumption Heatmap
     const canvasTemp = document.getElementById('heatmapTempConsumption');
     if (canvasTemp && heatmapKwh.length) {
         if (charts.heatmapTemp) charts.heatmapTemp.destroy();
 
-        // Use a single dataset with proper height constraint
+        // Flatten data
         const flatData = [];
         const dayLabels = [];
         for (let day = 0; day < 7; day++) {
             for (let hour = 0; hour < 24; hour++) {
                 flatData.push(heatmapKwh[day]?.[hour] || 0);
-                dayLabels.push(`${labelsDays[day]}\n${String(hour).padStart(2, '0')}:00`);
+                dayLabels.push(`${labelsHours[hour]}`);
             }
         }
 
         charts.heatmapTemp = new Chart(canvasTemp, {
             type: 'bar',
             data: {
-                labels: dayLabels,
+                labels: labelsDays,
                 datasets: [{
-                    data: flatData,
-                    backgroundColor: flatData.map(getColor),
+                    label: 'Verbrauch',
+                    data: heatmapKwh,
+                    backgroundColor: (ctx) => getColor(ctx.raw || 0),
                     borderColor: '#dee2e6',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    barThickness: 8  // Fixed bar thickness to prevent expansion
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                height: 150,  // Fixed height
+                aspectRatio: 4,  // Wide aspect ratio
+                height: 150,     // Fixed height
                 plugins: {
                     legend: { display: false },
                     title: { display: true, text: 'Verbrauch (kWh) - 7 Tage x 24h', font: { size: 10 } }
                 },
                 scales: {
                     x: { 
+                        stacked: true,
                         grid: { display: false }, 
-                        ticks: { maxRotation: 90, minRotation: 0, font: { size: 6 } } 
+                        ticks: { maxRotation: 0, minRotation: 0, font: { size: 8 } } 
                     },
                     y: { 
+                        stacked: true,
                         beginAtZero: true, 
                         title: { display: true, text: 'kWh' },
-                        ticks: { font: { size: 8 } }
+                        ticks: { font: { size: 8 } },
+                        grid: { display: true }
                     }
                 }
             }
         });
     }
 
-    // Weekday Heatmap - simplified
+    // Weekday Heatmap
     const canvasWeekday = document.getElementById('heatmapWeekdayConsumption');
     if (canvasWeekday && heatmapKwh.length) {
         if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
@@ -399,13 +405,13 @@ function renderHeatmaps(heatmapData) {
             transposed.push(heatmapKwh.map(row => row[hour] || 0));
         }
 
-        // Create single dataset per hour - but limit to reduce rendering
         const datasets = transposed.map((row, idx) => ({
             label: labelsHours[idx],
             data: row,
             backgroundColor: row.map(getColor),
             borderColor: '#dee2e6',
-            borderWidth: 1
+            borderWidth: 1,
+            barThickness: 6  // Fixed bar thickness
         }));
 
         charts.heatmapWeekday = new Chart(canvasWeekday, {
@@ -417,10 +423,31 @@ function renderHeatmaps(heatmapData) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                height: 150,  // Fixed height
+                aspectRatio: 1.5,
+                height: 150,
                 indexAxis: 'y',
                 plugins: {
                     legend: { display: false },
+                    title: { display: true, text: 'Lademenge nach Tag (kWh)', font: { size: 10 } }
+                },
+                scales: {
+                    x: { 
+                        stacked: true, 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'kWh' },
+                        ticks: { font: { size: 6 } },
+                        grid: { display: true }
+                    },
+                    y: { 
+                        stacked: true, 
+                        ticks: { font: { size: 10 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+}
                     title: { display: true, text: 'Lademenge nach Tag (kWh)', font: { size: 10 } }
                 },
                 scales: {
