@@ -67,7 +67,7 @@ html[data-theme="dark"] body {
 
 /* Desktop header - compact height */
 .app-header {
-  background: var(--bg-header-light);
+  background: var(--bg-header-light) !important;
   border-bottom: 1px solid var(--border-light);
   height: var(--header-height);
   z-index: 1030;
