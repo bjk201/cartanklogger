@@ -67,7 +67,6 @@ function renderMergedTable(rows) {
     const tb = safeGet('#tblMerged tbody');
     if (!tb) return;
 
-    // Filter out rows that don't have a valid day field
     const validRows = (rows || []).filter(r => r && r.day);
 
     if (validRows.length === 0) {
@@ -156,7 +155,6 @@ function renderCharts(chartsData, stats) {
 
     const days = series.map(s => s.day || '').filter(d => d);
     
-    // Verbrauch: verwende kwh falls consumption null/undefined ist
     const consumptionData = series.map(s => {
         const val = s.consumption ?? s.kwh;
         return val != null ? Number(val) : 0;
@@ -167,7 +165,6 @@ function renderCharts(chartsData, stats) {
         return val != null ? Number(val) : 0;
     });
     
-    // Kilometer: verwende cum_km (kumuliert) falls km 0 oder null ist
     const kmData = series.map(s => {
         if (s.km != null && Number(s.km) > 0) return Number(s.km);
         return s.cum_km != null ? Number(s.cum_km) : 0;
@@ -178,7 +175,6 @@ function renderCharts(chartsData, stats) {
         return val != null ? Number(val) : 0;
     });
     
-    // Stats values for Home/Extern
     const homeKwh = stats.home_kwh || stats.kwh || 0;
     const extKwh = stats.ext_kwh || 0;
 
@@ -187,7 +183,6 @@ function renderCharts(chartsData, stats) {
         return isDark ? dark : light;
     };
 
-    // Destroy existing
     Object.values(charts).forEach(c => c && c.destroy());
 
     // Consumption Chart
@@ -315,7 +310,6 @@ function renderCharts(chartsData, stats) {
     }
 }
 
-
 // Heatmap rendering - fixed height version with proper constraints
 function renderHeatmaps(heatmapData) {
     if (typeof Chart === 'undefined') {
@@ -326,7 +320,6 @@ function renderHeatmaps(heatmapData) {
     const heatmapKwh = heatmapData?.heatmap_kwh || [];
     if (!heatmapKwh.length) return;
 
-    // Calculate max for color scaling
     const allVals = heatmapKwh.flat().filter(v => v > 0);
     const maxVal = allVals.length ? Math.max(...allVals) : 1;
 
@@ -344,16 +337,6 @@ function renderHeatmaps(heatmapData) {
     if (canvasTemp && heatmapKwh.length) {
         if (charts.heatmapTemp) charts.heatmapTemp.destroy();
 
-        // Flatten data
-        const flatData = [];
-        const dayLabels = [];
-        for (let day = 0; day < 7; day++) {
-            for (let hour = 0; hour < 24; hour++) {
-                flatData.push(heatmapKwh[day]?.[hour] || 0);
-                dayLabels.push(`${labelsHours[hour]}`);
-            }
-        }
-
         charts.heatmapTemp = new Chart(canvasTemp, {
             type: 'bar',
             data: {
@@ -364,17 +347,17 @@ function renderHeatmaps(heatmapData) {
                     backgroundColor: (ctx) => getColor(ctx.raw || 0),
                     borderColor: '#dee2e6',
                     borderWidth: 1,
-                    barThickness: 8  // Fixed bar thickness to prevent expansion
+                    barThickness: 8
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                aspectRatio: 4,  // Wide aspect ratio
-                height: 150,     // Fixed height
+                aspectRatio: 4,
+                height: 150,
                 plugins: {
                     legend: { display: false },
-                    title: { display: true, text: 'Verbrauch (kWh) - 7 Tage x 24h', font: { size: 10 } }
+                    title: { display: true, text: 'Verbrauch (kWh) - 7 Tage', font: { size: 10 } }
                 },
                 scales: {
                     x: { 
@@ -383,11 +366,9 @@ function renderHeatmaps(heatmapData) {
                         ticks: { maxRotation: 0, minRotation: 0, font: { size: 8 } } 
                     },
                     y: { 
-                        stacked: true,
                         beginAtZero: true, 
                         title: { display: true, text: 'kWh' },
-                        ticks: { font: { size: 8 } },
-                        grid: { display: true }
+                        ticks: { font: { size: 8 } }
                     }
                 }
             }
@@ -399,7 +380,6 @@ function renderHeatmaps(heatmapData) {
     if (canvasWeekday && heatmapKwh.length) {
         if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
 
-        // Transpose: hours as rows, days as columns
         const transposed = [];
         for (let hour = 0; hour < 24; hour++) {
             transposed.push(heatmapKwh.map(row => row[hour] || 0));
@@ -411,7 +391,7 @@ function renderHeatmaps(heatmapData) {
             backgroundColor: row.map(getColor),
             borderColor: '#dee2e6',
             borderWidth: 1,
-            barThickness: 6  // Fixed bar thickness
+            barThickness: 6
         }));
 
         charts.heatmapWeekday = new Chart(canvasWeekday, {
@@ -435,31 +415,17 @@ function renderHeatmaps(heatmapData) {
                         stacked: true, 
                         beginAtZero: true, 
                         title: { display: true, text: 'kWh' },
-                        ticks: { font: { size: 6 } },
-                        grid: { display: true }
+                        ticks: { font: { size: 6 } }
                     },
                     y: { 
                         stacked: true, 
-                        ticks: { font: { size: 10 } },
-                        grid: { display: false }
+                        ticks: { font: { size: 10 } }
                     }
                 }
             }
         });
     }
 }
-                    title: { display: true, text: 'Lademenge nach Tag (kWh)', font: { size: 10 } }
-                },
-                scales: {
-                    x: { stacked: true, beginAtZero: true, title: { display: true, text: 'kWh' }, ticks: { font: { size: 6 } } },
-                    y: { stacked: true, ticks: { font: { size: 10 } } }
-                }
-            }
-        });
-    }
-}
-
-
 
 function renderPaginationMerged(total) {
     const navEl = safeGet('#paginationMerged');
@@ -514,7 +480,7 @@ window.addEventListener('globalRangeChange', (e) => {
     const urlParams = new URLSearchParams(params);
     const days = parseInt(urlParams.get('days'), 10);
     currentDays = days;
-    currentPageMerged = 1; // Reset to first page
+    currentPageMerged = 1;
     loadOverview();
 });
 
