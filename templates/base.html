@@ -123,7 +123,7 @@
 
 <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
 
-<nav class="sidebar-mobile d-md-none" id="sidebarMobile" style="position: fixed; top: 56px; left: 0; right: 0; bottom: 0; z-index: 1040; transform: translateX(-100%); transition: transform 0.3s ease; overflow-y: auto;">
+<nav class="sidebar-mobile d-md-none" id="sidebarMobile" class="sidebar-mobile d-md-none fixed-sidebar">
   <div class="p-3">
     <ul class="nav flex-column gap-1">
       <li><a class="nav-link btn btn-sm {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a></li>
@@ -198,7 +198,7 @@ function initSidebar() {
   if (!sidebarToggle || !sidebar || !overlay) return;
   
   function openSidebar() {
-    sidebar.style.transform = 'translateX(0)';
+    sidebar.classList.add('show');
     overlay.classList.add('show');
     sidebarToggle.innerHTML = '<i class="bi bi-x-lg"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü schließen');
@@ -206,7 +206,7 @@ function initSidebar() {
   }
   
   function closeSidebar() {
-    sidebar.style.transform = 'translateX(-100%)';
+    sidebar.classList.remove('show');
     overlay.classList.remove('show');
     sidebarToggle.innerHTML = '<i class="bi bi-list"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü öffnen');
@@ -214,7 +214,7 @@ function initSidebar() {
   }
   
   sidebarToggle.addEventListener('click', function() {
-    if (sidebar.style.transform === 'translateX(0)') closeSidebar();
+    if (sidebar.classList.contains('show')) closeSidebar();
     else openSidebar();
   });
   
@@ -227,7 +227,7 @@ function initSidebar() {
   
   // Close sidebar on window resize to desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth >= 768 && sidebar.style.transform === 'translateX(0)') closeSidebar();
+    if (window.innerWidth >= 768 && sidebar.classList.contains('show')) closeSidebar();
   });
 }
 
