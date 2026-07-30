@@ -932,7 +932,7 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  z-index: 1040 !important;
+  z-index: 1051 !important;
   transform: translateX(-100%) !important;
   transition: transform 0.3s ease !important;
   overflow-y: auto !important;
