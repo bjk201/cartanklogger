@@ -854,3 +854,73 @@ html[data-theme="dark"] .sidebar-overlay.show {
 html[data-theme="dark"] .sidebar-mobile .border-top {
   border-color: #334155 !important;
 }
+
+/* ========================================
+   MOBILE SIDEBAR DARK MODE - COMPLETE FIX
+   ======================================== */
+
+/* Base mobile sidebar styling */
+html[data-theme="dark"] .sidebar-mobile {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-bottom: 1px solid #334155 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Mobile sidebar container */
+html[data-theme="dark"] .sidebar-mobile .p-3 {
+  padding: 1rem !important;
+}
+
+/* Navigation links in mobile sidebar */
+html[data-theme="dark"] .sidebar-mobile .nav-link {
+  color: #e2e8f0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0.375rem !important;
+  padding: 0.375rem 0.75rem !important;
+  margin-bottom: 0.25rem !important;
+  transition: background-color 0.15s ease-in-out !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
+/* Secondary buttons in mobile sidebar */
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary {
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary:hover {
+  background-color: #475569 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+/* Border top in mobile sidebar */
+html[data-theme="dark"] .sidebar-mobile .border-top {
+  border-top: 1px solid #334155 !important;
+}
+
+/* Theme toggle button in mobile sidebar */
+html[data-theme="dark"] .sidebar-mobile #themeToggleMobile {
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
+  background-color: #475569 !important;
+  color: #ffffff !important;
+}
