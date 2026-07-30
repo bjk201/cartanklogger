@@ -315,132 +315,94 @@ function renderCharts(chartsData, stats) {
     }
 }
 
-// Heatmap rendering - grafana-style visualization
-// Heatmap rendering - grafana-style visualization with proper 2D grid
+
+// Heatmap rendering - simplified efficient version
 function renderHeatmaps(heatmapData) {
     if (typeof Chart === 'undefined') {
         console.warn('Chart.js not loaded for heatmaps');
         return;
     }
 
-    const heatmap = heatmapData?.heatmap || [];
     const heatmapKwh = heatmapData?.heatmap_kwh || [];
-    
-    // Calculate max value for color scaling
-    const allValues = heatmapKwh.flat().filter(v => v > 0);
-    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 1;
+    if (!heatmapKwh.length) return;
 
-    // Color gradient: light gray to dark blue
-    const getHeatColor = (value) => {
-        if (value === 0) return '#f8f9fa';
-        const intensity = value / maxVal;
-        const r = 248 - Math.floor(248 * intensity);
-        const g = 249 - Math.floor(249 * intensity);
-        const b = 250 - Math.floor(250 * intensity);
-        return `rgb(${r}, ${g}, ${b})`;
+    // Calculate max for color scaling
+    const allVals = heatmapKwh.flat().filter(v => v > 0);
+    const maxVal = allVals.length ? Math.max(...allVals) : 1;
+
+    const getColor = (v) => {
+        if (v === 0) return '#f8f9fa';
+        const i = v / maxVal;
+        return `rgb(${Math.floor(248-248*i)}, ${Math.floor(249-249*i)}, ${Math.floor(250-250*i)})`;
     };
 
-    // Horizontal Heatmap: Consumption by Day of Week (7 days x 24 hours)
+    // Simple heatmap: single dataset with colors
+    const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
+
+    // Temperature/Consumption Heatmap
     const canvasTemp = document.getElementById('heatmapTempConsumption');
-    if (canvasTemp && heatmapKwh.length > 0) {
+    if (canvasTemp && heatmapKwh.length) {
         if (charts.heatmapTemp) charts.heatmapTemp.destroy();
 
-        const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-        const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0') + ':00');
-
-        // Create background color dataset for each cell
-        const datasets = [];
+        // Flatten data for simple bar chart
+        const flatData = [];
         for (let day = 0; day < 7; day++) {
-            datasets.push({
-                label: labelsDays[day],
-                data: heatmapKwh[day] || [],
-                backgroundColor: (context) => {
-                    const value = context.dataset.data[context.dataIndex];
-                    return getHeatColor(value);
-                },
-                borderColor: '#dee2e6',
-                borderWidth: 1,
-                barPercentage: 1.0,
-                categoryPercentage: 1.0
-            });
+            for (let hour = 0; hour < 24; hour++) {
+                flatData.push(heatmapKwh[day]?.[hour] || 0);
+            }
         }
 
         charts.heatmapTemp = new Chart(canvasTemp, {
             type: 'bar',
             data: {
-                labels: labelsHours,
-                datasets: datasets
+                labels: labelsDays.flatMap(d => labelsHours.map(h => `${h}`)),
+                datasets: [{
+                    data: flatData,
+                    backgroundColor: flatData.map(getColor),
+                    borderColor: '#dee2e6',
+                    borderWidth: 1
+                }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                indexAxis: 'x',
                 plugins: {
                     legend: { display: false },
-                    title: {
-                        display: true,
-                        text: 'Verbrauch (kWh) nach Tag und Uhrzeit',
-                        font: { size: 12 }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => {
-                                const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-                                const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0') + ':00');
-                                return labelsDays[ctx.datasetIndex] + ' ' + labelsHours[ctx.dataIndex] + ': ' + ctx.raw.toFixed(1) + ' kWh';
-                            }
-                        }
-                    }
+                    title: { display: true, text: 'Verbrauch (kWh) - 7 Tage x 24h', font: { size: 11 } }
                 },
                 scales: {
-                    x: {
-                        stacked: true,
-                        ticks: { maxRotation: 90, minRotation: 0, font: { size: 8 } }
-                    },
-                    y: {
-                        stacked: true,
-                        beginAtZero: true,
-                        title: { display: true, text: 'Uhrzeit' }
-                    }
+                    x: { grid: { display: false }, ticks: { maxRotation: 90, minRotation: 0, font: { size: 7 } } },
+                    y: { beginAtZero: true, title: { display: true, text: 'kWh' } }
                 }
             }
         });
     }
 
-    // Vertical Heatmap: Weekday Consumption (24 hours x 7 days)
+    // Weekday Heatmap
     const canvasWeekday = document.getElementById('heatmapWeekdayConsumption');
-    if (canvasWeekday && heatmapKwh.length > 0) {
+    if (canvasWeekday && heatmapKwh.length) {
         if (charts.heatmapWeekday) charts.heatmapWeekday.destroy();
 
-        const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-        const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
-
-        // Transpose: hours as labels, days as datasets
+        // Transpose: hours as rows, days as columns
         const transposed = [];
         for (let hour = 0; hour < 24; hour++) {
-            transposed[hour] = heatmapKwh.map(row => row[hour] || 0);
+            transposed.push(heatmapKwh.map(row => row[hour] || 0));
         }
 
-        const datasets = [];
-        for (let day = 0; day < 7; day++) {
-            datasets.push({
-                label: labelsDays[day],
-                data: transposed.map(row => row[day] || 0),
-                backgroundColor: (context) => {
-                    const value = context.dataset.data[context.dataIndex];
-                    return getHeatColor(value);
-                },
-                borderColor: '#dee2e6',
-                borderWidth: 1,
-                barPercentage: 1.0,
-                categoryPercentage: 1.0
-            });
-        }
+        // Create single dataset per hour
+        const datasets = transposed.map((row, idx) => ({
+            label: labelsHours[idx],
+            data: row,
+            backgroundColor: row.map(getColor),
+            borderColor: '#dee2e6',
+            borderWidth: 1
+        }));
 
         charts.heatmapWeekday = new Chart(canvasWeekday, {
             type: 'bar',
             data: {
-                labels: labelsHours,
+                labels: labelsDays,
                 datasets: datasets
             },
             options: {
@@ -448,41 +410,18 @@ function renderHeatmaps(heatmapData) {
                 maintainAspectRatio: false,
                 indexAxis: 'y',
                 plugins: {
-                    legend: { 
-                        display: true,
-                        position: 'bottom',
-                        labels: { font: { size: 10 } }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Lademenge (kWh) nach Tag der Woche',
-                        font: { size: 12 }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => {
-                                const labelsDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-                                const labelsHours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
-                                return labelsDays[ctx.datasetIndex] + ' ' + labelsHours[ctx.dataIndex] + ': ' + ctx.raw.toFixed(1) + ' kWh';
-                            }
-                        }
-                    }
+                    legend: { display: false },
+                    title: { display: true, text: 'Lademenge nach Tag (kWh)', font: { size: 11 } }
                 },
                 scales: {
-                    y: {
-                        stacked: true,
-                        ticks: { maxRotation: 90, minRotation: 0, font: { size: 8 } }
-                    },
-                    x: {
-                        stacked: true,
-                        beginAtZero: true,
-                        title: { display: true, text: 'kWh' }
-                    }
+                    x: { stacked: true, beginAtZero: true, title: { display: true, text: 'kWh' } },
+                    y: { stacked: true, ticks: { font: { size: 8 } } }
                 }
             }
         });
     }
 }
+
 
 function renderPaginationMerged(total) {
     const navEl = safeGet('#paginationMerged');
