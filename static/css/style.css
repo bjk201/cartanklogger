@@ -926,6 +926,8 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
 }
 
 
+
+
 /* Fixed sidebar base styles - Mobile menu */
 .fixed-sidebar {
   position: fixed !important;
@@ -934,15 +936,7 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   right: 0 !important;
   bottom: 0 !important;
   z-index: 1051 !important;
-  transform: translateX(-100%) !important;
-  transition: transform 0.3s ease-in-out !important;
   overflow-y: auto !important;
-  visibility: hidden !important;
-}
-
-.fixed-sidebar.show {
-  transform: translateX(0) !important;
-  visibility: visible !important;
 }
 
 /* Overlay for mobile menu */
@@ -953,16 +947,12 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   right: 0 !important;
   bottom: 0 !important;
   z-index: 1040 !important;
-  background: rgba(0, 0, 0, 0) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
   opacity: 0 !important;
   visibility: hidden !important;
-  transition: all 0.3s ease-in-out !important;
 }
 
 .sidebar-overlay.show {
-  background: rgba(0, 0, 0, 0.5) !important;
   opacity: 1 !important;
   visibility: visible !important;
 }
-
-

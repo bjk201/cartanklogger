@@ -197,37 +197,48 @@ function initSidebar() {
   
   if (!sidebarToggle || !sidebar || !overlay) return;
   
+  // Ensure sidebar is hidden initially
+  sidebar.style.display = 'none';
+  overlay.style.display = 'none';
+  
   function openSidebar() {
-    sidebar.classList.add('show');
-    overlay.classList.add('show');
+    sidebar.style.display = 'block';
+    overlay.style.display = 'block';
     sidebarToggle.innerHTML = '<i class="bi bi-x-lg"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü schließen');
     document.body.style.overflow = 'hidden';
   }
   
   function closeSidebar() {
-    sidebar.classList.remove('show');
-    overlay.classList.remove('show');
+    sidebar.style.display = 'none';
+    overlay.style.display = 'none';
     sidebarToggle.innerHTML = '<i class="bi bi-list"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü öffnen');
     document.body.style.overflow = '';
   }
   
-  sidebarToggle.addEventListener('click', function() {
-    if (sidebar.classList.contains('show')) closeSidebar();
+  sidebarToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (sidebar.style.display === 'block') closeSidebar();
     else openSidebar();
   });
   
-  overlay.addEventListener('click', closeSidebar);
+  overlay.addEventListener('click', function(e) {
+    e.stopPropagation();
+    closeSidebar();
+  });
   
   // Close sidebar when clicking a nav link on mobile
   document.querySelectorAll('.sidebar-mobile .nav-link').forEach(link => {
-    link.addEventListener('click', closeSidebar);
+    link.addEventListener('click', function(e) {
+      e.stopPropagation();
+      closeSidebar();
+    });
   });
   
   // Close sidebar on window resize to desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth >= 768 && sidebar.classList.contains('show')) closeSidebar();
+    if (window.innerWidth >= 768 && sidebar.style.display === 'block') closeSidebar();
   });
 }
 
