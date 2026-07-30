@@ -956,3 +956,17 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   opacity: 1 !important;
   visibility: visible !important;
 }
+
+/* Hide mobile sidebar on desktop */
+@media (min-width: 768px) {
+  .sidebar-mobile.d-none {
+    display: none !important;
+  }
+}
+
+/* Show mobile sidebar on small screens */
+@media (max-width: 767px) {
+  .sidebar-mobile:not(.d-none) {
+    display: block !important;
+  }
+}
