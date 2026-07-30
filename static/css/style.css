@@ -925,7 +925,8 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   color: #ffffff !important;
 }
 
-/* Fixed sidebar base styles */
+
+/* Fixed sidebar base styles - Mobile menu */
 .fixed-sidebar {
   position: fixed !important;
   top: 56px !important;
@@ -934,10 +935,34 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
   bottom: 0 !important;
   z-index: 1051 !important;
   transform: translateX(-100%) !important;
-  transition: transform 0.3s ease !important;
+  transition: transform 0.3s ease-in-out !important;
   overflow-y: auto !important;
+  visibility: hidden !important;
 }
 
 .fixed-sidebar.show {
   transform: translateX(0) !important;
+  visibility: visible !important;
 }
+
+/* Overlay for mobile menu */
+.sidebar-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 1040 !important;
+  background: rgba(0, 0, 0, 0) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: all 0.3s ease-in-out !important;
+}
+
+.sidebar-overlay.show {
+  background: rgba(0, 0, 0, 0.5) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+
