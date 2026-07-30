@@ -763,3 +763,53 @@ html[data-theme="dark"] .sidebar-mobile .nav-link.active {
   background-color: var(--sidebar-active-bg-dark) !important;
   color: #ffffff !important;
 }
+
+/* Dark Mode Header Styles - More specific selectors */
+body html[data-theme="dark"] .app-header {
+  background: var(--bg-header-dark) !important;
+  color: var(--text-dark) !important;
+}
+
+body html[data-theme="dark"] .app-header .navbar-brand,
+body html[data-theme="dark"] .app-header .nav-link,
+body html[data-theme="dark"] .app-header .btn,
+body html[data-theme="dark"] .app-header .text-muted,
+body html[data-theme="dark"] .app-header .small {
+  color: var(--text-dark) !important;
+}
+
+body html[data-theme="dark"] .app-header .btn-outline-secondary {
+  background-color: var(--btn-secondary-bg-dark) !important;
+  border-color: var(--btn-secondary-border-dark) !important;
+  color: var(--btn-secondary-text-dark) !important;
+}
+
+body html[data-theme="dark"] .app-header .btn-primary:not(.btn-outline-primary) {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+body html[data-theme="dark"] .app-header .btn-outline-primary {
+  background-color: transparent !important;
+  border-color: #2563eb !important;
+  color: #2563eb !important;
+}
+
+body html[data-theme="dark"] .app-header .input-group-text,
+body html[data-theme="dark"] .app-header input.form-control {
+  background-color: var(--form-bg-dark) !important;
+  border-color: var(--form-border-dark) !important;
+  color: var(--form-text-dark) !important;
+}
+
+body html[data-theme="dark"] .app-header .input-group-text {
+  border: 1px solid var(--form-border-dark) !important;
+}
+
+body html[data-theme="dark"] .app-header .btn-group-sm .btn.active,
+body html[data-theme="dark"] .app-header .btn-group-sm .btn-primary {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
