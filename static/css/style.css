@@ -970,3 +970,95 @@ html[data-theme="dark"] .sidebar-mobile #themeToggleMobile:hover {
     display: block !important;
   }
 }
+
+/* ========================================
+   COMPLETE MOBILE SIDEBAR DARK MODE FIX
+   ======================================== */
+
+/* Mobile sidebar container - ensure it's above header */
+html[data-theme="dark"] .sidebar-mobile {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-bottom: 1px solid #334155 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  position: fixed !important;
+  top: 56px !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 1052 !important;
+  overflow-y: auto !important;
+  transform: translateX(0) !important;
+  visibility: visible !important;
+}
+
+/* Mobile sidebar links - ensure they're visible */
+html[data-theme="dark"] .sidebar-mobile .nav-link {
+  color: #e2e8f0 !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0.5rem 1rem !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .nav-link.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  border-left: 3px solid #3b82f6 !important;
+}
+
+/* Mobile sidebar buttons - ensure they're visible */
+html[data-theme="dark"] .sidebar-mobile .btn {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary {
+  color: #cbd5e1 !important;
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+}
+
+html[data-theme="dark"] .sidebar-mobile .btn-outline-secondary:hover {
+  color: #ffffff !important;
+  background-color: #475569 !important;
+  border-color: #64748b !important;
+}
+
+/* Theme toggle button icon color in dark mode */
+html[data-theme="dark"] .theme-toggle i,
+html[data-theme="dark"] #themeToggleMobile i {
+  color: #e2e8f0 !important;
+}
+
+/* Header in dark mode - ensure it's consistent */
+html[data-theme="dark"] .app-header {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+/* Header links in dark mode */
+html[data-theme="dark"] .app-header a {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .app-header .nav-link {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .app-header .nav-link.active {
+  color: #93c5fd !important;
+}
+
+/* Border/divider colors in dark mode */
+html[data-theme="dark"] .border-top,
+html[data-theme="dark"] .sidebar-mobile .border-top {
+  border-top-color: #334155 !important;
+}
