@@ -1,0 +1,106 @@
+.state-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.state-view__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.state-view__icon {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  opacity: 0.6;
+}
+
+.state-view__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+}
+
+.state-view__message {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  max-width: 320px;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+.state-view__retry,
+.state-view__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: var(--color-primary);
+  color: white;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.state-view__retry:hover,
+.state-view__action:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.state-view__retry:focus-visible,
+.state-view__action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.partial-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-md);
+  color: #92400e;
+  font-size: 0.875rem;
+}
+
+[data-theme="dark"] .partial-error {
+  background: #3b2f0a;
+  border-color: #92400e;
+  color: #fde68a;
+}
+
+.partial-error__dismiss {
+  margin-left: auto;
+  padding: 0.125rem 0.375rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
+  border-radius: var(--radius-sm);
+  transition: opacity var(--transition-fast);
+}
+
+.partial-error__dismiss:hover {
+  opacity: 1;
+}

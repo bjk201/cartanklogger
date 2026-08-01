@@ -7,6 +7,129 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="csrf-token" content="{{ csrf_token() if csrf_token else '' }}">
+    <!-- Inline Styles for Header - ensures immediate rendering -->
+    <style>
+      /* Brand styles */
+      .brand-text {
+        font-size: 1.5rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+      }
+      .brand-text .text-primary {
+        color: #0d6efd;
+      }
+      #headerLogo, #mobileLogo {
+        color: #0f172a;
+        text-decoration: none;
+      }
+      #headerLogo:hover, #mobileLogo:hover { color: #1e293b; }
+      @media (min-width: 768px) { .brand-text { font-size: 1.75rem; } }
+      @media (max-width: 767.98px) { .brand-text { font-size: 1.25rem; } }
+      
+      /* Navigation Menu - minimalist style */
+      .nav-menu {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 0.5rem;
+        display: inline-flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .nav-menu .nav-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #0f172a;
+        background: transparent;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.375rem;
+        text-decoration: none;
+        transition: all 0.15s ease-in-out;
+      }
+      .nav-menu .nav-btn:hover { background: #f6f7f9; color: #0f172a; }
+      .nav-menu .nav-btn.active { background: #0d6efd; border-color: #0d6efd; color: white; }
+      
+      /* Mobile offcanvas sidebar */
+      .sidebar-mobile-offcanvas {
+        position: fixed;
+        top: 56px;
+        left: 0;
+        bottom: 0;
+        width: 280px;
+        max-width: 90vw;
+        background: #ffffff;
+        border-right: 1px solid #e2e8f0;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+        z-index: 1050;
+        transform: translateX(0);
+        transition: transform 0.3s ease;
+        overflow-y: auto;
+      }
+      .sidebar-mobile-offcanvas.hidden { transform: translateX(-100%); }
+      .sidebar-mobile-offcanvas * { color: #0f172a !important; }
+      .sidebar-mobile-offcanvas .nav-link,
+      .sidebar-mobile-offcanvas .btn { color: #0f172a !important; }
+      .sidebar-mobile-offcanvas .nav-link.active,
+      .sidebar-mobile-offcanvas .btn-primary { background: #2563eb !important; color: white !important; }
+      .sidebar-mobile-offcanvas .btn-outline-secondary { background: #f8fafc !important; border-color: #cbd5e1 !important; }
+      .sidebar-mobile-offcanvas .theme-toggle { background: #f8fafc; border: 1px solid #cbd5e1; }
+      
+      /* Dark mode overrides - using CSS variables for consistency */
+      html[data-theme="dark"] {
+        --header-bg: #1e293b;
+        --header-border: #334155;
+        --header-text: #e2e8f0;
+        --card-bg: #334155;
+        --card-border: #475569;
+        --sidebar-bg: #0f172a;
+        --text-muted: #94a3b8;
+        --primary: #2563eb;
+        --primary-dark: #1d4ed8;
+      }
+      html:not([data-theme="dark"]) {
+        --header-bg: #f8fafc;
+        --header-border: #e2e8f0;
+        --header-text: #0f172a;
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --sidebar-bg: #ffffff;
+        --text-muted: #64748b;
+        --primary: #0d6efd;
+        --primary-dark: #0c54d0;
+      }
+      
+      /* Apply CSS variables to header */
+      .app-header { background: var(--header-bg) !important; }
+      .app-header * { color: var(--header-text) !important; }
+      .app-header .btn-primary { background: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
+      .app-header .btn-primary:hover { background: var(--primary-dark) !important; border-color: var(--primary-dark) !important; }
+      .app-header .btn-outline-secondary { background: var(--card-bg) !important; border-color: var(--card-border) !important; color: var(--header-text) !important; }
+      .app-header .theme-toggle i { color: var(--header-text) !important; }
+      
+      /* Navigation in dark mode */
+      html[data-theme="dark"] .nav-menu {
+        background: var(--card-bg);
+        border-color: var(--card-border);
+      }
+      html[data-theme="dark"] .nav-menu .nav-btn { color: var(--header-text); border-color: var(--card-border); }
+      html[data-theme="dark"] .nav-menu .nav-btn:hover { background: #1e293b; }
+      html[data-theme="dark"] .nav-menu .nav-btn.active { background: var(--primary); border-color: var(--primary); }
+      
+      header .d-md-flex { display: flex !important; }
+      #mainNav { gap: 0.5rem; }
+      
+      /* Theme toggle button styling */
+      #themeToggle, #themeToggleMobile {
+        border-radius: 0.375rem;
+        transition: all 0.15s ease-in-out;
+      }
+      #themeLabel { font-weight: 500; }
+    </style>
 </head>
 <body>
 
@@ -35,106 +158,84 @@
       border-color: #475569 !important;
       color: #e2e8f0 !important;
     }
-    html[data-theme="dark"] .app-header .btn-outline-primary {
-      background-color: transparent !important;
-      border-color: #2563eb !important;
-      color: #2563eb !important;
-    }
-    html[data-theme="dark"] .app-header .input-group-text {
-      background-color: #1e293b !important;
-      border: 1px solid #475569 !important;
-      color: #e2e8f0 !important;
-    }
-    html[data-theme="dark"] .app-header input.form-control {
-      background-color: #1e293b !important;
-      border-color: #475569 !important;
-      color: #e2e8f0 !important;
-    }
-    html[data-theme="dark"] .app-header .input-group-text::before {
-      border-color: #475569 !important;
-    }
-    html[data-theme="dark"] .app-header .btn-group-sm .btn.active,
-    html[data-theme="dark"] .app-header .btn-group-sm .btn-primary {
-      background-color: #2563eb !important;
-      border-color: #2563eb !important;
-      color: #ffffff !important;
-    }
-    html[data-theme="dark"] .app-header .text-muted {
-      color: #94a3b8 !important;
-    }
-    html[data-theme="dark"] .app-header .small {
-      color: #cbd5e1 !important;
-    }
-    html[data-theme="dark"] .sidebar-mobile {
-      background: #0f172a !important;
-      color: #e2e8f0 !important;
-    }
-    html[data-theme="dark"] .sidebar-mobile .nav-link {
-      color: #e2e8f0 !important;
-    }
-    html[data-theme="dark"] .sidebar-mobile .nav-link.active {
-      background-color: #3b82f6 !important;
+    html[data-theme="dark"] .app-header .btn-outline-secondary:hover {
+      background-color: #475569 !important;
+      border-color: #64748b !important;
       color: #ffffff !important;
     }
   </style>
-      
-      <button class="sidebar-toggle d-md-none ms-auto order-md-last" id="sidebarToggle" aria-label="Menü öffnen">
-        <i class="bi bi-list"></i>
-      </button>
-      
-      <nav class="d-none d-md-flex align-items-center gap-1 order-md-1" id="mainNav">
-        <div class="btn-group btn-group-sm" role="group" aria-label="Hauptnavigation">
-          <a class="btn {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a>
-          <a class="btn {% if request.path == '/statistik' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/statistik">Statistik</a>
-          <a class="btn {% if request.path == '/monatsvergleich' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
-          <a class="btn {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra</a>
-          <a class="btn {% if request.path == '/importdaten' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/importdaten">Import</a>
-          <a class="btn {% if request.path == '/admin' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin">Admin</a>
-        </div>
-      </nav>
-      
-      <div class="d-flex align-items-center gap-1 order-md-2">
-        <div class="d-none d-sm-flex align-items-center gap-1 pe-1" id="globalDateRange">
-          <span class="text-muted small range-label" id="globalRangeLabel">Letzte 365 Tage</span>
-          <div class="btn-group btn-group-sm" role="group">
-            <button class="btn btn-outline-secondary" data-days="7">7 Tage</button>
-            <button class="btn btn-outline-secondary active" data-days="30">30 Tage</button>
-            <button class="btn btn-outline-secondary" data-days="90">90 Tage</button>
-            <button class="btn btn-outline-secondary" data-days="365">Jahr</button>
-            <button class="btn btn-outline-secondary" data-days="9999">Alle</button>
-          </div>
-          <div class="input-group input-group-sm d-none d-lg-flex ms-1" style="width: auto;">
-            <span class="input-group-text">Von</span>
-            <input type="date" id="globalRangeFrom" class="form-control form-control-sm" style="width: 110px;">
-            <span class="input-group-text">Bis</span>
-            <input type="date" id="globalRangeTo" class="form-control form-control-sm" style="width: 110px;">
-            <button class="btn btn-outline-primary" id="globalRangeApply" type="button">Anwenden</button>
-          </div>
-        </div>
-        
-        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="themeToggle" title="Theme wechseln">
-          <i class="bi bi-moon-fill" id="themeIcon"></i>
-          <span id="themeLabel" class="d-none d-sm-inline">Dark</span>
-        </button>
+  
+  <button class="sidebar-toggle d-md-none ms-auto order-md-last" id="sidebarToggle" aria-label="Menü öffnen">
+    <i class="bi bi-list"></i>
+  </button>
+  
+  <!-- Logo/Brand - click to go to overview -->
+  <div class="d-flex align-items-center gap-2 order-md-1 me-auto">
+    <a href="/" class="navbar-brand text-decoration-none" id="headerLogo">
+      <span class="brand-text fw-bold">CarTank<span class="text-primary">Logger</span></span>
+    </a>
+  </div>
+  
+  <nav class="d-none d-md-flex align-items-center gap-2 order-md-2" id="mainNav">
+    <!-- Navigation Menu - clean minimalist style -->
+    <div class="nav-menu" role="group" aria-label="Hauptnavigation">
+      <a class="nav-btn {% if request.path == '/' %}active{% endif %}" href="/">Übersicht</a>
+      <a class="nav-btn {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">Statistik</a>
+      <a class="nav-btn {% if request.path == '/monatsvergleich' %}active{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
+      <a class="nav-btn {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra</a>
+      <a class="nav-btn {% if request.path == '/importdaten' %}active{% endif %}" href="/importdaten">Import</a>
+      <a class="nav-btn {% if request.path == '/admin' %}active{% endif %}" href="/admin">Admin</a>
+    </div>
+  </nav>
+  
+  <div class="d-flex align-items-center gap-2 order-md-3">
+    <div class="d-none d-sm-flex align-items-center gap-1 pe-1" id="globalDateRange">
+      <span class="text-muted small range-label" id="globalRangeLabel">Letzte 30 Tage</span>
+      <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-outline-secondary" data-days="7">7 Tage</button>
+        <button class="btn btn-outline-secondary active" data-days="30">30 Tage</button>
+        <button class="btn btn-outline-secondary" data-days="90">90 Tage</button>
+        <button class="btn btn-outline-secondary" data-days="365">Jahr</button>
+        <button class="btn btn-outline-secondary" data-days="9999">Alle</button>
+      </div>
+      <div class="input-group input-group-sm d-none d-lg-flex ms-1" style="width: auto;">
+        <span class="input-group-text">Von</span>
+        <input type="date" id="globalRangeFrom" class="form-control form-control-sm" style="width: 110px;">
+        <span class="input-group-text">Bis</span>
+        <input type="date" id="globalRangeTo" class="form-control form-control-sm" style="width: 110px;">
+        <button class="btn btn-outline-primary" id="globalRangeApply" type="button">Anwenden</button>
       </div>
     </div>
+    
+    <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 theme-toggle" id="themeToggle" title="Theme wechseln">
+      <i class="bi bi-moon-fill" id="themeIcon"></i>
+      <span id="themeLabel" class="d-none d-sm-inline">Dark</span>
+    </button>
   </div>
 </header>
 
+<!-- Mobile Sidebar - Offcanvas style -->
 <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
 
-<nav class="sidebar-mobile d-md-none fixed-sidebar" id="sidebarMobile">
+<nav class="sidebar-mobile-offcanvas d-md-none" id="sidebarMobile">
   <div class="p-3">
-    <ul class="nav flex-column gap-1">
-      <li><a class="nav-link btn btn-sm {% if request.path == '/' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/">Übersicht</a></li>
-      <li><a class="nav-link btn btn-sm {% if request.path == '/statistik' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/statistik">Statistik</a></li>
-      <li><a class="nav-link btn btn-sm {% if request.path == '/monatsvergleich' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/monatsvergleich">Monatsvergleich</a></li>
-      <li><a class="nav-link btn btn-sm {% if request.path == '/extra' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/extra">Extra-Kosten</a></li>
-      <li><a class="nav-link btn btn-sm {% if request.path == '/importdaten' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/importdaten">Importdaten</a></li>
-      <li><a class="nav-link btn btn-sm {% if request.path == '/admin' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin">Admin</a></li>
-    </ul>
+    <!-- Logo/Brand für mobile Ansicht -->
+    <a href="/" class="navbar-brand text-decoration-none mb-3" id="mobileLogo">
+      <span class="brand-text fw-bold">CarTank<span class="text-primary">Logger</span></span>
+    </a>
+    
+    <!-- Navigation Menu für mobile Ansicht -->
+    <div class="nav-menu" role="group" aria-label="Hauptnavigation">
+      <a class="nav-btn {% if request.path == '/' %}active{% endif %}" href="/">Übersicht</a>
+      <a class="nav-btn {% if request.path == '/statistik' %}active{% endif %}" href="/statistik">Statistik</a>
+      <a class="nav-btn {% if request.path == '/monatsvergleich' %}active{% endif %}" href="/monatsvergleich">Monatsvergleich</a>
+      <a class="nav-btn {% if request.path == '/extra' %}active{% endif %}" href="/extra">Extra-Kosten</a>
+      <a class="nav-btn {% if request.path == '/importdaten' %}active{% endif %}" href="/importdaten">Importdaten</a>
+      <a class="nav-btn {% if request.path == '/admin' %}active{% endif %}" href="/admin">Admin</a>
+    </div>
+    
     <div class="mt-3 pt-3 border-top">
-      <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggleMobile">
+      <button class="btn btn-outline-secondary theme-toggle w-100 d-flex align-items-center justify-content-center gap-2" id="themeToggleMobile">
         <i class="bi bi-moon-fill" id="themeIconMobile"></i>
         <span id="themeLabelMobile">Dark Mode</span>
       </button>
@@ -189,7 +290,7 @@ function initTheme() {
   if (themeToggleMobile) themeToggleMobile.addEventListener('click', toggleTheme);
 }
 
-// Mobile sidebar toggle
+// Mobile sidebar toggle - Offcanvas style
 function initSidebar() {
   const sidebarToggle = document.getElementById('sidebarToggle');
   const sidebar = document.getElementById('sidebarMobile');
@@ -198,11 +299,11 @@ function initSidebar() {
   if (!sidebarToggle || !sidebar || !overlay) return;
   
   // Ensure sidebar is hidden initially
-  sidebar.classList.add('d-none');
+  sidebar.classList.add('hidden');
   overlay.classList.add('d-none');
   
   function openSidebar() {
-    sidebar.classList.remove('d-none');
+    sidebar.classList.remove('hidden');
     overlay.classList.remove('d-none');
     sidebarToggle.innerHTML = '<i class="bi bi-x-lg"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü schließen');
@@ -210,7 +311,7 @@ function initSidebar() {
   }
   
   function closeSidebar() {
-    sidebar.classList.add('d-none');
+    sidebar.classList.add('hidden');
     overlay.classList.add('d-none');
     sidebarToggle.innerHTML = '<i class="bi bi-list"></i>';
     sidebarToggle.setAttribute('aria-label', 'Menü öffnen');
@@ -220,7 +321,7 @@ function initSidebar() {
   sidebarToggle.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (sidebar.classList.contains('d-none')) openSidebar();
+    if (sidebar.classList.contains('hidden')) openSidebar();
     else closeSidebar();
   });
   
@@ -230,16 +331,17 @@ function initSidebar() {
   });
   
   // Close sidebar when clicking a nav link on mobile
-  document.querySelectorAll('.sidebar-mobile .nav-link').forEach(link => {
+  document.querySelectorAll('.sidebar-mobile .nav-btn').forEach(link => {
     link.addEventListener('click', function(e) {
-      e.preventDefault();
+      // Don't prevent default, let the navigation happen
+      // Just close the menu
       closeSidebar();
     });
   });
   
   // Close sidebar on window resize to desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth >= 768 && !sidebar.classList.contains('d-none')) closeSidebar();
+    if (window.innerWidth >= 768 && !sidebar.classList.contains('hidden')) closeSidebar();
   });
 }
 

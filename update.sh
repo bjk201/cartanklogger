@@ -1,28 +1,48 @@
 #!/usr/bin/env bash
 #
-# CartTankLogger – Auto-Update
+# CarTankLogger – Auto-Update für CTL 1.0 und CTL 2.0
 # ------------------------------------------------
 # Einfach ausführen:  ./update.sh
 #
 # Was passiert:
 #   1. git pull (neuester Code von GitHub)
-#   2. alter Container wird gestoppt
-#   3. Image wird neu gebaut (--no-cache => frischer Code)
-#   4. Container wird neu gestartet (Config + Daten bleiben erhalten)
-#   5. Gesundheits-Check (HTTP 200)
+#   2. CTL 1.0 (Legacy Flask) neu bauen & starten  -> Port 13131
+#   3. CTL 2.0 (FastAPI Backend) neu bauen & starten -> Port 13132
+#   4. Gesundheits-Checks für beide Services
 #
 # Verwendet reines 'docker' (kein docker-compose), weil docker-compose < v2
 # auf manchen Hosts das neue Image-Format nicht lesen kann
 # (KeyError: 'ContainerConfig').
-#
+
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP_NAME="cartanklogger"
-IMAGE="${APP_NAME}:latest"
-HOST_PORT=13131
-CONTAINER_PORT=5000
+# ============================================================
+# KONFIGURATION
+# ============================================================
+
+# --- CTL 1.0 (Legacy Flask) ---
+CTL10_APP_NAME="cartanklogger"
+CTL10_IMAGE="${CTL10_APP_NAME}:latest"
+CTL10_HOST_PORT=13131
+CTL10_CONTAINER_PORT=5000
+CTL10_DB_PATH="/app/data/cartanklogger.db"
+CTL10_CONFIG_FILE="/app/config.yaml"
+
+# --- CTL 2.0 (FastAPI Backend) ---
+CTL20_APP_NAME="cartanklogger-backend"
+CTL20_IMAGE="${CTL20_APP_NAME}:latest"
+CTL20_HOST_PORT=13132
+CTL20_CONTAINER_PORT=8000
+CTL20_DB_PATH="/app/data/cartanklogger-ctl20.db"
+CTL20_CONFIG_FILE="/app/config.yaml"
+CTL20_BUILD_CONTEXT="./backend"
+CTL20_DOCKERFILE="backend/Dockerfile"
+
+# --- Allgemein ---
+BUILD_TIME="$(date +%s)"
+COMMIT_HASH="$(git rev-parse --short HEAD 2>/dev/null || echo "n/a")"
 
 # Umgebung aus .env laden (falls vorhanden), z.B. MOCK_MODE
 if [ -f .env ]; then
@@ -32,40 +52,195 @@ if [ -f .env ]; then
   set +a
 fi
 
-echo "==> git pull (neuester Code)"
+MOCK_MODE="${MOCK_MODE:-false}"
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-http://localhost:13131,http://127.0.0.1:13131,http://localhost:13132,http://127.0.0.1:13132}"
+
+# ============================================================
+# HILFSFUNKTIONEN
+# ============================================================
+
+log_step() {
+  echo ""
+  echo "==> $1"
+}
+
+log_info() {
+  echo "    $1"
+}
+
+log_success() {
+  echo "✅ $1"
+}
+
+log_error() {
+  echo "❌ $1" >&2
+}
+
+stop_container() {
+  local name="$1"
+  log_info "Stoppe Container: ${name}"
+  docker rm -f "${name}" 2>/dev/null || true
+}
+
+build_image() {
+  local image="$1"
+  local context="$2"
+  local dockerfile="$3"
+  local label="$4"
+
+  log_info "Baue Image: ${image} (${label})"
+  docker build --no-cache \
+    --build-arg "BUILD_TIME=${BUILD_TIME}" \
+    --build-arg "COMMIT_HASH=${COMMIT_HASH}" \
+    -t "${image}" \
+    -f "${dockerfile}" \
+    "${context}"
+}
+
+wait_for_health() {
+  local url="$1"
+  local name="$2"
+  local max_attempts=20
+  local attempt=1
+
+  log_info "Warte auf ${name} (${url})..."
+
+  while [ $attempt -le $max_attempts ]; do
+    if curl -sf -o /dev/null "${url}" 2>/dev/null; then
+      log_success "${name} ist bereit (${url})"
+      return 0
+    fi
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+
+  log_error "${name} antwortet nicht nach ${max_attempts} Versuchen"
+  return 1
+}
+
+show_container_logs() {
+  local name="$1"
+  local lines="${2:-30}"
+  echo "--- Letzte ${lines} Zeilen von ${name} ---"
+  docker logs --tail "${lines}" "${name}" 2>&1 || true
+  echo "--- Ende Logs ---"
+}
+
+# ============================================================
+# MAIN
+# ============================================================
+
+echo "============================================================"
+echo "CarTankLogger Deployment - Build: ${BUILD_TIME} - Commit: ${COMMIT_HASH}"
+echo "============================================================"
+
+# ------------------------------------------------------------
+# 1. CODE AKTUALISIEREN
+# ------------------------------------------------------------
+log_step "git pull (neuester Code)"
 git pull --ff-only
 
-echo "==> alter Container stoppen"
-docker rm -f "${APP_NAME}" 2>/dev/null || true
+# ------------------------------------------------------------
+# 2. CTL 1.0 (LEGACY FLASK) DEPLOYEN
+# ------------------------------------------------------------
+log_step "CTL 1.0 (Legacy Flask) deployen"
 
-echo "==> Image neu bauen (--no-cache => frischer Code; BUILD_TIME = Cache-Buster)"
-BUILD_TIME="$(date +%s)"
-docker build --no-cache --build-arg "BUILD_TIME=${BUILD_TIME}" -t "${IMAGE}" .
+stop_container "${CTL10_APP_NAME}"
 
-echo "==> Container starten"
-# APP_VERSION wird im Dockerfile aus BUILD_TIME als ENV gesetzt (Cache-Buster);
-# hier NICHT erneut -e APP_VERSION setzen, sonst ueberschreibt es mit leerem Wert.
+build_image "${CTL10_IMAGE}" "." "Dockerfile" "CTL 1.0 Legacy"
+
+log_info "Starte Container: ${CTL10_APP_NAME} auf Port ${CTL10_HOST_PORT}"
 # shellcheck disable=SC2086
 docker run -d \
-  --name "${APP_NAME}" \
+  --name "${CTL10_APP_NAME}" \
   --restart unless-stopped \
-  -p "${HOST_PORT}:${CONTAINER_PORT}" \
-  -v "$(pwd)/config.yaml:/app/config.yaml" \
+  -p "${CTL10_HOST_PORT}:${CTL10_CONTAINER_PORT}" \
+  -v "$(pwd)/config.yaml:${CTL10_CONFIG_FILE}" \
   -v "$(pwd)/data:/app/data" \
-  -e CONFIG_PATH=/app/config.yaml \
-  -e DB_PATH=/app/data/cartanklogger.db \
-  -e MOCK_MODE="${MOCK_MODE:-false}" \
-  "${IMAGE}"
+  -e CONFIG_PATH="${CTL10_CONFIG_FILE}" \
+  -e DB_PATH="${CTL10_DB_PATH}" \
+  -e MOCK_MODE="${MOCK_MODE}" \
+  -e APP_VERSION="${BUILD_TIME}" \
+  "${CTL10_IMAGE}"
 
-echo "==> warte auf Bereitschaft..."
-for i in $(seq 1 20); do
-  if curl -sf -o /dev/null "http://localhost:${HOST_PORT}"; then
-    echo "✅ CartTankLogger läuft auf http://localhost:${HOST_PORT}"
-    exit 0
+if wait_for_health "http://localhost:${CTL10_HOST_PORT}" "CTL 1.0"; then
+  log_success "CTL 1.0 läuft auf http://localhost:${CTL10_HOST_PORT}"
+else
+  log_error "CTL 1.0 Start fehlgeschlagen"
+  show_container_logs "${CTL10_APP_NAME}"
+  exit 1
+fi
+
+# ------------------------------------------------------------
+# 3. CTL 2.0 (FASTAPI BACKEND) DEPLOYEN
+# ------------------------------------------------------------
+log_step "CTL 2.0 (FastAPI Backend) deployen"
+
+stop_container "${CTL20_APP_NAME}"
+
+build_image "${CTL20_IMAGE}" "${CTL20_BUILD_CONTEXT}" "${CTL20_DOCKERFILE}" "CTL 2.0 Backend"
+
+# DB-Datei für CTL 2.0 explizit ausgeben
+CTL20_DB_FILE="$(pwd)/data/cartanklogger-ctl20.db"
+log_info "CTL 2.0 Datenbank: ${CTL20_DB_FILE}"
+
+# Prüfen ob Dry-Run-DB verwendet wird (für Logging)
+if [ -f "$(pwd)/data/cartanklogger-ctl20-dryrun.db" ] && [ ! -f "${CTL20_DB_FILE}" ]; then
+  log_info "HINWEIS: Dry-Run-DB vorhanden, aber keine finale CTL-2.0-DB. Starte mit leerer DB."
+fi
+
+# shellcheck disable=SC2086
+docker run -d \
+  --name "${CTL20_APP_NAME}" \
+  --restart unless-stopped \
+  -p "${CTL20_HOST_PORT}:${CTL20_CONTAINER_PORT}" \
+  -v "$(pwd)/config:/app/config" \
+  -v "$(pwd)/data:/app/data" \
+  -e CONFIG_PATH="${CTL20_CONFIG_FILE}" \
+  -e DB_PATH="${CTL20_DB_PATH}" \
+  -e MOCK_MODE="${MOCK_MODE}" \
+  -e ALLOWED_ORIGINS="${ALLOWED_ORIGINS}" \
+  "${CTL20_IMAGE}"
+
+if wait_for_health "http://localhost:${CTL20_HOST_PORT}/health" "CTL 2.0"; then
+  log_success "CTL 2.0 läuft auf http://localhost:${CTL20_HOST_PORT}"
+  
+  # DB-Typ im Log kennzeichnen
+  if [ -f "$(pwd)/data/cartanklogger-ctl20-dryrun.db" ] && [ ! -f "${CTL20_DB_FILE}" ]; then
+    log_info "CTL 2.0 running with DRY-RUN database (cartanklogger-ctl20-dryrun.db)"
+  elif [ -f "${CTL20_DB_FILE}" ]; then
+    log_info "CTL 2.0 running with PRODUCTION database (cartanklogger-ctl20.db)"
+  else
+    log_info "CTL 2.0 running with EMPTY database (first start)"
   fi
-  sleep 2
-done
+else
+  log_error "CTL 2.0 Start fehlgeschlagen"
+  show_container_logs "${CTL20_APP_NAME}"
+  exit 1
+fi
 
-echo "❌ Container antwortet nicht – letzte Logs:"
-docker logs --tail 30 "${APP_NAME}" || true
-exit 1
+# ------------------------------------------------------------
+# 4. ZUSAMMENFASSUNG
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "✅ DEPLOYMENT ERFOLGREICH ABGESCHLOSSEN"
+echo "============================================================"
+echo ""
+echo "Services:"
+echo "  CTL 1.0 (Legacy Flask) : http://localhost:${CTL10_HOST_PORT}"
+echo "  CTL 2.0 (FastAPI Backend): http://localhost:${CTL20_HOST_PORT}"
+echo "                            API Docs: http://localhost:${CTL20_HOST_PORT}/docs"
+echo ""
+echo "Datenbanken:"
+echo "  CTL 1.0 : $(pwd)/data/cartanklogger.db"
+echo "  CTL 2.0 : $(pwd)/data/cartanklogger-ctl20.db"
+echo ""
+echo "Container:"
+echo "  ${CTL10_APP_NAME}  (Port ${CTL10_HOST_PORT})"
+echo "  ${CTL20_APP_NAME}  (Port ${CTL20_HOST_PORT})"
+echo ""
+echo "Build-Info:"
+echo "  Zeitstempel: ${BUILD_TIME}"
+echo "  Commit:      ${COMMIT_HASH}"
+echo "============================================================"

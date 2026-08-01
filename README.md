@@ -97,7 +97,8 @@ curl -s http://localhost:13131/api/charts | head -5
 
 ### Usage
 
-1. **Run the application:**
+#### Legacy Flask App (CTL 1.0) - Port 13131
+1. **Run the application (automatisch via update.sh):**
    ```bash
    ./update.sh
    ```
@@ -108,7 +109,158 @@ curl -s http://localhost:13131/api/charts | head -5
    - EVCC data: `http://localhost:13131/evcc`
    - TeslaMate data: `http://localhost:13131/teslamate`
 
-3. **Features working:**
+#### New FastAPI Backend (CTL 2.0) - Port 13132
+**Wird jetzt komplett über `./update.sh` verwaltet (zusammen mit CTL 1.0).**
+
+1. **Automatisches Deploy (beide Services):**
+   ```bash
+   ./update.sh
+   ```
+   Das Skript baut und startet nun **beide** Services:
+   - CTL 1.0 → Port 13131
+   - CTL 2.0 → Port 13132
+
+2. **Verify Backend:**
+   ```bash
+   # Health check
+   curl http://localhost:13132/health
+   
+   # MVP API Endpoint
+   curl "http://localhost:13132/api/overview/recent-sessions?limit=10"
+   
+   # API Documentation
+   open http://localhost:13132/docs
+   ```
+
+3. **Using Docker Compose (alternativ, beide Services):**
+   ```bash
+   docker-compose up -d --build
+   ```
+
+#### Datenbanken
+| Service | Host-Pfad | Container-Pfad |
+|---------|-----------|----------------|
+| CTL 1.0 | `./data/cartanklogger.db` | `/app/data/cartanklogger.db` |
+| CTL 2.0 | `./data/cartanklogger-ctl20.db` | `/app/data/cartanklogger-ctl20.db` |
+
+**WICHTIG:** CTL 2.0 nutzt eine **eigene SQLite-Datei** (`cartanklogger-ctl20.db`), getrennt von der Legacy-DB.
+Die Dry-Run-DB (`cartanklogger-ctl20-dryrun.db`) wird **nicht** produktiv verwendet.
+
+#### Environment Variables (CTL 2.0)
+| Variable | Default | Beschreibung |
+|----------|---------|--------------|
+| `DB_PATH` | `/app/data/cartanklogger-ctl20.db` | Pfad zur SQLite-DB im Container |
+| `ALLOWED_ORIGINS` | `http://localhost:13131,http://127.0.0.1:13131,http://localhost:13132,http://127.0.0.1:13132` | CORS Origins |
+| `MOCK_MODE` | `false` | Mock-Modus für Tests |
+| `CONFIG_PATH` | `/app/config/config.yaml` | Config-Datei Pfad |
+
+### Deployment-Verhalten
+- **Idempotent:** `./update.sh` kann beliebig oft ausgeführt werden
+- **Saubere Trennung:** CTL 1.0 und CTL 2.0 haben eigene Container, Images, Ports, DB-Dateien
+- **Healthchecks:** Beide Services werden auf Erreichbarkeit geprüft (`/` für CTL 1.0, `/health` für CTL 2.0)
+- **Logs bei Fehler:** Bei Startfehler werden die letzten 30 Log-Zeilen ausgezeigt
+- **Rollback:** Nicht implementiert (alter Container wird vor Build gelöscht)
+
+### Testing Commands
+```bash
+# Check backend health
+curl -s http://localhost:13132/health | python3 -m json.tool
+
+# Test MVP endpoint with different limits
+curl -s "http://localhost:13132/api/overview/recent-sessions?limit=1" | python3 -m json.tool
+curl -s "http://localhost:13132/api/overview/recent-sessions?limit=5" | python3 -m json.tool
+
+# Verify sorting and uniqueness
+curl -s "http://localhost:13132/api/overview/recent-sessions?limit=10" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+dates = [d['date'] for d in data['data']]
+ids = [d['id'] for d in data['data']]
+print('Sorted DESC:', all(dates[i] >= dates[i+1] for i in range(len(dates)-1)))
+print('Unique IDs:', len(set(ids)) == len(ids))
+print('IDs:', ids)
+"
+```
+
+### React Frontend (CTL 2.0) - Port 5173 (Dev) / Build für Production
+
+**Tech-Stack:** React 18 + Vite + TypeScript + CSS Modules
+
+#### Entwicklung
+```bash
+cd frontend
+npm install
+npm run dev
+```
+→ Läuft auf http://localhost:5173 mit Proxy zu Backend (Port 13132)
+
+#### Production Build
+```bash
+cd frontend
+npm run build
+```
+→ Output in `frontend/dist/` für nginx/Apache/Static-Hosting
+
+#### Frontend-Struktur
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   └── ThemeContext.tsx          # Theme Provider (Light/Dark + localStorage)
+│   ├── components/
+│   │   ├── KpiCard.tsx + .css        # KPI-Karte mit Trend
+│   │   ├── Sidebar.tsx + .css        # Collapsible Sidebar + Mobile Drawer
+│   │   ├── TopBar.tsx + .css         # Topbar mit Theme-Toggle
+│   │   ├── SessionsTable.tsx + .css  # Desktop-Tabelle + Mobile Cards
+│   │   ├── SessionMobileCard.tsx     # Mobile Card View
+│   │   ├── StateViews.tsx + .css     # Loading/Error/Empty/PartialError
+│   │   └── ...
+│   ├── features/
+│   │   └── overview/
+│   │       ├── OverviewPage.tsx      # Hauptseite: KPIs, Sessions, Trend, Import-Status
+│   │       └── OverviewPage.css
+│   ├── lib/
+│   │   └── apiClient.ts              # Zentrale API (fetch + Error-Handling)
+│   ├── pages/                        # Platzhalter für weitere Seiten
+│   ├── styles/
+│   │   └── global.css                # CSS Variables, Reset, Theme
+│   ├── types/
+│   │   └── api.ts                    # TypeScript Interfaces für API
+│   ├── App.tsx                       # Routing + Layout (Sidebar + TopBar)
+│   ├── main.tsx                      # Entry Point
+│   └── vite-env.d.ts
+├── package.json
+├── tsconfig.json
+├── vite.config.ts                    # Proxy: /api → http://localhost:13132
+└── index.html
+```
+
+#### Features (Overview MVP)
+- **AppShell** mit Sidebar (collapsible, mobile Drawer) + TopBar
+- **Dark/Light Mode** über CSS Variables + localStorage + System-Preference
+- **4 KPI-Karten** (Sessions, Energie, Kosten, Home-Anteil) – berechnet aus letzten 10 Sessions
+- **Sessions-Liste** als Tabelle (Desktop) / Karten (Mobile)
+- **Trend-Chart** (SVG Sparkline) – Energie pro Session
+- **Import-Status** Panel
+- **Loading / Error / Empty / PartialError** States
+- **Vollständig responsiv** (Mobile-first Breakpoints: 480, 768, 1024)
+- **Echte API-Anbindung** gegen `http://localhost:13132/api/overview/recent-sessions?limit=10`
+
+#### API-Nutzung im Frontend
+```typescript
+// lib/apiClient.ts
+export const api = {
+  async getRecentSessions(limit: number = 10): Promise<OverviewResponse>
+}
+```
+
+#### Bekannte offene Punkte
+- Sessions-Seite (`/sessions`) nur Navigation, noch nicht implementiert
+- Statistik/Preise/Extra-Kosten/Import/Settings nur Navigation vorbereitet
+- Kein separater Stats-Endpunkt – KPIs clientseitig aus 10 Sessions berechnet
+- Production-Import noch nicht durchgeführt (läuft auf Dry-Run DB)
+
+### Features working (Legacy CTL 1.0):
    - ✅ 5 KPI cards with real data
    - ✅ Charts visualizing consumption, costs, distance
    - ✅ Dark/light theme toggle
@@ -116,8 +268,24 @@ curl -s http://localhost:13131/api/charts | head -5
    - ✅ Error handling and loading states
    - ✅ Data export capabilities
 
-### Dependencies
+### Features working (CTL 2.0 Backend):
+   - ✅ GET /health → 200
+   - ✅ GET /api/overview/recent-sessions?limit=10 → 200 (echte Legacy-Daten via Dry-Run-Import)
+   - ✅ GET /docs → Swagger UI
+   - ✅ CORS konfiguriert für Frontend-Origin
+   - ✅ Docker Healthcheck
 
+### Features working (CTL 2.0 Frontend MVP):
+   - ✅ React 18 + Vite + TypeScript Build erfolgreich
+   - ✅ AppShell (Sidebar, TopBar, Theme)
+   - ✅ Overview Page mit 4 KPIs, Sessions, Trend, Import-Status
+   - ✅ Responsive: Desktop-Tabelle / Mobile Cards
+   - ✅ Dark/Light Mode (CSS Variables, localStorage, System-Pref)
+   - ✅ Loading / Error / Empty / PartialError States
+   - ✅ Echte API-Anbindung gegen Port 13132 (Vite Proxy)
+   - ✅ TypeScript strict mode, keine Build-Fehler
+
+### Dependencies
 Required for full functionality:
 - **Node.js** (for development)
 - **Docker** (for production deployment)
@@ -125,7 +293,6 @@ Required for full functionality:
 - **Backend APIs** (for data retrieval)
 
 ### Notes
-
 - This repository addresses critical production issues identified during testing
 - Fixes are focused on restoring dashboard functionality and user experience
 - Changes prioritize backward compatibility with existing frontend code
@@ -133,9 +300,8 @@ Required for full functionality:
 - Security improvements include proper input validation and API endpoint protection
 
 ### Repository Information
-
 - **Branch:** main
-- **Commit:** 09942fedded6a8a4d36f30c7236d26485c34f632
+- **Commit:** 0603745 fix: remove duplicate class attribute from sidebar-mobile element
 - **Remote:** origin https://github.com/bjk201/cartanklogger.git
 - **Status:** ✅ Production ready with all critical issues resolved
 

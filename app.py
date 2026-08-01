@@ -14,7 +14,7 @@ import sqlite3
 import subprocess
 import requests
 from datetime import datetime, date, timedelta
-from flask import Flask, render_template, jsonify, request, g, session
+from flask import Flask, render_template, jsonify, request, g, session, abort
 
 # Domänenmodell + Matching + Statistik (vereinheitlichte Charge-Sicht)
 from services.stats import build_stats_from_rows, compute_home_cost_row as _stats_compute_home_cost_row
@@ -5143,6 +5143,37 @@ def api_nerd_vampire_drain():
     park_sessions.reverse()
     
     return jsonify({"park_sessions": park_sessions[:50]})  # Top 50
+
+
+# ---------------------------------------------------------------------------
+# React Frontend SPA Routes
+# ---------------------------------------------------------------------------
+@app.route("/app")
+def react_app():
+    """Serve the React frontend index.html for the root /app route."""
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "frontend", "index.html"), "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "React frontend not found", 404
+
+
+@app.route("/app/<path:path>")
+def spa_fallback(path):
+    """SPA fallback - liefert index.html für alle /app/* Pfade außer /app/api.
+    
+    WICHTIG: Diese Route muss NACH den API-Routen definiert werden,
+    damit /api/* Pfade nicht vom SPA-Fallback überschrieben werden.
+    """
+    # API-Endpunkte nicht vom SPA-Fallback betreffen
+    # Diese Pfade werden bereits von den @app.route("/api/...") Routen bedient
+    
+    # Existiert nicht unter /app/api - SPA-Fallback
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "frontend", "index.html"), "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "React frontend not found", 404
 
 
 if __name__ == "__main__":

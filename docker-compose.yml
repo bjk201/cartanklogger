@@ -21,14 +21,11 @@
 #   - Passe die Pfade ggf. an dein Arbeitsverzeichnis an (relativ zum Compose-File).
 
 services:
+  # Legacy Flask App (CTL 1.0) - remains unchanged
   cartanklogger:
     build:
       context: .
       dockerfile: Dockerfile
-      # BUILD_TIME wird NICHT als Arg uebergeben: Portainer wertet
-      # "$(date +%s)" nicht aus und reicht den Literal-String durch.
-      # Stattdessen setzt der entrypoint APP_VERSION auf die echte
-      # Container-Startzeit (siehe entrypoint.sh) -> zuverlaessiger Cache-Buster.
     image: cartanklogger:latest
     ports:
       - "13131:5000"
@@ -40,3 +37,29 @@ services:
       - DB_PATH=/app/data/cartanklogger.db
       - MOCK_MODE=${MOCK_MODE:-false}
     restart: unless-stopped
+
+  # New FastAPI Backend (CTL 2.0)
+  cartanklogger-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: cartanklogger-backend:latest
+    ports:
+      - "13132:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - DB_PATH=/app/data/cartanklogger-ctl20.db
+      - MOCK_MODE=${MOCK_MODE:-false}
+      - ALLOWED_ORIGINS=http://localhost:13131,http://127.0.0.1:13131,http://localhost:13132,http://127.0.0.1:13132
+    restart: unless-stopped
+    depends_on:
+      - cartanklogger
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

@@ -1,0 +1,246 @@
+.sessions-table__wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+}
+
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.sessions-table thead {
+  background: var(--color-bg);
+}
+
+.sessions-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.sessions-table th.text-end,
+.sessions-table td.text-end {
+  text-align: right;
+}
+
+.sessions-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.sessions-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sessions-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.sessions-table tbody tr:hover {
+  background: var(--color-bg-hover);
+}
+
+.sessions-table__date {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.sessions-table__location {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions-table__energy {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.sessions-table__cost {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.sessions-table__odometer {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.sessions-table__note {
+  max-width: 250px;
+}
+
+.note-truncate {
+  display: inline-block;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.source-badge--home {
+  background: var(--color-primary-light);
+  color: var(--color-home);
+}
+
+[data-theme="dark"] .source-badge--home {
+  background: var(--color-primary-light);
+  color: var(--color-home);
+}
+
+.source-badge--external {
+  background: #dbeafe;
+  color: var(--color-external);
+}
+
+[data-theme="dark"] .source-badge--external {
+  background: #1e3a5f;
+  color: var(--color-external);
+}
+
+.source-badge--import {
+  background: #f3e8ff;
+  color: var(--color-import);
+}
+
+[data-theme="dark"] .source-badge--import {
+  background: #3b1f5b;
+  color: var(--color-import);
+}
+
+.sessions-table__empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.sessions-table__empty p {
+  font-size: 0.875rem;
+}
+
+/* Skeleton loading */
+.sessions-table__skeleton {
+  padding: 0.5rem;
+}
+
+.sessions-table__row.skeleton {
+  display: grid;
+  grid-template-columns: 140px 100px 1fr 80px 100px 100px 1fr;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.skeleton__cell {
+  height: 1rem;
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 25%,
+    var(--color-bg-hover) 50%,
+    var(--color-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (max-width: 1024px) {
+  .sessions-table {
+    font-size: 0.8125rem;
+  }
+  
+  .sessions-table th,
+  .sessions-table td {
+    padding: 0.625rem 0.75rem;
+  }
+  
+  .sessions-table__row.skeleton {
+    grid-template-columns: 120px 80px 1fr 70px 80px 80px 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .sessions-table__wrapper {
+    border: none;
+    border-radius: 0;
+    overflow-x: visible;
+  }
+  
+  .sessions-table thead {
+    display: none;
+  }
+  
+  .sessions-table tbody {
+    display: block;
+  }
+  
+  .sessions-table tr {
+    display: block;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .sessions-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+  }
+  
+  .sessions-table tbody tr:last-child td:last-child {
+    border-bottom: none;
+  }
+  
+  .sessions-table td::before {
+    content: attr(data-label);
+    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  
+  .sessions-table td:last-child {
+    border-bottom: none;
+  }
+  
+  .sessions-table__row.skeleton {
+    display: none;
+  }
+}
