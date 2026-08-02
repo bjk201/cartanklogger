@@ -123,14 +123,27 @@ async def _check_teslamateapi_reachable(base_url: str, token: str) -> Reachabili
     if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, error="Nicht konfiguriert")
     
+    # Ensure trailing slash for TeslaMateAPI
+    if not base_url.endswith("/"):
+        base_url = base_url + "/"
+    
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{base_url}/health", headers=headers)
+            # Use the base URL directly - TeslaMateAPI returns info at root
+            response = await client.get(base_url, headers=headers)
             if response.status_code == 200:
+                # Verify it's a plausible TeslaMateAPI response
+                try:
+                    data = response.json()
+                    if isinstance(data, dict) and ("message" in data or "path" in data or "version" in data):
+                        return ReachabilityStatus(configured=True, reachable=True, status_code=response.status_code)
+                except:
+                    pass
+                # Even if JSON parsing fails or structure differs, HTTP 200 is a good sign
                 return ReachabilityStatus(configured=True, reachable=True, status_code=response.status_code)
             else:
                 return ReachabilityStatus(configured=True, reachable=False, status_code=response.status_code, error=f"HTTP {response.status_code}")

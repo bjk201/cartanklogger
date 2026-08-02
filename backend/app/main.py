@@ -158,14 +158,27 @@ async def check_teslamateapi_reachable_from_config(config) -> dict:
         return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
     
     base_url = config.teslamateapi_base_url
+    # Ensure trailing slash for TeslaMateAPI
+    if not base_url.endswith("/"):
+        base_url = base_url + "/"
+    
     headers = {}
     if config.teslamateapi_token:
         headers["Authorization"] = f"Bearer {config.teslamateapi_token}"
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{base_url}/health", headers=headers)
+            # Use the base URL directly - TeslaMateAPI returns info at root
+            response = await client.get(base_url, headers=headers)
             if response.status_code == 200:
+                # Verify it's a plausible TeslaMateAPI response
+                try:
+                    data = response.json()
+                    if isinstance(data, dict) and ("message" in data or "path" in data or "version" in data):
+                        return {"configured": True, "reachable": True, "status_code": response.status_code}
+                except:
+                    pass
+                # Even if JSON parsing fails or structure differs, HTTP 200 is a good sign
                 return {"configured": True, "reachable": True, "status_code": response.status_code}
             else:
                 return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
