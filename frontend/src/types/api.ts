@@ -138,3 +138,44 @@ export interface OverviewSummaryResponse {
   home_share_pct: number;
   errors: ErrorDetail[];
 }
+
+// Data Sources Settings Types
+export interface DataSourceConfigRead {
+  evcc_host: string;
+  evcc_port: number;
+  evcc_password: string;
+  evcc_api_token: string;
+  evcc_use_tls: boolean;
+  teslamateapi_base_url: string;
+  teslamateapi_token: string;
+  evcc_configured: boolean;
+  teslamateapi_configured: boolean;
+  data_source: 'demo' | 'live';
+}
+
+export interface DataSourceConfigWrite {
+  host: string;
+  port: number;
+  password?: string | null;
+  api_token?: string | null;
+  use_tls: boolean;
+  base_url: string;
+  token?: string | null;
+}
+
+export interface DataSourceConfigTestRequest {
+  source: 'evcc' | 'teslamateapi';
+  host?: string;
+  port?: number;
+  password?: string;
+  api_token?: string;
+  use_tls?: boolean;
+  base_url?: string;
+  token?: string;
+}
+
+export interface DataSourceConfigTestResponse {
+  ok: boolean;
+  source: 'evcc' | 'teslamateapi';
+  status: ReachabilityStatus;
+}

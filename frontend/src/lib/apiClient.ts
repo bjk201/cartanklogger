@@ -1,4 +1,16 @@
-import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, StatisticsResponse, OverviewSummaryResponse, DataSourceStatusResponse } from '../types/api';
+import type { 
+  OverviewResponse, 
+  Session, 
+  HealthResponse, 
+  PaginatedSessionsResponse, 
+  StatisticsResponse, 
+  OverviewSummaryResponse, 
+  DataSourceStatusResponse,
+  DataSourceConfigRead,
+  DataSourceConfigWrite,
+  DataSourceConfigTestRequest,
+  DataSourceConfigTestResponse
+} from '../types/api';
 
 const API_BASE = '/api';
 
@@ -80,7 +92,41 @@ export const api = {
   async getDataSourceStatus(): Promise<DataSourceStatusResponse> {
     return fetchJson<DataSourceStatusResponse>(`/status`);
   },
+
+  // Data Sources Settings
+  async getDataSourceConfig(): Promise<DataSourceConfigRead> {
+    return fetchJson<DataSourceConfigRead>(`/settings/data-sources`);
+  },
+
+  async saveDataSourceConfig(config: DataSourceConfigWrite): Promise<DataSourceConfigRead> {
+    return fetchJson<DataSourceConfigRead>(`/settings/data-sources`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+
+  async testDataSourceConnection(request: DataSourceConfigTestRequest): Promise<DataSourceConfigTestResponse> {
+    return fetchJson<DataSourceConfigTestResponse>(`/settings/data-sources/test`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  },
 };
 
 export { ApiError };
-export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo, StatisticsResponse, StatisticsKPIs, SourceBreakdown, OverviewSummaryResponse, DataSourceStatusResponse } from '../types/api';
+export type { 
+  OverviewResponse, 
+  Session, 
+  HealthResponse, 
+  PaginatedSessionsResponse, 
+  PaginationInfo, 
+  StatisticsResponse, 
+  StatisticsKPIs, 
+  SourceBreakdown, 
+  OverviewSummaryResponse, 
+  DataSourceStatusResponse,
+  DataSourceConfigRead,
+  DataSourceConfigWrite,
+  DataSourceConfigTestRequest,
+  DataSourceConfigTestResponse
+} from '../types/api';

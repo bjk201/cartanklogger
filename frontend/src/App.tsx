@@ -9,7 +9,7 @@ import { StatisticsPage } from './pages/StatisticsPage';
 import { PricesPlaceholderPage } from './pages/PricesPlaceholderPage';
 import { ExtraCostsPlaceholderPage } from './pages/ExtraCostsPlaceholderPage';
 import { ImportReviewPlaceholderPage } from './pages/ImportReviewPlaceholderPage';
-import { SettingsPlaceholderPage } from './pages/SettingsPlaceholderPage';
+import { DataSourcesPage } from './pages/DataSourcesPage';
 import './styles/global.css';
 import './styles/layout.css';
 
@@ -31,7 +31,7 @@ function App() {
                 <Route path="/prices" element={<PricesPlaceholderPage />} />
                 <Route path="/extra-costs" element={<ExtraCostsPlaceholderPage />} />
                 <Route path="/import-review" element={<ImportReviewPlaceholderPage />} />
-                <Route path="/settings" element={<SettingsPlaceholderPage />} />
+                <Route path="/settings" element={<DataSourcesPage />} />
               </Routes>
             </main>
           </div>
