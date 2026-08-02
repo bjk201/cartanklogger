@@ -3,7 +3,7 @@ EVCC ↔ TeslaMateAPI Matching Service
 ====================================
 
 Read-only dry-run matching of EVCC sessions with TeslaMateAPI charges.
-Uses time window overlap logic.
+Uses time window overlap logic with location pre-filter.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -25,6 +25,12 @@ class MatchedCharge:
     energy_kwh: Optional[float]
     cost_eur: Optional[float]
     location: Optional[str]
+    # Pre-filter info
+    location_original: Optional[str]
+    location_normalized: Optional[str]
+    accepted_as_candidate: bool
+    reject_reason: Optional[str]
+    # Match info
     overlap_seconds: int
     containment: str  # 'inside', 'overlaps_start', 'overlaps_end', 'envelops'
 
@@ -59,10 +65,17 @@ class MatchingSummary:
     total_tm_energy: float
     total_delta_kwh: float
     quality_distribution: Dict[str, int]
+    # Pre-filter stats
+    total_tm_charges: int
+    accepted_candidates: int
+    rejected_wrong_location: int
 
 
 class MatchingService:
     """Service for matching EVCC sessions with TeslaMateAPI charges."""
+    
+    # Home location identifier - exact match after normalization
+    HOME_LOCATION_KEY = "zuhause"
     
     def __init__(self, db: Session):
         self.db = db
@@ -77,6 +90,17 @@ class MatchingService:
             return datetime.fromisoformat(dt_str)
         except ValueError:
             return None
+    
+    def _normalize_location(self, location: Optional[str]) -> str:
+        """Normalize location for comparison: lowercase, trim."""
+        if not location:
+            return ""
+        return location.strip().lower()
+    
+    def _is_home_location(self, location: Optional[str]) -> bool:
+        """Check if location is the home location 'Zuhause'."""
+        normalized = self._normalize_location(location)
+        return normalized == self.HOME_LOCATION_KEY
     
     def _get_evcc_sessions(self, limit: Optional[int] = None) -> List[SessionModel]:
         """Get EVCC (home) sessions."""
@@ -181,13 +205,15 @@ class MatchingService:
         total_tm_energy = 0.0
         quality_dist = {'exact': 0, 'plausible': 0, 'weak': 0, 'unmatched': 0}
         
+        # Pre-filter stats
+        total_tm_charges = len(tm_charges)
+        accepted_candidates = 0
+        rejected_wrong_location = 0
+        
         for evcc in evcc_sessions:
             evcc_start = self._parse_datetime(evcc.date.isoformat() if evcc.date else '')
             
-            # EVCC end time: we need finished time - not in model directly
-            # Use date + estimate based on energy (rough: 11kW charging = ~1h per 11kWh)
-            # Or we can check if there's a finished field in legacy data
-            # For now, estimate duration from energy
+            # EVCC end time: estimate duration from energy
             evcc_duration_hours = 0
             if evcc.energy_kwh and evcc.energy_kwh > 0:
                 # Assume average 11kW charging power
@@ -225,8 +251,35 @@ class MatchingService:
             matched_energy_sum = 0.0
             
             for tm in tm_charges:
+                # PRE-FILTER: Location check
+                tm_location_original = tm.location
+                tm_location_normalized = self._normalize_location(tm.location)
+                is_home = self._is_home_location(tm.location)
+                
+                if not is_home:
+                    rejected_wrong_location += 1
+                    # Still record as rejected candidate for debugging
+                    matched_charges.append(MatchedCharge(
+                        charge_id=tm.id,
+                        source_id=tm.source_id,
+                        date=tm.date.isoformat() if tm.date else '',
+                        energy_kwh=tm.energy_kwh,
+                        cost_eur=tm.cost_eur,
+                        location=tm.location,
+                        location_original=tm_location_original,
+                        location_normalized=tm_location_normalized,
+                        accepted_as_candidate=False,
+                        reject_reason='wrong_location',
+                        overlap_seconds=0,
+                        containment='unmatched'
+                    ))
+                    continue
+                
+                # Location accepted
+                accepted_candidates += 1
+                
                 tm_start = self._parse_datetime(tm.date.isoformat() if tm.date else '')
-                # TM end: estimate from energy or use finished if available
+                # TM end: estimate from energy
                 tm_end = None
                 if tm.energy_kwh and tm.energy_kwh > 0:
                     tm_duration_hours = float(tm.energy_kwh) / 11.0  # rough estimate
@@ -247,6 +300,10 @@ class MatchingService:
                         energy_kwh=tm.energy_kwh,
                         cost_eur=tm.cost_eur,
                         location=tm.location,
+                        location_original=tm_location_original,
+                        location_normalized=tm_location_normalized,
+                        accepted_as_candidate=True,
+                        reject_reason=None,
                         overlap_seconds=overlap_seconds,
                         containment=containment
                     ))
@@ -254,25 +311,28 @@ class MatchingService:
                     if tm.energy_kwh:
                         matched_energy_sum += float(tm.energy_kwh)
             
+            # Filter to only accepted candidates for match calculation
+            actual_matches = [c for c in matched_charges if c.accepted_as_candidate]
+            
             # Calculate delta
             delta_kwh = None
-            if evcc.energy_kwh is not None and matched_energy_sum > 0:
+            if evcc.energy_kwh is not None and actual_matches:
+                matched_energy_sum = sum(c.energy_kwh for c in actual_matches if c.energy_kwh)
                 delta_kwh = round(matched_energy_sum - float(evcc.energy_kwh), 2)
             
             # Determine quality
             best_containment = 'unmatched'
-            if matched_charges:
-                # Use best containment
+            if actual_matches:
                 containment_order = {'inside': 4, 'envelops': 3, 'overlaps_start': 2, 'overlaps_end': 1, 'unmatched': 0}
                 best_containment = max(
-                    [c.containment for c in matched_charges],
+                    [c.containment for c in actual_matches],
                     key=lambda x: containment_order.get(x, 0)
                 )
             
             match_quality = self._determine_match_quality(
                 evcc.energy_kwh,
-                matched_energy_sum if matched_charges else None,
-                sum(c.overlap_seconds for c in matched_charges),
+                sum(c.energy_kwh for c in actual_matches if c.energy_kwh) if actual_matches else None,
+                sum(c.overlap_seconds for c in actual_matches),
                 evcc_duration_seconds,
                 best_containment
             )
@@ -281,12 +341,17 @@ class MatchingService:
             
             # Build notes
             notes_parts = []
-            if matched_charges:
-                notes_parts.append(f"{len(matched_charges)} TM charge(s) matched")
-                for c in matched_charges:
+            if actual_matches:
+                notes_parts.append(f"{len(actual_matches)} TM charge(s) matched (home location)")
+                for c in actual_matches:
                     notes_parts.append(f"  TM#{c.charge_id}: {c.containment}, overlap={c.overlap_seconds}s")
             else:
-                notes_parts.append("No TM charges matched")
+                notes_parts.append("No TM charges matched (home location)")
+            
+            # Show rejected count
+            rejected_count = len([c for c in matched_charges if not c.accepted_as_candidate])
+            if rejected_count > 0:
+                notes_parts.append(f"{rejected_count} TM charge(s) rejected: wrong_location")
             
             if delta_kwh is not None:
                 notes_parts.append(f"Delta: {delta_kwh:+.2f} kWh")
@@ -300,10 +365,10 @@ class MatchingService:
                 evcc_cost_eur=evcc.cost_eur,
                 evcc_cost_per_kwh=evcc.cost_per_kwh,
                 evcc_location=evcc.location,
-                matched_charge_count=len(matched_charges),
-                matched_charge_ids=matched_charge_ids,
-                matched_charges=matched_charges,
-                matched_charge_energy_kwh_sum=round(matched_energy_sum, 2) if matched_charges else None,
+                matched_charge_count=len(actual_matches),
+                matched_charge_ids=[c.charge_id for c in actual_matches],
+                matched_charges=matched_charges,  # Include all for debugging (accepted + rejected)
+                matched_charge_energy_kwh_sum=round(sum(c.energy_kwh for c in actual_matches if c.energy_kwh), 2) if actual_matches else None,
                 delta_kwh=delta_kwh,
                 match_quality=match_quality,
                 match_notes='; '.join(notes_parts)
@@ -313,8 +378,8 @@ class MatchingService:
             
             if evcc.energy_kwh:
                 total_evcc_energy += float(evcc.energy_kwh)
-            if matched_charges:
-                total_tm_energy += matched_energy_sum
+            if actual_matches:
+                total_tm_energy += sum(c.energy_kwh for c in actual_matches if c.energy_kwh)
         
         # Summary
         total_delta = round(total_tm_energy - total_evcc_energy, 2)
@@ -328,7 +393,10 @@ class MatchingService:
             total_evcc_energy=round(total_evcc_energy, 2),
             total_tm_energy=round(total_tm_energy, 2),
             total_delta_kwh=total_delta,
-            quality_distribution=quality_dist
+            quality_distribution=quality_dist,
+            total_tm_charges=total_tm_charges,
+            accepted_candidates=accepted_candidates,
+            rejected_wrong_location=rejected_wrong_location
         )
         
         return matches, summary
