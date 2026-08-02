@@ -3,7 +3,7 @@ EVCC ↔ TeslaMateAPI Matching Service
 ====================================
 
 Read-only dry-run matching of EVCC sessions with TeslaMateAPI charges.
-Uses time window overlap logic with location pre-filter.
+Uses time window overlap logic with location pre-filter and manual overrides.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 
 from app.models.session import SessionModel
+from app.models.matching_override import MatchingOverride, OverrideType
 from app.database import get_db
 
 
@@ -32,7 +33,11 @@ class MatchedCharge:
     reject_reason: Optional[str]
     # Match info
     overlap_seconds: int
-    containment: str  # 'inside', 'overlaps_start', 'overlaps_end', 'envelops'
+    containment: str  # 'inside', 'overlaps_start', 'overlaps_end', 'envelops', 'manual_override'
+    # Source info
+    match_source: str = 'auto'  # 'auto' | 'manual_override'
+    override_id: Optional[int] = None
+    override_reason: Optional[str] = None
 
 
 @dataclass
@@ -200,6 +205,9 @@ class MatchingService:
         evcc_sessions = self._get_evcc_sessions(limit)
         tm_charges = self._get_teslamate_charges()
         
+        # Load manual overrides
+        overrides = self._get_active_overrides()
+        
         matches: List[EVCCSessionMatch] = []
         total_evcc_energy = 0.0
         total_tm_energy = 0.0
@@ -209,6 +217,23 @@ class MatchingService:
         total_tm_charges = len(tm_charges)
         accepted_candidates = 0
         rejected_wrong_location = 0
+        
+        # Track which TM charges are already assigned via override
+        overridden_tm_charge_ids = set()
+        for ov in overrides:
+            if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id:
+                overridden_tm_charge_ids.add(ov.teslamate_charge_id)
+        
+        # Build override lookup: tm_charge_id -> override info
+        override_map = {}
+        for ov in overrides:
+            if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id:
+                override_map[ov.teslamate_charge_id] = {
+                    'evcc_session_id': ov.evcc_session_id,
+                    'override_id': ov.id,
+                    'reason': ov.reason,
+                    'replaced_auto_match': ov.replaced_auto_match
+                }
         
         for evcc in evcc_sessions:
             evcc_start = self._parse_datetime(evcc.date.isoformat() if evcc.date else '')
@@ -249,8 +274,42 @@ class MatchingService:
             matched_charges: List[MatchedCharge] = []
             matched_charge_ids: List[int] = []
             matched_energy_sum = 0.0
+            manual_matches = 0
+            auto_matches = 0
             
             for tm in tm_charges:
+                # Check if this TM charge has a manual override
+                override_info = override_map.get(tm.id)
+                
+                if override_info:
+                    # Manual override exists - use it if it points to this EVCC session
+                    if override_info['evcc_session_id'] == evcc.id:
+                        # This TM charge is manually assigned to this EVCC session
+                        manual_matches += 1
+                        matched_charges.append(MatchedCharge(
+                            charge_id=tm.id,
+                            source_id=tm.source_id,
+                            date=tm.date.isoformat() if tm.date else '',
+                            energy_kwh=tm.energy_kwh,
+                            cost_eur=tm.cost_eur,
+                            location=tm.location,
+                            location_original=tm.location,
+                            location_normalized=self._normalize_location(tm.location),
+                            accepted_as_candidate=True,
+                            reject_reason=None,
+                            overlap_seconds=0,
+                            containment='manual_override',
+                            match_source='manual_override',
+                            override_id=override_info['override_id'],
+                            override_reason=override_info['reason']
+                        ))
+                        matched_charge_ids.append(tm.id)
+                        if tm.energy_kwh:
+                            matched_energy_sum += float(tm.energy_kwh)
+                    # If override points to different EVCC session, skip (will be matched there)
+                    continue
+                
+                # No manual override - apply auto-matching logic
                 # PRE-FILTER: Location check
                 tm_location_original = tm.location
                 tm_location_normalized = self._normalize_location(tm.location)
@@ -271,7 +330,8 @@ class MatchingService:
                         accepted_as_candidate=False,
                         reject_reason='wrong_location',
                         overlap_seconds=0,
-                        containment='unmatched'
+                        containment='unmatched',
+                        match_source='auto'
                     ))
                     continue
                 
@@ -293,6 +353,7 @@ class MatchingService:
                 )
                 
                 if overlap_seconds > 0 or containment != 'unmatched':
+                    auto_matches += 1
                     matched_charges.append(MatchedCharge(
                         charge_id=tm.id,
                         source_id=tm.source_id,
@@ -305,7 +366,8 @@ class MatchingService:
                         accepted_as_candidate=True,
                         reject_reason=None,
                         overlap_seconds=overlap_seconds,
-                        containment=containment
+                        containment=containment,
+                        match_source='auto'
                     ))
                     matched_charge_ids.append(tm.id)
                     if tm.energy_kwh:
@@ -323,7 +385,7 @@ class MatchingService:
             # Determine quality
             best_containment = 'unmatched'
             if actual_matches:
-                containment_order = {'inside': 4, 'envelops': 3, 'overlaps_start': 2, 'overlaps_end': 1, 'unmatched': 0}
+                containment_order = {'inside': 4, 'envelops': 3, 'overlaps_start': 2, 'overlaps_end': 1, 'manual_override': 5, 'unmatched': 0}
                 best_containment = max(
                     [c.containment for c in actual_matches],
                     key=lambda x: containment_order.get(x, 0)
@@ -342,9 +404,16 @@ class MatchingService:
             # Build notes
             notes_parts = []
             if actual_matches:
-                notes_parts.append(f"{len(actual_matches)} TM charge(s) matched (home location)")
+                manual_count = sum(1 for c in actual_matches if getattr(c, 'match_source', 'auto') == 'manual_override')
+                auto_count = len(actual_matches) - manual_count
+                if manual_count > 0:
+                    notes_parts.append(f"{manual_count} manual override(s)")
+                if auto_count > 0:
+                    notes_parts.append(f"{auto_count} auto-matched")
                 for c in actual_matches:
-                    notes_parts.append(f"  TM#{c.charge_id}: {c.containment}, overlap={c.overlap_seconds}s")
+                    source = getattr(c, 'match_source', 'auto')
+                    oid = f" (override #{c.override_id})" if getattr(c, 'override_id', None) else ""
+                    notes_parts.append(f"  TM#{c.charge_id}: {c.containment}{oid} [{source}]")
             else:
                 notes_parts.append("No TM charges matched (home location)")
             
@@ -400,6 +469,28 @@ class MatchingService:
         )
         
         return matches, summary
+    
+    def _get_active_overrides(self) -> List[MatchingOverride]:
+        """Get all active manual overrides (excluding reset_to_auto and cancelled ones).
+        
+        Returns only the latest override per TM charge, and only if it's not reset_to_auto.
+        """
+        # Get all overrides ordered by TM charge and created_at desc
+        all_overrides = self.db.query(MatchingOverride).order_by(
+            MatchingOverride.teslamate_charge_id,
+            MatchingOverride.created_at.desc()
+        ).all()
+        
+        # Keep only the latest per TM charge
+        latest_per_charge = {}
+        for ov in all_overrides:
+            if ov.teslamate_charge_id not in latest_per_charge:
+                latest_per_charge[ov.teslamate_charge_id] = ov
+        
+        # Filter out reset_to_auto
+        active = [ov for ov in latest_per_charge.values() if ov.override_type != OverrideType.reset_to_auto]
+        
+        return active
 
 
 def run_matching_dry_run(limit: Optional[int] = None) -> Dict[str, Any]:
