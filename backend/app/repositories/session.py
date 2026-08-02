@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, text
-from typing import List, Optional
-from datetime import datetime
+from sqlalchemy import desc, text, func
+from typing import List, Optional, Tuple
+from datetime import datetime, timedelta
 from app.models.session import SessionModel
 
 
@@ -55,6 +55,105 @@ class SessionRepository:
         sessions = query.offset(offset).limit(page_size).all()
         
         return sessions, total
+
+    def get_statistics(self, range_days: Optional[int] = None) -> dict:
+        """Get aggregated statistics for the given time range."""
+        query = self.db.query(SessionModel)
+        
+        # Apply time range filter
+        if range_days is not None:
+            cutoff_date = datetime.now() - timedelta(days=range_days)
+            query = query.filter(SessionModel.date >= cutoff_date)
+        
+        # Base aggregations
+        total_sessions = query.count()
+        
+        # Aggregations by source type
+        home_query = query.filter(SessionModel.source_type == "home")
+        external_query = query.filter(SessionModel.source_type == "external")
+        import_query = query.filter(SessionModel.source_type == "import")
+        
+        home_sessions = home_query.count()
+        external_sessions = external_query.count()
+        import_sessions = import_query.count()
+        
+        # Energy sums
+        total_energy = query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        home_energy = home_query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        external_energy = external_query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        import_energy = import_query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        
+        # Cost sums
+        total_cost = query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        home_cost = home_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        external_cost = external_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        import_cost = import_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        
+        # Average cost per kWh (only where both cost and energy exist and energy > 0)
+        avg_cost_per_kwh = None
+        if total_energy > 0:
+            avg_cost_per_kwh = round(total_cost / total_energy, 4)
+        
+        # Session-based averages
+        avg_energy_per_session = None
+        avg_cost_per_session = None
+        if total_sessions > 0:
+            avg_energy_per_session = round(total_energy / total_sessions, 2)
+            avg_cost_per_session = round(total_cost / total_sessions, 2)
+        
+        # Max energy session
+        max_energy_session = (
+            query.filter(SessionModel.energy_kwh.isnot(None))
+            .order_by(desc(SessionModel.energy_kwh))
+            .first()
+        )
+        max_energy_val = max_energy_session.energy_kwh if max_energy_session else None
+        max_energy_id = max_energy_session.id if max_energy_session else None
+        
+        # Max cost session
+        max_cost_session = (
+            query.filter(SessionModel.cost_eur.isnot(None))
+            .order_by(desc(SessionModel.cost_eur))
+            .first()
+        )
+        max_cost_val = max_cost_session.cost_eur if max_cost_session else None
+        max_cost_id = max_cost_session.id if max_cost_session else None
+        
+        return {
+            "kpis": {
+                "total_energy_kwh": round(total_energy, 2),
+                "total_cost_eur": round(total_cost, 2),
+                "avg_cost_per_kwh": avg_cost_per_kwh,
+                "total_sessions": total_sessions,
+                "home_sessions": home_sessions,
+                "external_sessions": external_sessions,
+                "import_sessions": import_sessions,
+                "avg_energy_per_session": avg_energy_per_session,
+                "avg_cost_per_session": avg_cost_per_session,
+                "max_energy_session": round(max_energy_val, 2) if max_energy_val else None,
+                "max_cost_session": round(max_cost_val, 2) if max_cost_val else None,
+                "max_energy_session_id": max_energy_id,
+                "max_cost_session_id": max_cost_id,
+            },
+            "energy_by_source": {
+                "home": round(home_energy, 2),
+                "external": round(external_energy, 2),
+                "import": round(import_energy, 2),
+                "total": round(total_energy, 2),
+            },
+            "cost_by_source": {
+                "home": round(home_cost, 2),
+                "external": round(external_cost, 2),
+                "import": round(import_cost, 2),
+                "total": round(total_cost, 2),
+            },
+            "sessions_by_source": {
+                "home": home_sessions,
+                "external": external_sessions,
+                "import": import_sessions,
+                "total": total_sessions,
+            },
+        }
 
     def count_all_sessions(self) -> int:
         """Count total sessions."""

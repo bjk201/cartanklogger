@@ -67,3 +67,38 @@ export interface PaginatedSessionsResponse {
   pagination: PaginationInfo;
   errors: ErrorDetail[];
 }
+
+// Statistics Types
+export interface SourceBreakdown {
+  home: number;
+  external: number;
+  import: number;
+  total: number;
+}
+
+export interface StatisticsKPIs {
+  total_energy_kwh: number;
+  total_cost_eur: number;
+  avg_cost_per_kwh: number | null;
+  total_sessions: number;
+  home_sessions: number;
+  external_sessions: number;
+  import_sessions: number;
+  avg_energy_per_session: number | null;
+  avg_cost_per_session: number | null;
+  max_energy_session: number | null;
+  max_cost_session: number | null;
+  max_energy_session_id: number | null;
+  max_cost_session_id: number | null;
+}
+
+export interface StatisticsResponse {
+  ok: boolean;
+  kpis: StatisticsKPIs;
+  energy_by_source: SourceBreakdown;
+  cost_by_source: SourceBreakdown;
+  sessions_by_source: SourceBreakdown;
+  range_days: number;
+  range_label: string;
+  errors: ErrorDetail[];
+}

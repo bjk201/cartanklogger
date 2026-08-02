@@ -71,3 +71,46 @@ class PaginatedSessionsResponse(BaseModel):
     meta: MetaInfo
     pagination: PaginationInfo
     errors: List[ErrorDetail] = []
+
+
+# Statistics Schemas
+class SourceBreakdown(BaseModel):
+    """Breakdown by source type"""
+    home: float
+    external: float
+    import_: float = Field(alias="import")
+    total: float
+
+    class Config:
+        populate_by_name = True
+
+
+class StatisticsKPIs(BaseModel):
+    """Main KPI values for statistics page"""
+    total_energy_kwh: float
+    total_cost_eur: float
+    avg_cost_per_kwh: Optional[float] = None
+    total_sessions: int
+    home_sessions: int
+    external_sessions: int
+    import_sessions: int
+    
+    # Session-based stats
+    avg_energy_per_session: Optional[float] = None
+    avg_cost_per_session: Optional[float] = None
+    max_energy_session: Optional[float] = None
+    max_cost_session: Optional[float] = None
+    max_energy_session_id: Optional[int] = None
+    max_cost_session_id: Optional[int] = None
+
+
+class StatisticsResponse(BaseModel):
+    """Response contract for GET /api/statistics"""
+    ok: bool = True
+    kpis: StatisticsKPIs
+    energy_by_source: SourceBreakdown
+    cost_by_source: SourceBreakdown
+    sessions_by_source: SourceBreakdown
+    range_days: int
+    range_label: str
+    errors: List[ErrorDetail] = []

@@ -1,4 +1,4 @@
-import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse } from '../types/api';
+import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, StatisticsResponse } from '../types/api';
 
 const API_BASE = '/api';
 
@@ -68,7 +68,11 @@ export const api = {
     if (params.sort_desc !== undefined) searchParams.set('sort_desc', params.sort_desc.toString());
     return fetchJson<PaginatedSessionsResponse>(`/sessions?${searchParams.toString()}`);
   },
+
+  async getStatistics(range: string = '30d'): Promise<StatisticsResponse> {
+    return fetchJson<StatisticsResponse>(`/statistics?range=${range}`);
+  },
 };
 
 export { ApiError };
-export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo } from '../types/api';
+export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo, StatisticsResponse, StatisticsKPIs, SourceBreakdown } from '../types/api';
