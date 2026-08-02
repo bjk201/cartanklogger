@@ -6,7 +6,7 @@ import os
 
 from app.config import settings
 from app.database import init_db, engine
-from app.api import overview
+from app.api import overview, sessions
 
 # Logging setup
 logging.basicConfig(
@@ -61,6 +61,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(overview.router, prefix=settings.API_PREFIX)
+app.include_router(sessions.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health", tags=["Health"])

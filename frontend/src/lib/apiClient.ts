@@ -1,4 +1,4 @@
-import type { OverviewResponse, Session, HealthResponse } from '../types/api';
+import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse } from '../types/api';
 
 const API_BASE = '/api';
 
@@ -35,7 +35,16 @@ export const api = {
     return fetchJson<OverviewResponse>(`/overview/recent-sessions?limit=${limit}`);
   },
 
-  async getSessions(params?: { limit?: number; from?: string; to?: string }): Promise<OverviewResponse> {
+  async getSessions(params?: { 
+    limit?: number; 
+    from?: string; 
+    to?: string;
+    page?: number;
+    page_size?: number;
+    source_type?: string;
+    search?: string;
+    sort_desc?: boolean;
+  }): Promise<OverviewResponse> {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.set('limit', params.limit.toString());
     if (params?.from) searchParams.set('from', params.from);
@@ -43,7 +52,23 @@ export const api = {
     const query = searchParams.toString();
     return fetchJson<OverviewResponse>(`/overview/recent-sessions${query ? `?${query}` : ''}`);
   },
+
+  async getPaginatedSessions(params: {
+    page: number;
+    page_size: number;
+    source_type?: string;
+    search?: string;
+    sort_desc?: boolean;
+  }): Promise<PaginatedSessionsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', params.page.toString());
+    searchParams.set('page_size', params.page_size.toString());
+    if (params.source_type) searchParams.set('source_type', params.source_type);
+    if (params.search) searchParams.set('search', params.search);
+    if (params.sort_desc !== undefined) searchParams.set('sort_desc', params.sort_desc.toString());
+    return fetchJson<PaginatedSessionsResponse>(`/sessions?${searchParams.toString()}`);
+  },
 };
 
 export { ApiError };
-export type { OverviewResponse, Session, HealthResponse } from '../types/api';
+export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo } from '../types/api';

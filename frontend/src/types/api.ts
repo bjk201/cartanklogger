@@ -1,13 +1,17 @@
 export interface Session {
-  id: string;
-  date: string;
+  id: number;
   source_type: 'home' | 'external' | 'import';
+  source_id: string;
+  date: string;
   location: string | null;
   energy_kwh: number | null;
   cost_eur: number | null;
   odometer_km: number | null;
   distance_km: number | null;
   note: string | null;
+  // PV / Solar data (from EVCC home_sessions)
+  solar_percentage: number | null;
+  pv_kwh: number | null;
 }
 
 export interface MetaInfo {
@@ -40,4 +44,21 @@ export interface KPIData {
   totalEnergy: number;
   totalCost: number;
   homeShare: number;
+}
+
+export interface PaginationInfo {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface PaginatedSessionsResponse {
+  ok: boolean;
+  data: Session[];
+  meta: MetaInfo;
+  pagination: PaginationInfo;
+  errors: ErrorDetail[];
 }

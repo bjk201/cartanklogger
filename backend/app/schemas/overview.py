@@ -5,15 +5,19 @@ from datetime import datetime
 
 class SessionRead(BaseModel):
     """Response schema for a single session."""
-    id: str = Field(..., description="Unique identifier: {source_type}:{source_id}")
-    date: datetime
+    id: int = Field(..., description="Database primary key (unique)")
     source_type: Literal["home", "external", "import"]
+    source_id: str = Field(..., description="Original source ID")
+    date: datetime
     location: Optional[str] = None
     energy_kwh: Optional[float] = None
     cost_eur: Optional[float] = None
     odometer_km: Optional[float] = None
     distance_km: Optional[float] = None
     note: Optional[str] = None
+    # PV / Solar data (from EVCC home_sessions)
+    solar_percentage: Optional[float] = None
+    pv_kwh: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -43,3 +47,21 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     database: str
+
+
+class PaginationInfo(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+
+
+class PaginatedSessionsResponse(BaseModel):
+    """Response contract for GET /api/sessions"""
+    ok: bool = True
+    data: List[SessionRead]
+    meta: MetaInfo
+    pagination: PaginationInfo
+    errors: List[ErrorDetail] = []

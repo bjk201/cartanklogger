@@ -1,0 +1,76 @@
+/* ============================================================
+   Layout / AppShell — Zentraler Layout-Container
+   Gilt für ALLE Seiten (Overview, Sessions, Statistik, ...)
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--sidebar-width);
+  transition: margin-left var(--transition-normal);
+}
+
+.sidebar--collapsed ~ .app-main {
+  margin-left: var(--sidebar-collapsed-width);
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    margin-left: 0;
+  }
+  
+  .sidebar--collapsed ~ .app-main {
+    margin-left: 0;
+  }
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: calc(var(--header-height) + 1.5rem) 1.5rem 2rem;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1400px;
+  padding: 0 1rem;
+}
+
+@media (max-width: 768px) {
+  .app-content {
+    padding: calc(var(--header-height) + 1rem) 1rem 1.5rem;
+  }
+  
+  .page-container {
+    padding: 0;
+  }
+}
+
+/* TopBar Anpassung: nutzt jetzt app-main Breite */
+.topbar {
+  left: var(--sidebar-width);
+  right: 0;
+}
+
+.sidebar--collapsed ~ .topbar,
+.sidebar--collapsed + .topbar {
+  left: var(--sidebar-collapsed-width);
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    left: 0;
+  }
+}

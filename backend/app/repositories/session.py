@@ -18,6 +18,44 @@ class SessionRepository:
             .all()
         )
 
+    def get_sessions_paginated(
+        self,
+        page: int = 1,
+        page_size: int = 25,
+        source_type: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_desc: bool = True,
+    ) -> tuple[List[SessionModel], int]:
+        """Get sessions with pagination, filtering, and sorting."""
+        query = self.db.query(SessionModel)
+        
+        # Filter by source_type
+        if source_type and source_type != "all":
+            query = query.filter(SessionModel.source_type == source_type)
+        
+        # Search in location and note
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                (SessionModel.location.ilike(search_term)) |
+                (SessionModel.note.ilike(search_term))
+            )
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Sort
+        if sort_desc:
+            query = query.order_by(desc(SessionModel.date))
+        else:
+            query = query.order_by(SessionModel.date)
+        
+        # Pagination
+        offset = (page - 1) * page_size
+        sessions = query.offset(offset).limit(page_size).all()
+        
+        return sessions, total
+
     def count_all_sessions(self) -> int:
         """Count total sessions."""
         return self.db.query(SessionModel).count()
