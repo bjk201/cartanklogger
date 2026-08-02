@@ -21,23 +21,23 @@ logger = logging.getLogger(__name__)
 def get_data_source_info() -> dict:
     """Determine data source mode and reachability."""
     evcc_configured = settings.EVCC_CONFIGURED
-    teslamate_configured = settings.TESLAMATE_CONFIGURED
+    teslamateapi_configured = settings.TESLAMATEAPI_CONFIGURED
     
     # If both are configured, we're in live mode
-    is_live = evcc_configured and teslamate_configured
+    is_live = evcc_configured and teslamateapi_configured
     
     if is_live:
         data_source = "live"
-        description = "Live-Modus: EVCC und TeslaMate konfiguriert"
+        description = "Live-Modus: EVCC und TeslaMateAPI konfiguriert"
     else:
         data_source = "demo"
-        description = "Demo/Fallback-Modus: Seed-Daten (EVCC/TeslaMate nicht oder unvollständig konfiguriert)"
+        description = "Demo/Fallback-Modus: Seed-Daten (EVCC/TeslaMateAPI nicht oder unvollständig konfiguriert)"
     
     return {
         "data_source": data_source,
         "data_source_description": description,
         "evcc_configured": evcc_configured,
-        "teslamate_configured": teslamate_configured,
+        "teslamateapi_configured": teslamateapi_configured,
         "is_live": is_live,
     }
 
@@ -67,27 +67,23 @@ async def check_evcc_reachable() -> dict:
         return {"configured": True, "reachable": False, "error": str(e)}
 
 
-async def check_teslamate_reachable() -> dict:
-    """Check if TeslaMate API is reachable."""
-    if not settings.TESLAMATE_CONFIGURED:
+async def check_teslamateapi_reachable() -> dict:
+    """Check if TeslaMateAPI is reachable."""
+    if not settings.TESLAMATEAPI_CONFIGURED:
         return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
     
-    url = settings.TESLAMATE_URL
-    if not url:
-        return {"configured": True, "reachable": False, "error": "Keine URL"}
+    base_url = settings.TESLAMATEAPI_BASE_URL
+    if not base_url:
+        return {"configured": True, "reachable": False, "error": "Keine Base URL"}
     
     headers = {}
-    if settings.TESLAMATE_API_TOKEN:
-        headers["Authorization"] = f"Bearer {settings.TESLAMATE_API_TOKEN}"
+    if settings.TESLAMATEAPI_TOKEN:
+        headers["Authorization"] = f"Bearer {settings.TESLAMATEAPI_TOKEN}"
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # TeslaMate GraphQL health check
-            response = await client.post(
-                url,
-                json={"query": "{ hello }"},
-                headers=headers
-            )
+            # TeslaMateAPI health check - use /health or /api/v1/vehicles
+            response = await client.get(f"{base_url}/health", headers=headers)
             if response.status_code == 200:
                 return {"configured": True, "reachable": True, "status_code": response.status_code}
             else:
@@ -109,7 +105,7 @@ async def lifespan(app: FastAPI):
     data_source_info = get_data_source_info()
     logger.info(f"Data source: {data_source_info['data_source']} - {data_source_info['data_source_description']}")
     logger.info(f"EVCC configured: {data_source_info['evcc_configured']}")
-    logger.info(f"TeslaMate configured: {data_source_info['teslamate_configured']}")
+    logger.info(f"TeslaMateAPI configured: {data_source_info['teslamateapi_configured']}")
     
     # Initialize database tables
     try:
@@ -166,7 +162,7 @@ def health_check():
         "data_source": info["data_source"],
         "data_source_description": info["data_source_description"],
         "evcc_configured": info["evcc_configured"],
-        "teslamate_configured": info["teslamate_configured"],
+        "teslamateapi_configured": info["teslamateapi_configured"],
     }
 
 
@@ -175,24 +171,24 @@ async def data_source_status():
     """Data source status endpoint for frontend with reachability checks."""
     info = get_data_source_info()
     evcc_status = await check_evcc_reachable()
-    teslamate_status = await check_teslamate_reachable()
+    teslamateapi_status = await check_teslamateapi_reachable()
     
     # Determine overall message
     if info["is_live"]:
-        if evcc_status["reachable"] and teslamate_status["reachable"]:
-            message = "Live-Modus aktiv: EVCC und TeslaMate erreichbar"
-        elif evcc_status["reachable"] and not teslamate_status["reachable"]:
-            message = "Live-Modus: EVCC erreichbar, TeslaMate nicht erreichbar"
-        elif not evcc_status["reachable"] and teslamate_status["reachable"]:
-            message = "Live-Modus: TeslaMate erreichbar, EVCC nicht erreichbar"
+        if evcc_status["reachable"] and teslamateapi_status["reachable"]:
+            message = "Live-Modus aktiv: EVCC und TeslaMateAPI erreichbar"
+        elif evcc_status["reachable"] and not teslamateapi_status["reachable"]:
+            message = "Live-Modus: EVCC erreichbar, TeslaMateAPI nicht erreichbar"
+        elif not evcc_status["reachable"] and teslamateapi_status["reachable"]:
+            message = "Live-Modus: TeslaMateAPI erreichbar, EVCC nicht erreichbar"
         else:
             message = "Live-Modus konfiguriert, aber keine Quelle erreichbar"
     else:
         missing = []
         if not info["evcc_configured"]:
             missing.append("EVCC")
-        if not info["teslamate_configured"]:
-            missing.append("TeslaMate")
+        if not info["teslamateapi_configured"]:
+            missing.append("TeslaMateAPI")
         message = f"Demo-Modus: {', '.join(missing)} nicht konfiguriert"
     
     return {
@@ -201,7 +197,7 @@ async def data_source_status():
         "data_source_description": info["data_source_description"],
         "message": message,
         "evcc": evcc_status,
-        "teslamate": teslamate_status,
+        "teslamateapi": teslamateapi_status,
     }
 
 

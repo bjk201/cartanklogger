@@ -230,9 +230,9 @@ export function OverviewPage() {
             </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">TeslaMate (Extern)</span>
-            <span className={getStatusClass(dataSourceStatus?.teslamate)}>
-              {formatSourceStatus(dataSourceStatus?.teslamate, 'TeslaMate')}
+            <span className="import-status__label">TeslaMateAPI (Extern)</span>
+            <span className={getStatusClass(dataSourceStatus?.teslamateapi)}>
+              {formatSourceStatus(dataSourceStatus?.teslamateapi, 'TeslaMateAPI')}
             </span>
           </div>
           {dataSourceStatus?.data_source === 'live' && dataSourceStatus?.message && (

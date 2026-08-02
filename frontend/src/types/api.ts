@@ -52,7 +52,7 @@ export interface DataSourceStatusResponse {
   data_source_description: string;
   message: string;
   evcc: ReachabilityStatus;
-  teslamate: ReachabilityStatus;
+  teslamateapi: ReachabilityStatus;
 }
 
 export interface ReachabilityStatus {
