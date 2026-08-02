@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../app/ThemeContext';
 import './Sidebar.css';
@@ -16,33 +16,37 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/statistics', label: 'Statistik', icon: BarChart2 },
   { path: '/prices', label: 'Preise', icon: Calendar },
   { path: '/extra-costs', label: 'Extra-Kosten', icon: FileText },
-  { path: '/import', label: 'Import/Review', icon: ExternalLink },
+  { path: '/import-review', label: 'Import/Review', icon: ExternalLink },
   { path: '/settings', label: 'Einstellungen', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isMobileOpen: boolean;
+  onMobileToggle: (open: boolean) => void;
+}
+
+export function Sidebar({ isMobileOpen, onMobileToggle }: SidebarProps) {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
+    onMobileToggle(false);
+  }, [location.pathname, onMobileToggle]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
-  if (mobileOpen) {
+  if (isMobileOpen) {
     return (
       <>
-        <div className="sidebar-overlay" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+        <div className="sidebar-overlay" onClick={() => onMobileToggle(false)} aria-hidden="true" />
         <aside className="sidebar sidebar--mobile" role="navigation" aria-label="Hauptnavigation">
           <div className="sidebar__header">
-            <a href="/" className="sidebar__brand" onClick={(e) => { e.preventDefault(); navigate('/'); setMobileOpen(false); }}>
+            <a href="/" className="sidebar__brand" onClick={(e) => { e.preventDefault(); navigate('/'); onMobileToggle(false); }}>
               <span className="sidebar__brand-icon" aria-hidden="true">CTL</span>
               <span className="sidebar__brand-text">CarTankLogger 2.0</span>
             </a>
@@ -51,14 +55,15 @@ export function Sidebar() {
             <ul className="sidebar__list" role="list">
               {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
                 <li key={path}>
-                  <button
-                    className={`sidebar__item ${isActive(path) ? 'sidebar__item--active' : ''}`}
-                    onClick={() => { navigate(path); setMobileOpen(false); }}
+                  <NavLink
+                    to={path}
+                    className={({ isActive }) => `sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
+                    onClick={() => onMobileToggle(false)}
                     aria-current={isActive(path) ? 'page' : undefined}
                   >
                     <Icon size={20} aria-hidden="true" />
                     <span className="sidebar__label">{label}</span>
-                  </button>
+                  </NavLink>
                 </li>
               ))}
             </ul>
@@ -88,14 +93,15 @@ export function Sidebar() {
         <ul className="sidebar__list" role="list">
           {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
             <li key={path}>
-              <button
-                className={`sidebar__item ${isActive(path) ? 'sidebar__item--active' : ''}`}
+              <NavLink
+                to={path}
+                className={({ isActive }) => `sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
                 onClick={() => navigate(path)}
                 aria-current={isActive(path) ? 'page' : undefined}
               >
                 <Icon size={20} aria-hidden="true" />
                 {!collapsed && <span className="sidebar__label">{label}</span>}
-              </button>
+              </NavLink>
             </li>
           ))}
         </ul>

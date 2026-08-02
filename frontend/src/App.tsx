@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './app/ThemeContext';
 import { Sidebar } from './components/Sidebar';
@@ -14,13 +14,15 @@ import './styles/global.css';
 import './styles/layout.css';
 
 function App() {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
   return (
     <ThemeProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div className="app-shell">
-          <Sidebar />
+          <Sidebar isMobileOpen={mobileSidebarOpen} onMobileToggle={setMobileSidebarOpen} />
           <div className="app-main">
-            <TopBar />
+            <TopBar onMenuClick={() => setMobileSidebarOpen(true)} />
             <main className="app-content" role="main">
               <Routes>
                 <Route path="/" element={<OverviewPage />} />
