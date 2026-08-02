@@ -42,6 +42,15 @@ export interface HealthResponse {
   service: string;
   version: string;
   database: string;
+  data_source: 'demo' | 'live';
+  data_source_description: string;
+}
+
+export interface DataSourceStatusResponse {
+  ok: boolean;
+  data_source: 'demo' | 'live';
+  data_source_description: string;
+  message: string;
 }
 
 export interface KPIData {

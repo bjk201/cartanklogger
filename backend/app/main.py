@@ -16,11 +16,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Data source status - central configuration
+DATA_SOURCE = "demo"
+DATA_SOURCE_DESCRIPTION = "Demo/Fallback-Modus: Seed-Daten (keine produktiven EVCC/TeslaMate-Verbindungen)"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting CarTankLogger 2.0 Backend...")
     logger.info(f"Database URL: {settings.DATABASE_URL}")
+    logger.info(f"Data source: {DATA_SOURCE} - {DATA_SOURCE_DESCRIPTION}")
     
     # Initialize database tables
     try:
@@ -67,12 +73,25 @@ app.include_router(statistics.router, prefix=settings.API_PREFIX)
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    """Health check endpoint."""
+    """Health check endpoint with data source info."""
     return {
         "ok": True,
         "service": "cartanklogger-backend",
         "version": "2.0.0",
-        "database": "connected"
+        "database": "connected",
+        "data_source": DATA_SOURCE,
+        "data_source_description": DATA_SOURCE_DESCRIPTION
+    }
+
+
+@app.get("/api/status", tags=["Status"])
+def data_source_status():
+    """Data source status endpoint for frontend."""
+    return {
+        "ok": True,
+        "data_source": DATA_SOURCE,
+        "data_source_description": DATA_SOURCE_DESCRIPTION,
+        "message": "Aktuell werden Demo-Daten angezeigt. Für produktive Daten sind EVCC/TeslaMate-IP-Zugänge erforderlich."
     }
 
 
@@ -83,5 +102,6 @@ def root():
         "version": "2.0.0",
         "docs": "/docs",
         "health": "/health",
-        "api": settings.API_PREFIX
+        "api": settings.API_PREFIX,
+        "data_source": DATA_SOURCE
     }

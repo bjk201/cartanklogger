@@ -4,44 +4,35 @@ import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState, PartialError } from '../../components/StateViews';
-import { api, type Session, type OverviewResponse, type OverviewSummaryResponse } from '../../lib/apiClient';
+import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse } from '../../lib/apiClient';
 import './OverviewPage.css';
 
 export function OverviewPage() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
+  const [dataSourceStatus, setDataSourceStatus] = useState<DataSourceStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [partialError, setPartialError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setPartialError(null);
 
     try {
-      const [recentResponse, summaryResponse] = await Promise.all([
+      const [recentResponse, summaryResponse, statusResponse] = await Promise.all([
         api.getRecentSessions(10),
         api.getOverviewSummary(),
+        api.getDataSourceStatus(),
       ]);
 
-      if (!recentResponse.ok || !summaryResponse.ok) {
+      if (!recentResponse.ok || !summaryResponse.ok || !statusResponse.ok) {
         throw new Error('API returned error status');
       }
 
       setSessions(recentResponse.data);
       setSummary(summaryResponse);
-
-      // Check if we have seed data (legacy sessions without legacy_source)
-      const hasSeedData = recentResponse.data.some(s =>
-        s.location === 'Garage' && s.note === 'Home charging' ||
-        s.location?.includes('Supercharger') && s.note === 'Long distance trip'
-      );
-
-      if (hasSeedData) {
-        setPartialError('Hinweis: Aktuell werden Demo-Daten angezeigt. Echte Daten folgen nach Import.');
-      }
+      setDataSourceStatus(statusResponse);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -84,23 +75,31 @@ export function OverviewPage() {
     );
   }
 
+  const isDemoMode = dataSourceStatus?.data_source === 'demo';
+
   return (
     <div className="page-container">
       <div className="overview-page__header">
         <h1 className="overview-page__title">Overview</h1>
         <p className="overview-page__subtitle">
-          Produktiver Einstieg · <span className="overview-page__status">Aktuell</span>
+          {isDemoMode ? 'Demo-Modus aktiv' : 'Produktiver Einstieg'} · 
+          <span className="overview-page__status">{isDemoMode ? 'Demo-Daten' : 'Aktuell'}</span>
         </p>
       </div>
 
-      {partialError && (
-        <PartialError message={partialError} onDismiss={() => setPartialError(null)} />
+      {isDemoMode && dataSourceStatus && (
+        <PartialError 
+          message={`Demo-Modus: ${dataSourceStatus.message}`}
+          onDismiss={() => {}}
+        />
       )}
 
       {/* KPI Cards - Real Data from Summary API */}
       {summary && (
         <section className="overview-page__section" aria-labelledby="kpi-heading">
-          <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
+          <h2 id="kpi-heading" className="overview-page__section-title">
+            Kennzahlen (gesamt) {isDemoMode && <span className="overview-page__demo-badge">Demo-Daten</span>}
+          </h2>
           <div className="overview-page__kpi-grid">
             <KpiCard
               label="Gesamt Sessions"
@@ -166,9 +165,9 @@ export function OverviewPage() {
         {sessions.length === 0 ? (
           <EmptyState
             title="Keine Sessions"
-            message="Es wurden noch keine Ladevorgänge importiert."
+            message={isDemoMode ? "Demo-Daten enthalten Sessions. Echte Daten folgen nach Import." : "Es wurden noch keine Ladevorgänge importiert."}
             action={{
-              label: 'Import starten',
+              label: isDemoMode ? 'Import verstehen' : 'Import starten',
               onClick: () => navigate('/import-review'),
             }}
           />
@@ -192,25 +191,33 @@ export function OverviewPage() {
         </div>
       </section>
 
-      {/* Import Status */}
-      <section className="overview-page__section overview-page__section--subtle" aria-labelledby="import-status-heading">
-        <h2 id="import-status-heading" className="overview-page__section-title">Import-Status</h2>
+      {/* Data Source Status - honest about demo mode */}
+      <section className="overview-page__section overview-page__section--subtle" aria-labelledby="data-source-heading">
+        <h2 id="data-source-heading" className="overview-page__section-title">Datenquellen-Status</h2>
         <div className="overview-page__import-status">
           <div className="import-status__item">
-            <span className="import-status__label">Datenquelle</span>
-            <span className="import-status__value import-status__value--ok">EVCC (Home)</span>
+            <span className="import-status__label">Modus</span>
+            <span className={`import-status__value ${isDemoMode ? 'import-status__value--warn' : 'import-status__value--ok'}`}>
+              {isDemoMode ? 'Demo / Fallback' : 'Produktiv'}
+            </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">Datenquelle</span>
-            <span className="import-status__value import-status__value--ok">TeslaMate (Extern)</span>
+            <span className="import-status__label">Datenquelle Home</span>
+            <span className="import-status__value import-status__value--ok">
+              EVCC (Demo-Seed)
+            </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">Letzter Sync</span>
-            <span className="import-status__value">Nicht durchgeführt</span>
+            <span className="import-status__label">Datenquelle Extern</span>
+            <span className="import-status__value import-status__value--ok">
+              TeslaMate (Demo-Seed)
+            </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">Status</span>
-            <span className="import-status__value import-status__value--warn">Dry-Run DB aktiv</span>
+            <span className="import-status__label">Produktive Anbindung</span>
+            <span className="import-status__value import-status__value--warn">
+              Nicht konfiguriert (keine EVCC/TeslaMate-IPs)
+            </span>
           </div>
         </div>
       </section>
