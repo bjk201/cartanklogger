@@ -4,65 +4,48 @@ import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState, PartialError } from '../../components/StateViews';
-import { api, type Session, type OverviewResponse } from '../../lib/apiClient';
+import { api, type Session, type OverviewResponse, type OverviewSummaryResponse } from '../../lib/apiClient';
 import './OverviewPage.css';
 
 export function OverviewPage() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [partialError, setPartialError] = useState<string | null>(null);
-  const [kpiData, setKpiData] = useState({
-    totalSessions: 0,
-    totalEnergy: 0,
-    totalCost: 0,
-    homeShare: 0,
-  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     setPartialError(null);
-    
+
     try {
-      const response: OverviewResponse = await api.getRecentSessions(10);
-      
-      if (!response.ok) {
+      const [recentResponse, summaryResponse] = await Promise.all([
+        api.getRecentSessions(10),
+        api.getOverviewSummary(),
+      ]);
+
+      if (!recentResponse.ok || !summaryResponse.ok) {
         throw new Error('API returned error status');
       }
-      
-      setSessions(response.data);
-      
-      // Calculate KPIs from the 10 sessions
-      const homeSessions = response.data.filter(s => s.source_type === 'home');
-      const totalEnergy = response.data.reduce((sum, s) => sum + (s.energy_kwh || 0), 0);
-      const totalCost = response.data.reduce((sum, s) => sum + (s.cost_eur || 0), 0);
-      const homeShare = response.data.length > 0 
-        ? (homeSessions.length / response.data.length) * 100 
-        : 0;
-      
-      setKpiData({
-        totalSessions: response.data.length,
-        totalEnergy: Math.round(totalEnergy * 10) / 10,
-        totalCost: Math.round(totalCost * 100) / 100,
-        homeShare: Math.round(homeShare),
-      });
-      
+
+      setSessions(recentResponse.data);
+      setSummary(summaryResponse);
+
       // Check if we have seed data (legacy sessions without legacy_source)
-      // This is a soft warning since we're still showing data
-      const hasSeedData = response.data.some(s => 
+      const hasSeedData = recentResponse.data.some(s =>
         s.location === 'Garage' && s.note === 'Home charging' ||
         s.location?.includes('Supercharger') && s.note === 'Long distance trip'
       );
-      
+
       if (hasSeedData) {
         setPartialError('Hinweis: Aktuell werden Demo-Daten angezeigt. Echte Daten folgen nach Import.');
       }
-      
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      setError(`Fehler beim Laden der Sessions: ${message}`);
+      setError(`Fehler beim Laden der Overview: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -76,15 +59,37 @@ export function OverviewPage() {
     fetchData();
   };
 
+  const formatNumber = (num: number): string => {
+    return num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  };
+
+  const formatCostPerKWh = (num: number | null): string => {
+    if (num === null || num === undefined) return '—';
+    return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
+  };
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <LoadingState message="Overview wird geladen…" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container">
+        <ErrorState message={error} onRetry={handleRetry} />
+      </div>
+    );
+  }
+
   return (
-    <div className="overview-page">
+    <div className="page-container">
       <div className="overview-page__header">
         <h1 className="overview-page__title">Overview</h1>
         <p className="overview-page__subtitle">
-          Letzte 10 Sessions · 
-          <span className="overview-page__status">
-            {loading ? 'Lädt…' : error ? 'Fehler' : 'Aktuell'}
-          </span>
+          Produktiver Einstieg · <span className="overview-page__status">Aktuell</span>
         </p>
       </div>
 
@@ -92,114 +97,123 @@ export function OverviewPage() {
         <PartialError message={partialError} onDismiss={() => setPartialError(null)} />
       )}
 
-      {error && !loading ? (
-        <ErrorState message={error} onRetry={handleRetry} />
-      ) : (
-        <>
-          {/* KPI Cards */}
-          <section className="overview-page__section" aria-labelledby="kpi-heading">
-            <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (letzte 10 Sessions)</h2>
-            <div className="overview-page__kpi-grid">
-              <KpiCard
-                label="Sessions"
-                value={kpiData.totalSessions}
-                icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>}
-                subtitle="In der Übersicht"
-              />
-              <KpiCard
-                label="Energie"
-                value={kpiData.totalEnergy.toFixed(1)}
-                unit="kWh"
-                iconColor="var(--color-home)"
-                icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>}
-                subtitle="Gesamt geladen"
-              />
-              <KpiCard
-                label="Kosten"
-                value={kpiData.totalCost.toFixed(2)}
-                unit="€"
-                iconColor="#f59e0b"
-                icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
-                subtitle="Gesamtkosten"
-              />
-              <KpiCard
-                label="Home-Anteil"
-                value={kpiData.homeShare}
-                unit="%"
-                iconColor="var(--color-primary)"
-                icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
-                subtitle="von 10 Sessions"
-              />
-            </div>
-          </section>
-
-          {/* Sessions List */}
-          <section className="overview-page__section" aria-labelledby="sessions-heading">
-            <div className="overview-page__section-header">
-              <h2 id="sessions-heading" className="overview-page__section-title">Letzte Sessions</h2>
-              <button
-                className="overview-page__view-all"
-                onClick={() => navigate('/sessions')}
-              >
-                Alle anzeigen →
-              </button>
-            </div>
-            
-            {loading ? (
-              <LoadingState message="Sessions werden geladen…" />
-            ) : sessions.length === 0 ? (
-              <EmptyState
-                title="Keine Sessions"
-                message="Es wurden noch keine Ladevorgänge importiert."
-                action={{
-                  label: 'Import starten',
-                  onClick: () => navigate('/import'),
-                }}
-              />
-            ) : (
-              <div className="overview-page__sessions">
-                <SessionsTable sessions={sessions} />
-                <div className="overview-page__mobile-cards">
-                  {sessions.map(session => (
-                    <SessionMobileCard key={session.id} session={session} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* Small Trend Area */}
-          <section className="overview-page__section" aria-labelledby="trend-heading">
-            <h2 id="trend-heading" className="overview-page__section-title">Trend: Energie pro Session</h2>
-            <div className="overview-page__trend">
-              <TrendChart sessions={sessions} />
-            </div>
-          </section>
-
-          {/* Import Status */}
-          <section className="overview-page__section overview-page__section--subtle" aria-labelledby="import-status-heading">
-            <h2 id="import-status-heading" className="overview-page__section-title">Import-Status</h2>
-            <div className="overview-page__import-status">
-              <div className="import-status__item">
-                <span className="import-status__label">Datenquelle</span>
-                <span className="import-status__value import-status__value--ok">EVCC (Home)</span>
-              </div>
-              <div className="import-status__item">
-                <span className="import-status__label">Datenquelle</span>
-                <span className="import-status__value import-status__value--ok">TeslaMate (Extern)</span>
-              </div>
-              <div className="import-status__item">
-                <span className="import-status__label">Letzter Sync</span>
-                <span className="import-status__value">Nicht durchgeführt</span>
-              </div>
-              <div className="import-status__item">
-                <span className="import-status__label">Status</span>
-                <span className="import-status__value import-status__value--warn">Dry-Run DB aktiv</span>
-              </div>
-            </div>
-          </section>
-        </>
+      {/* KPI Cards - Real Data from Summary API */}
+      {summary && (
+        <section className="overview-page__section" aria-labelledby="kpi-heading">
+          <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
+          <div className="overview-page__kpi-grid">
+            <KpiCard
+              label="Gesamt Sessions"
+              value={summary.total_sessions}
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>}
+              subtitle="Alle Ladevorgänge"
+            />
+            <KpiCard
+              label="Gesamt Energie"
+              value={formatNumber(summary.total_energy_kwh)}
+              unit="kWh"
+              iconColor="var(--color-home)"
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>}
+              subtitle="Gesamt geladen"
+            />
+            <KpiCard
+              label="Gesamtkosten"
+              value={summary.total_cost_eur.toFixed(2)}
+              unit="€"
+              iconColor="#f59e0b"
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+              subtitle="Gesamtkosten"
+            />
+            <KpiCard
+              label="Ø Kosten/kWh"
+              value={formatCostPerKWh(summary.avg_cost_per_kwh)}
+              iconColor="var(--color-primary)"
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>}
+              subtitle="Durchschnittspreis"
+            />
+            <KpiCard
+              label="Home Energie"
+              value={formatNumber(summary.home_energy_kwh)}
+              unit="kWh"
+              iconColor="var(--color-home)"
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
+              subtitle="Zuhause geladen"
+            />
+            <KpiCard
+              label="External Energie"
+              value={formatNumber(summary.external_energy_kwh)}
+              unit="kWh"
+              iconColor="var(--color-external)"
+              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
+              subtitle="Extern geladen"
+            />
+          </div>
+        </section>
       )}
+
+      {/* Sessions List */}
+      <section className="overview-page__section" aria-labelledby="sessions-heading">
+        <div className="overview-page__section-header">
+          <h2 id="sessions-heading" className="overview-page__section-title">Letzte 10 Sessions</h2>
+          <button
+            className="overview-page__view-all"
+            onClick={() => navigate('/sessions')}
+          >
+            Alle anzeigen →
+          </button>
+        </div>
+
+        {sessions.length === 0 ? (
+          <EmptyState
+            title="Keine Sessions"
+            message="Es wurden noch keine Ladevorgänge importiert."
+            action={{
+              label: 'Import starten',
+              onClick: () => navigate('/import-review'),
+            }}
+          />
+        ) : (
+          <div className="overview-page__sessions">
+            <SessionsTable sessions={sessions} />
+            <div className="overview-page__mobile-cards">
+              {sessions.map(session => (
+                <SessionMobileCard key={session.id} session={session} />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Small Trend Area */}
+      <section className="overview-page__section" aria-labelledby="trend-heading">
+        <h2 id="trend-heading" className="overview-page__section-title">Trend: Energie pro Session</h2>
+        <div className="overview-page__trend">
+          <TrendChart sessions={sessions} />
+        </div>
+      </section>
+
+      {/* Import Status */}
+      <section className="overview-page__section overview-page__section--subtle" aria-labelledby="import-status-heading">
+        <h2 id="import-status-heading" className="overview-page__section-title">Import-Status</h2>
+        <div className="overview-page__import-status">
+          <div className="import-status__item">
+            <span className="import-status__label">Datenquelle</span>
+            <span className="import-status__value import-status__value--ok">EVCC (Home)</span>
+          </div>
+          <div className="import-status__item">
+            <span className="import-status__label">Datenquelle</span>
+            <span className="import-status__value import-status__value--ok">TeslaMate (Extern)</span>
+          </div>
+          <div className="import-status__item">
+            <span className="import-status__label">Letzter Sync</span>
+            <span className="import-status__value">Nicht durchgeführt</span>
+          </div>
+          <div className="import-status__item">
+            <span className="import-status__label">Status</span>
+            <span className="import-status__value import-status__value--warn">Dry-Run DB aktiv</span>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -220,10 +234,10 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
   const maxEnergy = Math.max(...energies, 1);
   const minEnergy = Math.min(...energies);
   const range = maxEnergy - minEnergy || 1;
-  
-  const width = 100;
-  const height = 80;
-  const padding = { top: 10, right: 10, bottom: 20, left: 35 };
+
+  const width = 760;
+  const height = 200;
+  const padding = { top: 20, right: 20, bottom: 40, left: 50 };
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
 
@@ -244,7 +258,7 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
             <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        
+
         {/* Y-axis */}
         <g className="trend-chart__axis">
           <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + innerHeight} stroke="var(--color-border)" strokeWidth="1" />
@@ -252,31 +266,31 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
             const y = padding.top + innerHeight - ((tick - minEnergy) / range) * innerHeight;
             return (
               <g key={i}>
-                <line x1={padding.left - 4} y1={y} x2={padding.left} y2={y} stroke="var(--color-border)" strokeWidth="1" />
-                <text x={padding.left - 8} y={y + 4} fontSize="9" fill="var(--color-text-muted)" textAnchor="end" dominantBaseline="middle">{tick.toFixed(1)}</text>
+                <line x1={padding.left - 6} y1={y} x2={padding.left} y2={y} stroke="var(--color-border)" strokeWidth="1" />
+                <text x={padding.left - 10} y={y + 4} fontSize="11" fill="var(--color-text-muted)" textAnchor="end" dominantBaseline="middle">{tick.toFixed(1)}</text>
               </g>
             );
           })}
         </g>
-        
+
         {/* X-axis labels */}
         <g className="trend-chart__x-axis">
           {sorted.map((_, i) => {
             const x = padding.left + (i / (sorted.length - 1)) * innerWidth;
             return (
-              <text key={i} x={x} y={height - 4} fontSize="8" fill="var(--color-text-muted)" textAnchor="middle">
+              <text key={i} x={x} y={height - 10} fontSize="10" fill="var(--color-text-muted)" textAnchor="middle">
                 {new Date(sorted[i].date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
               </text>
             );
           })}
         </g>
-        
+
         {/* Area */}
         <path
           d={`M${points} L${padding.left + innerWidth} ${padding.top + innerHeight} L${padding.left} ${padding.top + innerHeight} Z`}
           fill="url(#trend-gradient)"
         />
-        
+
         {/* Line */}
         <path
           d={`M${points}`}
@@ -286,7 +300,7 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        
+
         {/* Points */}
         {sorted.map((session, i) => {
           const x = padding.left + (i / (sorted.length - 1)) * innerWidth;
@@ -296,7 +310,7 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
               key={i}
               cx={x}
               cy={y}
-              r={3}
+              r={4}
               fill="var(--color-primary)"
               stroke="var(--color-bg-card)"
               strokeWidth="2"

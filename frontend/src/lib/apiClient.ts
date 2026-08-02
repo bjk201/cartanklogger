@@ -1,4 +1,4 @@
-import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, StatisticsResponse } from '../types/api';
+import type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, StatisticsResponse, OverviewSummaryResponse } from '../types/api';
 
 const API_BASE = '/api';
 
@@ -72,7 +72,11 @@ export const api = {
   async getStatistics(range: string = '30d'): Promise<StatisticsResponse> {
     return fetchJson<StatisticsResponse>(`/statistics?range=${range}`);
   },
+
+  async getOverviewSummary(): Promise<OverviewSummaryResponse> {
+    return fetchJson<OverviewSummaryResponse>(`/overview/summary`);
+  },
 };
 
 export { ApiError };
-export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo, StatisticsResponse, StatisticsKPIs, SourceBreakdown } from '../types/api';
+export type { OverviewResponse, Session, HealthResponse, PaginatedSessionsResponse, PaginationInfo, StatisticsResponse, StatisticsKPIs, SourceBreakdown, OverviewSummaryResponse } from '../types/api';

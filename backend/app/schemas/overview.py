@@ -114,3 +114,21 @@ class StatisticsResponse(BaseModel):
     range_days: int
     range_label: str
     errors: List[ErrorDetail] = []
+
+
+class OverviewSummaryResponse(BaseModel):
+    """Response contract for GET /api/overview/summary"""
+    ok: bool = True
+    total_sessions: int
+    total_energy_kwh: float
+    total_cost_eur: float
+    avg_cost_per_kwh: Optional[float] = None
+    home_sessions: int
+    external_sessions: int
+    import_sessions: int
+    home_energy_kwh: float
+    external_energy_kwh: float
+    home_cost_eur: float
+    external_cost_eur: float
+    home_share_pct: float
+    errors: List[ErrorDetail] = []

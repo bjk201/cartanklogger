@@ -102,3 +102,21 @@ export interface StatisticsResponse {
   range_label: string;
   errors: ErrorDetail[];
 }
+
+// Overview Summary Types
+export interface OverviewSummaryResponse {
+  ok: boolean;
+  total_sessions: number;
+  total_energy_kwh: number;
+  total_cost_eur: number;
+  avg_cost_per_kwh: number | null;
+  home_sessions: number;
+  external_sessions: number;
+  import_sessions: number;
+  home_energy_kwh: number;
+  external_energy_kwh: number;
+  home_cost_eur: number;
+  external_cost_eur: number;
+  home_share_pct: number;
+  errors: ErrorDetail[];
+}
