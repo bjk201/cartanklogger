@@ -179,3 +179,92 @@ export interface DataSourceConfigTestResponse {
   source: 'evcc' | 'teslamateapi';
   status: ReachabilityStatus;
 }
+
+// Matching Types
+export interface MatchedCharge {
+  charge_id: number;
+  source_id: string;
+  date: string;
+  energy_kwh: number | null;
+  cost_eur: number | null;
+  location: string | null;
+  location_original: string | null;
+  location_normalized: string | null;
+  accepted_as_candidate: boolean;
+  reject_reason: string | null;
+  overlap_seconds: number;
+  containment: string;
+  match_source: 'auto' | 'manual_override';
+  override_id: number | null;
+  override_reason: string | null;
+  replaced_auto_match: string | null;
+  skipped_due_to_other_override: boolean;
+}
+
+export interface EVCCSessionMatch {
+  evcc_session_id: number;
+  evcc_source_id: string;
+  evcc_start: string;
+  evcc_end: string;
+  evcc_energy_kwh: number | null;
+  evcc_cost_eur: number | null;
+  evcc_cost_per_kwh: number | null;
+  evcc_location: string | null;
+  matched_charge_count: number;
+  matched_charge_ids: number[];
+  matched_charges: MatchedCharge[];
+  matched_charge_energy_kwh_sum: number | null;
+  delta_kwh: number | null;
+  match_quality: 'exact' | 'plausible' | 'weak' | 'unmatched';
+  match_notes: string;
+}
+
+export interface MatchingSummary {
+  total_evcc_sessions_checked: number;
+  total_matched: number;
+  total_unmatched: number;
+  total_evcc_energy: number;
+  total_tm_energy: number;
+  total_delta_kwh: number;
+  quality_distribution: Record<string, number>;
+  total_tm_charges: number;
+  accepted_candidates: number;
+  rejected_wrong_location: number;
+}
+
+export interface MatchingDryRunResponse {
+  ok: boolean;
+  matches: EVCCSessionMatch[];
+  summary: MatchingSummary;
+  timestamp: string;
+  error?: string;
+}
+
+// Matching Override Types
+export interface MatchingOverrideCreate {
+  teslamate_charge_id: number;
+  evcc_session_id: number | null;
+  override_type: 'manual_assign' | 'manual_unassign' | 'reset_to_auto';
+  reason: string | null;
+}
+
+export interface MatchingOverrideRead {
+  id: number;
+  teslamate_charge_id: number;
+  evcc_session_id: number | null;
+  override_type: string;
+  reason: string | null;
+  replaced_auto_match: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface MatchingOverrideListResponse {
+  ok: boolean;
+  overrides: MatchingOverrideRead[];
+}
+
+export interface MatchingOverrideSingleResponse {
+  ok: boolean;
+  override: MatchingOverrideRead;
+}

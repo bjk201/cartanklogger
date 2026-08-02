@@ -10,6 +10,7 @@ import { PricesPlaceholderPage } from './pages/PricesPlaceholderPage';
 import { ExtraCostsPlaceholderPage } from './pages/ExtraCostsPlaceholderPage';
 import { ImportReviewPlaceholderPage } from './pages/ImportReviewPlaceholderPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
+import MatchingPage from './pages/MatchingPage';
 import './styles/global.css';
 import './styles/layout.css';
 
@@ -32,6 +33,7 @@ function App() {
                 <Route path="/extra-costs" element={<ExtraCostsPlaceholderPage />} />
                 <Route path="/import-review" element={<ImportReviewPlaceholderPage />} />
                 <Route path="/settings" element={<DataSourcesPage />} />
+                <Route path="/matching" element={<MatchingPage />} />
               </Routes>
             </main>
           </div>

@@ -9,7 +9,12 @@ import type {
   DataSourceConfigRead,
   DataSourceConfigWrite,
   DataSourceConfigTestRequest,
-  DataSourceConfigTestResponse
+  DataSourceConfigTestResponse,
+  MatchingDryRunResponse,
+  MatchingOverrideCreate,
+  MatchingOverrideRead,
+  MatchingOverrideListResponse,
+  MatchingOverrideSingleResponse,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -109,6 +114,29 @@ export const api = {
     return fetchJson<DataSourceConfigTestResponse>(`/settings/data-sources/test`, {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  },
+
+  // Matching
+  async getMatchingDryRun(limit?: number): Promise<MatchingDryRunResponse> {
+    const params = limit ? `?limit=${limit}` : '';
+    return fetchJson<MatchingDryRunResponse>(`/matching/dry-run${params}`);
+  },
+
+  async getMatchingOverrides(): Promise<MatchingOverrideListResponse> {
+    return fetchJson<MatchingOverrideListResponse>(`/matching/overrides`);
+  },
+
+  async createMatchingOverride(payload: MatchingOverrideCreate): Promise<MatchingOverrideSingleResponse> {
+    return fetchJson<MatchingOverrideSingleResponse>(`/matching/overrides`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteMatchingOverride(overrideId: number): Promise<MatchingOverrideSingleResponse> {
+    return fetchJson<MatchingOverrideSingleResponse>(`/matching/overrides/${overrideId}`, {
+      method: 'DELETE',
     });
   },
 };
