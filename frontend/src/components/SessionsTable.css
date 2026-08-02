@@ -74,10 +74,23 @@
   color: var(--color-text);
 }
 
+.sessions-table__cost-per-kwh {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 .sessions-table__odometer {
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
+}
+
+.sessions-table__pv-pct,
+.sessions-table__pv-kwh {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--color-home);
 }
 
 .sessions-table__note {
@@ -150,7 +163,7 @@
 
 .sessions-table__row.skeleton {
   display: grid;
-  grid-template-columns: 140px 100px 1fr 80px 100px 100px 1fr;
+  grid-template-columns: 140px 100px 1fr 80px 80px 80px 100px 100px 1fr;
   gap: 1rem;
   padding: 0.875rem 1rem;
   border-bottom: 1px solid var(--color-border);
@@ -185,7 +198,7 @@
   }
   
   .sessions-table__row.skeleton {
-    grid-template-columns: 120px 80px 1fr 70px 80px 80px 1fr;
+    grid-template-columns: 120px 80px 1fr 70px 70px 70px 80px 80px 1fr;
   }
 }
 

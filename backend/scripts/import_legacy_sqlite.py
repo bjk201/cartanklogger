@@ -94,7 +94,13 @@ class LegacyImporter:
                 legacy_table VARCHAR(50),
                 legacy_id INTEGER,
                 imported_at DATETIME,
-                import_status VARCHAR(50)
+                import_status VARCHAR(50),
+                -- PV / Solar data
+                solar_percentage FLOAT,
+                pv_kwh FLOAT,
+                -- Cost per kWh
+                cost_per_kwh FLOAT,
+                cost_per_kwh_source VARCHAR(20)
             )
         """)
         
@@ -254,8 +260,10 @@ class LegacyImporter:
                     INSERT INTO sessions 
                     (source_id, source_type, date, location, energy_kwh, cost_eur,
                      odometer_km, distance_km, note,
-                     legacy_source, legacy_table, legacy_id, imported_at, import_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     legacy_source, legacy_table, legacy_id, imported_at, import_status,
+                     solar_percentage, pv_kwh,
+                     cost_per_kwh, cost_per_kwh_source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(legacy_source, legacy_table, legacy_id) 
                     DO UPDATE SET
                         source_id=excluded.source_id,
@@ -268,11 +276,17 @@ class LegacyImporter:
                         distance_km=excluded.distance_km,
                         note=excluded.note,
                         imported_at=excluded.imported_at,
-                        import_status=excluded.import_status
+                        import_status=excluded.import_status,
+                        solar_percentage=excluded.solar_percentage,
+                        pv_kwh=excluded.pv_kwh,
+                        cost_per_kwh=excluded.cost_per_kwh,
+                        cost_per_kwh_source=excluded.cost_per_kwh_source
                 """, (
                     source_id, 'home', date.isoformat(), row['loadpoint'],
                     energy_kwh, cost_eur, odometer_km, None, note,
-                    'evcc', 'home_sessions', legacy_id, imported_at, 'imported'
+                    'evcc', 'home_sessions', legacy_id, imported_at, 'imported',
+                    row['solar_percentage'], row['pv_kwh'],
+                    row['price_per_kwh'], 'api'
                 ))
                 self.stats.home_imported += 1
                 
@@ -363,12 +377,19 @@ class LegacyImporter:
             
             # Insert into target
             try:
+                # Derive cost_per_kwh for TeslaMate: cost / charge_energy_added (energy_kwh)
+                # Only if energy_kwh > 0, otherwise null
+                derived_cost_per_kwh = None
+                if energy_kwh is not None and energy_kwh > 0 and cost_eur is not None:
+                    derived_cost_per_kwh = round(cost_eur / energy_kwh, 4)
+                
                 target_cursor.execute("""
                     INSERT INTO sessions 
                     (source_id, source_type, date, location, energy_kwh, cost_eur,
                      odometer_km, distance_km, note,
-                     legacy_source, legacy_table, legacy_id, imported_at, import_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     legacy_source, legacy_table, legacy_id, imported_at, import_status,
+                     cost_per_kwh, cost_per_kwh_source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(legacy_source, legacy_table, legacy_id) 
                     DO UPDATE SET
                         source_id=excluded.source_id,
@@ -381,11 +402,14 @@ class LegacyImporter:
                         distance_km=excluded.distance_km,
                         note=excluded.note,
                         imported_at=excluded.imported_at,
-                        import_status=excluded.import_status
+                        import_status=excluded.import_status,
+                        cost_per_kwh=excluded.cost_per_kwh,
+                        cost_per_kwh_source=excluded.cost_per_kwh_source
                 """, (
                     source_id, source_type, date.isoformat(), location_name,
                     energy_kwh, cost_eur, odometer_km, None, note,
-                    'teslamate', 'external_sessions', legacy_id, imported_at, import_status
+                    'teslamate', 'external_sessions', legacy_id, imported_at, import_status,
+                    derived_cost_per_kwh, 'derived'
                 ))
                 
                 if import_status == 'imported':

@@ -19,6 +19,16 @@ class SessionModel(Base):
     distance_km = Column(Float, nullable=True)
     note = Column(Text, nullable=True)
     
+    # PV / Solar data (from EVCC home_sessions)
+    solar_percentage = Column(Float, nullable=True)
+    pv_kwh = Column(Float, nullable=True)
+    
+    # Cost per kWh (price per unit energy)
+    # For EVCC: directly from pricePerKWh API field (source='api')
+    # For TeslaMate: derived from cost / charge_energy_added (source='derived')
+    cost_per_kwh = Column(Float, nullable=True)
+    cost_per_kwh_source = Column(String(20), nullable=True)  # 'api' | 'derived'
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

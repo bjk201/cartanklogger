@@ -20,6 +20,8 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
             <div className="skeleton__cell" />
             <div className="skeleton__cell" />
             <div className="skeleton__cell" />
+            <div className="skeleton__cell" />
+            <div className="skeleton__cell" />
           </div>
         ))}
       </div>
@@ -43,7 +45,10 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
             <th scope="col">Quelle</th>
             <th scope="col">Ort</th>
             <th scope="col" className="text-end">kWh</th>
+            <th scope="col" className="text-end">PV %</th>
+            <th scope="col" className="text-end">PV kWh</th>
             <th scope="col" className="text-end">Kosten</th>
+            <th scope="col" className="text-end">€/kWh</th>
             <th scope="col" className="text-end">km-Stand</th>
             <th scope="col">Notiz</th>
           </tr>
@@ -67,8 +72,17 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
               <td className="text-end sessions-table__energy">
                 {session.energy_kwh !== null ? session.energy_kwh.toFixed(1) : '—'}
               </td>
+              <td className="text-end sessions-table__pv-pct">
+                {session.solar_percentage !== null ? `${session.solar_percentage.toFixed(1)} %` : '—'}
+              </td>
+              <td className="text-end sessions-table__pv-kwh">
+                {session.pv_kwh !== null ? session.pv_kwh.toFixed(2) : '—'}
+              </td>
               <td className="text-end sessions-table__cost">
                 {session.cost_eur !== null ? `${session.cost_eur.toFixed(2)} €` : '—'}
+              </td>
+              <td className="text-end sessions-table__cost-per-kwh">
+                {session.cost_per_kwh !== null ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}
               </td>
               <td className="text-end sessions-table__odometer">
                 {session.odometer_km !== null ? session.odometer_km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}

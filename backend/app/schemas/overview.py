@@ -18,6 +18,12 @@ class SessionRead(BaseModel):
     # PV / Solar data (from EVCC home_sessions)
     solar_percentage: Optional[float] = None
     pv_kwh: Optional[float] = None
+    
+    # Cost per kWh (price per unit energy)
+    # For EVCC: directly from pricePerKWh API field (source='api')
+    # For TeslaMate: derived from cost / charge_energy_added (source='derived')
+    cost_per_kwh: Optional[float] = None
+    cost_per_kwh_source: Optional[Literal["api", "derived"]] = None
 
     class Config:
         from_attributes = True

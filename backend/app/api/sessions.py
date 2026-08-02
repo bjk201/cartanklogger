@@ -65,6 +65,8 @@ def get_sessions(
             note=s.note,
             solar_percentage=s.solar_percentage,
             pv_kwh=s.pv_kwh,
+            cost_per_kwh=s.cost_per_kwh,
+            cost_per_kwh_source=s.cost_per_kwh_source,
         ))
     
     return PaginatedSessionsResponse(

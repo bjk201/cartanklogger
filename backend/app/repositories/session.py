@@ -77,46 +77,58 @@ class SessionRepository:
         
         # Home sessions
         for i in range(5):
+            energy = round(random.uniform(10.0, 25.0), 1)
+            cost = round(random.uniform(3.0, 8.0), 2)
             s = SessionModel(
                 source_id=str(i + 1),
                 source_type="home",
                 date=base_date - timedelta(days=i * 2),
                 location="Garage",
-                energy_kwh=round(random.uniform(10.0, 25.0), 1),
-                cost_eur=round(random.uniform(3.0, 8.0), 2),
+                energy_kwh=energy,
+                cost_eur=cost,
                 odometer_km=round(50000 + i * 150.5, 1),
                 distance_km=round(random.uniform(80.0, 180.0), 1) if i > 0 else None,
                 note="Home charging" if i % 2 == 0 else None,
+                cost_per_kwh=round(cost / energy, 4) if energy > 0 else None,
+                cost_per_kwh_source="api",
             )
             sessions.append(s)
 
         # External sessions (TeslaMate)
         for i in range(3):
+            energy = round(random.uniform(30.0, 60.0), 1)
+            cost = round(random.uniform(15.0, 35.0), 2)
             s = SessionModel(
                 source_id=str(i + 1),
                 source_type="external",
                 date=base_date - timedelta(days=i * 3 + 1),
                 location=f"Supercharger {['Munich', 'Berlin', 'Hamburg'][i]}",
-                energy_kwh=round(random.uniform(30.0, 60.0), 1),
-                cost_eur=round(random.uniform(15.0, 35.0), 2),
+                energy_kwh=energy,
+                cost_eur=cost,
                 odometer_km=round(50500 + i * 200.0, 1),
                 distance_km=round(random.uniform(200.0, 350.0), 1),
                 note="Long distance trip",
+                cost_per_kwh=round(cost / energy, 4) if energy > 0 else None,
+                cost_per_kwh_source="derived",
             )
             sessions.append(s)
 
         # Import sessions
         for i in range(2):
+            energy = round(random.uniform(5.0, 15.0), 1)
+            cost = round(random.uniform(2.0, 5.0), 2)
             s = SessionModel(
                 source_id=str(i + 1),
                 source_type="import",
                 date=base_date - timedelta(days=10 + i * 5),
                 location="Unknown",
-                energy_kwh=round(random.uniform(5.0, 15.0), 1),
-                cost_eur=round(random.uniform(2.0, 5.0), 2),
+                energy_kwh=energy,
+                cost_eur=cost,
                 odometer_km=round(49000 + i * 100.0, 1),
                 distance_km=None,
                 note="CSV Import",
+                cost_per_kwh=round(cost / energy, 4) if energy > 0 else None,
+                cost_per_kwh_source="derived",
             )
             sessions.append(s)
 

@@ -34,15 +34,20 @@ def get_recent_sessions(
     data = []
     for s in sessions:
         data.append(SessionRead(
-            id=f"{s.source_type}:{s.source_id}",
-            date=s.date,
+            id=s.id,
             source_type=s.source_type,
+            source_id=s.source_id,
+            date=s.date,
             location=s.location,
             energy_kwh=s.energy_kwh,
             cost_eur=s.cost_eur,
             odometer_km=s.odometer_km,
             distance_km=s.distance_km,
             note=s.note,
+            solar_percentage=s.solar_percentage,
+            pv_kwh=s.pv_kwh,
+            cost_per_kwh=s.cost_per_kwh,
+            cost_per_kwh_source=s.cost_per_kwh_source,
         ))
     
     return OverviewResponse(

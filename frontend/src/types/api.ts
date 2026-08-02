@@ -12,6 +12,11 @@ export interface Session {
   // PV / Solar data (from EVCC home_sessions)
   solar_percentage: number | null;
   pv_kwh: number | null;
+  // Cost per kWh
+  // EVCC: directly from pricePerKWh API field (source='api')
+  // TeslaMate: derived from cost / charge_energy_added (source='derived')
+  cost_per_kwh: number | null;
+  cost_per_kwh_source: 'api' | 'derived' | null;
 }
 
 export interface MetaInfo {

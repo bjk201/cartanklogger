@@ -28,12 +28,36 @@ export function SessionMobileCard({ session }: SessionMobileCardProps) {
             {session.energy_kwh !== null ? `${session.energy_kwh.toFixed(1)} kWh` : '—'}
           </span>
         </div>
+        {session.solar_percentage !== null && session.pv_kwh !== null && (
+          <>
+            <div className="session-card__row">
+              <span className="session-card__label">PV-Anteil</span>
+              <span className="session-card__value session-card__value--pv-pct">
+                {session.solar_percentage.toFixed(1)} %
+              </span>
+            </div>
+            <div className="session-card__row">
+              <span className="session-card__label">PV Energie</span>
+              <span className="session-card__value session-card__value--pv-kwh">
+                {session.pv_kwh.toFixed(2)} kWh
+              </span>
+            </div>
+          </>
+        )}
         <div className="session-card__row">
           <span className="session-card__label">Kosten</span>
           <span className="session-card__value session-card__value--cost">
             {session.cost_eur !== null ? `${session.cost_eur.toFixed(2)} €` : '—'}
           </span>
         </div>
+        {session.cost_per_kwh !== null && (
+          <div className="session-card__row">
+            <span className="session-card__label">€/kWh</span>
+            <span className="session-card__value session-card__value--cost-per-kwh">
+              {session.cost_per_kwh.toFixed(2)} €/kWh
+            </span>
+          </div>
+        )}
         <div className="session-card__row">
           <span className="session-card__label">km-Stand</span>
           <span className="session-card__value">
