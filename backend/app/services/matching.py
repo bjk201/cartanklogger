@@ -38,6 +38,8 @@ class MatchedCharge:
     match_source: str = 'auto'  # 'auto' | 'manual_override'
     override_id: Optional[int] = None
     override_reason: Optional[str] = None
+    replaced_auto_match: Optional[str] = None
+    skipped_due_to_other_override: bool = False
 
 
 @dataclass
@@ -301,12 +303,31 @@ class MatchingService:
                             containment='manual_override',
                             match_source='manual_override',
                             override_id=override_info['override_id'],
-                            override_reason=override_info['reason']
+                            override_reason=override_info['reason'],
+                            replaced_auto_match=override_info.get('replaced_auto_match')
                         ))
                         matched_charge_ids.append(tm.id)
                         if tm.energy_kwh:
                             matched_energy_sum += float(tm.energy_kwh)
-                    # If override points to different EVCC session, skip (will be matched there)
+                    else:
+                        # Override exists but points to a DIFFERENT EVCC session
+                        # This charge is skipped for auto-matching in this session
+                        matched_charges.append(MatchedCharge(
+                            charge_id=tm.id,
+                            source_id=tm.source_id,
+                            date=tm.date.isoformat() if tm.date else '',
+                            energy_kwh=tm.energy_kwh,
+                            cost_eur=tm.cost_eur,
+                            location=tm.location,
+                            location_original=tm.location,
+                            location_normalized=self._normalize_location(tm.location),
+                            accepted_as_candidate=False,
+                            reject_reason='skipped_due_to_other_override',
+                            overlap_seconds=0,
+                            containment='unmatched',
+                            match_source='auto',
+                            skipped_due_to_other_override=True
+                        ))
                     continue
                 
                 # No manual override - apply auto-matching logic
@@ -473,7 +494,7 @@ class MatchingService:
     def _get_active_overrides(self) -> List[MatchingOverride]:
         """Get all active manual overrides (excluding reset_to_auto and cancelled ones).
         
-        Returns only the latest override per TM charge, and only if it's not reset_to_auto.
+        Returns only the latest NON-reset override per TM charge.
         """
         # Get all overrides ordered by TM charge and created_at desc
         all_overrides = self.db.query(MatchingOverride).order_by(
@@ -481,16 +502,15 @@ class MatchingService:
             MatchingOverride.created_at.desc()
         ).all()
         
-        # Keep only the latest per TM charge
+        # Keep only the latest NON-reset override per TM charge
         latest_per_charge = {}
         for ov in all_overrides:
+            if ov.override_type == OverrideType.reset_to_auto:
+                continue
             if ov.teslamate_charge_id not in latest_per_charge:
                 latest_per_charge[ov.teslamate_charge_id] = ov
         
-        # Filter out reset_to_auto
-        active = [ov for ov in latest_per_charge.values() if ov.override_type != OverrideType.reset_to_auto]
-        
-        return active
+        return list(latest_per_charge.values())
 
 
 def run_matching_dry_run(limit: Optional[int] = None) -> Dict[str, Any]:
