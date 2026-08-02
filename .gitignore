@@ -16,3 +16,13 @@ __pycache__/
 
 # Lokale Konfiguration (kann private LAN-IPs / Token enthalten) – NICHT versionieren
 config.yaml
+
+# Build artifacts
+frontend/dist/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

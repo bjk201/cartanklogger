@@ -51,6 +51,15 @@ export interface DataSourceStatusResponse {
   data_source: 'demo' | 'live';
   data_source_description: string;
   message: string;
+  evcc: ReachabilityStatus;
+  teslamate: ReachabilityStatus;
+}
+
+export interface ReachabilityStatus {
+  configured: boolean;
+  reachable: boolean;
+  status_code?: number;
+  error?: string;
 }
 
 export interface KPIData {

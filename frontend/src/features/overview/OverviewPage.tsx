@@ -50,6 +50,21 @@ export function OverviewPage() {
     fetchData();
   };
 
+  // Helper functions for data source status display
+  const getStatusClass = (status: { configured: boolean; reachable: boolean } | undefined): string => {
+    if (!status) return 'import-status__value';
+    if (!status.configured) return 'import-status__value import-status__value--warn';
+    if (status.reachable) return 'import-status__value import-status__value--ok';
+    return 'import-status__value import-status__value--error';
+  };
+
+  const formatSourceStatus = (status: { configured: boolean; reachable: boolean; error?: string } | undefined, sourceName: string): string => {
+    if (!status) return `${sourceName}: Unbekannt`;
+    if (!status.configured) return `${sourceName}: Nicht konfiguriert`;
+    if (status.reachable) return `${sourceName}: Erreichbar`;
+    return `${sourceName}: Nicht erreichbar${status.error ? ` (${status.error})` : ''}`;
+  };
+
   const formatNumber = (num: number): string => {
     return num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
   };
@@ -191,34 +206,43 @@ export function OverviewPage() {
         </div>
       </section>
 
-      {/* Data Source Status - honest about demo mode */}
+      {/* Data Source Status - honest about demo/live mode with reachability */}
       <section className="overview-page__section overview-page__section--subtle" aria-labelledby="data-source-heading">
-        <h2 id="data-source-heading" className="overview-page__section-title">Datenquellen-Status</h2>
+        <h2 id="data-source-heading" className="overview-page__section-title">
+          Datenquellen-Status
+          {dataSourceStatus && (
+            <span className={`overview-page__mode-badge ${dataSourceStatus.data_source === 'live' ? 'overview-page__mode-badge--live' : 'overview-page__mode-badge--demo'}`}>
+              {dataSourceStatus.data_source === 'live' ? 'LIVE' : 'DEMO'}
+            </span>
+          )}
+        </h2>
         <div className="overview-page__import-status">
           <div className="import-status__item">
             <span className="import-status__label">Modus</span>
-            <span className={`import-status__value ${isDemoMode ? 'import-status__value--warn' : 'import-status__value--ok'}`}>
-              {isDemoMode ? 'Demo / Fallback' : 'Produktiv'}
+            <span className={`import-status__value ${dataSourceStatus?.data_source === 'live' ? 'import-status__value--ok' : 'import-status__value--warn'}`}>
+              {dataSourceStatus?.data_source === 'live' ? 'Live' : 'Demo / Fallback'}
             </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">Datenquelle Home</span>
-            <span className="import-status__value import-status__value--ok">
-              EVCC (Demo-Seed)
+            <span className="import-status__label">EVCC (Home)</span>
+            <span className={getStatusClass(dataSourceStatus?.evcc)}>
+              {formatSourceStatus(dataSourceStatus?.evcc, 'EVCC')}
             </span>
           </div>
           <div className="import-status__item">
-            <span className="import-status__label">Datenquelle Extern</span>
-            <span className="import-status__value import-status__value--ok">
-              TeslaMate (Demo-Seed)
+            <span className="import-status__label">TeslaMate (Extern)</span>
+            <span className={getStatusClass(dataSourceStatus?.teslamate)}>
+              {formatSourceStatus(dataSourceStatus?.teslamate, 'TeslaMate')}
             </span>
           </div>
-          <div className="import-status__item">
-            <span className="import-status__label">Produktive Anbindung</span>
-            <span className="import-status__value import-status__value--warn">
-              Nicht konfiguriert (keine EVCC/TeslaMate-IPs)
-            </span>
-          </div>
+          {dataSourceStatus?.data_source === 'live' && dataSourceStatus?.message && (
+            <div className="import-status__item import-status__item--full">
+              <span className="import-status__label">Status</span>
+              <span className="import-status__value import-status__value--warn">
+                {dataSourceStatus.message}
+              </span>
+            </div>
+          )}
         </div>
       </section>
     </div>

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import os
+import httpx
 
 from app.config import settings
 from app.database import init_db, engine
@@ -16,9 +17,87 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Data source status - central configuration
-DATA_SOURCE = "demo"
-DATA_SOURCE_DESCRIPTION = "Demo/Fallback-Modus: Seed-Daten (keine produktiven EVCC/TeslaMate-Verbindungen)"
+# Data source mode derived from settings
+def get_data_source_info() -> dict:
+    """Determine data source mode and reachability."""
+    evcc_configured = settings.EVCC_CONFIGURED
+    teslamate_configured = settings.TESLAMATE_CONFIGURED
+    
+    # If both are configured, we're in live mode
+    is_live = evcc_configured and teslamate_configured
+    
+    if is_live:
+        data_source = "live"
+        description = "Live-Modus: EVCC und TeslaMate konfiguriert"
+    else:
+        data_source = "demo"
+        description = "Demo/Fallback-Modus: Seed-Daten (EVCC/TeslaMate nicht oder unvollständig konfiguriert)"
+    
+    return {
+        "data_source": data_source,
+        "data_source_description": description,
+        "evcc_configured": evcc_configured,
+        "teslamate_configured": teslamate_configured,
+        "is_live": is_live,
+    }
+
+
+async def check_evcc_reachable() -> dict:
+    """Check if EVCC API is reachable."""
+    if not settings.EVCC_CONFIGURED:
+        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
+    
+    base_url = settings.EVCC_BASE_URL
+    if not base_url:
+        return {"configured": True, "reachable": False, "error": "Keine Base URL"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # EVCC health endpoint
+            response = await client.get(f"{base_url}/api/state", headers={})
+            if response.status_code == 200:
+                return {"configured": True, "reachable": True, "status_code": response.status_code}
+            else:
+                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+    except httpx.TimeoutException:
+        return {"configured": True, "reachable": False, "error": "Timeout"}
+    except httpx.ConnectError:
+        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+    except Exception as e:
+        return {"configured": True, "reachable": False, "error": str(e)}
+
+
+async def check_teslamate_reachable() -> dict:
+    """Check if TeslaMate API is reachable."""
+    if not settings.TESLAMATE_CONFIGURED:
+        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
+    
+    url = settings.TESLAMATE_URL
+    if not url:
+        return {"configured": True, "reachable": False, "error": "Keine URL"}
+    
+    headers = {}
+    if settings.TESLAMATE_API_TOKEN:
+        headers["Authorization"] = f"Bearer {settings.TESLAMATE_API_TOKEN}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # TeslaMate GraphQL health check
+            response = await client.post(
+                url,
+                json={"query": "{ hello }"},
+                headers=headers
+            )
+            if response.status_code == 200:
+                return {"configured": True, "reachable": True, "status_code": response.status_code}
+            else:
+                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+    except httpx.TimeoutException:
+        return {"configured": True, "reachable": False, "error": "Timeout"}
+    except httpx.ConnectError:
+        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+    except Exception as e:
+        return {"configured": True, "reachable": False, "error": str(e)}
 
 
 @asynccontextmanager
@@ -26,7 +105,11 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting CarTankLogger 2.0 Backend...")
     logger.info(f"Database URL: {settings.DATABASE_URL}")
-    logger.info(f"Data source: {DATA_SOURCE} - {DATA_SOURCE_DESCRIPTION}")
+    
+    data_source_info = get_data_source_info()
+    logger.info(f"Data source: {data_source_info['data_source']} - {data_source_info['data_source_description']}")
+    logger.info(f"EVCC configured: {data_source_info['evcc_configured']}")
+    logger.info(f"TeslaMate configured: {data_source_info['teslamate_configured']}")
     
     # Initialize database tables
     try:
@@ -74,34 +157,62 @@ app.include_router(statistics.router, prefix=settings.API_PREFIX)
 @app.get("/health", tags=["Health"])
 def health_check():
     """Health check endpoint with data source info."""
+    info = get_data_source_info()
     return {
         "ok": True,
         "service": "cartanklogger-backend",
         "version": "2.0.0",
         "database": "connected",
-        "data_source": DATA_SOURCE,
-        "data_source_description": DATA_SOURCE_DESCRIPTION
+        "data_source": info["data_source"],
+        "data_source_description": info["data_source_description"],
+        "evcc_configured": info["evcc_configured"],
+        "teslamate_configured": info["teslamate_configured"],
     }
 
 
 @app.get("/api/status", tags=["Status"])
-def data_source_status():
-    """Data source status endpoint for frontend."""
+async def data_source_status():
+    """Data source status endpoint for frontend with reachability checks."""
+    info = get_data_source_info()
+    evcc_status = await check_evcc_reachable()
+    teslamate_status = await check_teslamate_reachable()
+    
+    # Determine overall message
+    if info["is_live"]:
+        if evcc_status["reachable"] and teslamate_status["reachable"]:
+            message = "Live-Modus aktiv: EVCC und TeslaMate erreichbar"
+        elif evcc_status["reachable"] and not teslamate_status["reachable"]:
+            message = "Live-Modus: EVCC erreichbar, TeslaMate nicht erreichbar"
+        elif not evcc_status["reachable"] and teslamate_status["reachable"]:
+            message = "Live-Modus: TeslaMate erreichbar, EVCC nicht erreichbar"
+        else:
+            message = "Live-Modus konfiguriert, aber keine Quelle erreichbar"
+    else:
+        missing = []
+        if not info["evcc_configured"]:
+            missing.append("EVCC")
+        if not info["teslamate_configured"]:
+            missing.append("TeslaMate")
+        message = f"Demo-Modus: {', '.join(missing)} nicht konfiguriert"
+    
     return {
         "ok": True,
-        "data_source": DATA_SOURCE,
-        "data_source_description": DATA_SOURCE_DESCRIPTION,
-        "message": "Aktuell werden Demo-Daten angezeigt. Für produktive Daten sind EVCC/TeslaMate-IP-Zugänge erforderlich."
+        "data_source": info["data_source"],
+        "data_source_description": info["data_source_description"],
+        "message": message,
+        "evcc": evcc_status,
+        "teslamate": teslamate_status,
     }
 
 
 @app.get("/", tags=["Root"])
 def root():
+    info = get_data_source_info()
     return {
         "service": "CarTankLogger 2.0",
         "version": "2.0.0",
         "docs": "/docs",
         "health": "/health",
         "api": settings.API_PREFIX,
-        "data_source": DATA_SOURCE
+        "data_source": info["data_source"],
     }
