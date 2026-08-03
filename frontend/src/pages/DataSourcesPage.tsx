@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff } from 'lucide-react';
+import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, Clock } from 'lucide-react';
 import { LoadingState, ErrorState, EmptyState, PartialError } from '../components/StateViews';
-import { api, type DataSourceConfigRead, type DataSourceConfigWrite, type DataSourceConfigTestRequest, type DataSourceConfigTestResponse } from '../lib/apiClient';
+import { api, type DataSourceConfigRead, type DataSourceConfigWrite, type DataSourceConfigTestRequest, type DataSourceConfigTestResponse, type DataSourceStatusResponse } from '../lib/apiClient';
 import './DataSourcesPage.css';
 
 export function DataSourcesPage() {
@@ -39,19 +39,54 @@ export function DataSourcesPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getDataSourceConfig();
+      const [configResponse, statusResponse] = await Promise.all([
+        api.getDataSourceConfig(),
+        api.getDataSourceStatus().catch(() => null) // Optional, don't fail if status endpoint has issues
+      ]);
       
-      setConfig(response);
+      setConfig(configResponse);
       // Populate form with current config (passwords/tokens not returned by API)
       setForm({
-        host: response.evcc_host,
-        port: response.evcc_port,
+        host: configResponse.evcc_host,
+        port: configResponse.evcc_port,
         password: '',
         api_token: '',
-        use_tls: response.evcc_use_tls,
-        base_url: response.teslamateapi_base_url,
+        use_tls: configResponse.evcc_use_tls,
+        base_url: configResponse.teslamateapi_base_url,
         token: '',
       });
+      
+      // Initialize test results from status endpoint (shows last known reachability)
+      if (statusResponse) {
+        setTestResults({
+          evcc: {
+            ok: true,
+            source: 'evcc',
+            status: {
+              configured: configResponse.evcc_configured,
+              reachable: statusResponse.evcc?.reachable ?? false,
+              level: statusResponse.evcc?.level,
+              status_code: statusResponse.evcc?.status_code,
+              error: statusResponse.evcc?.error,
+              data_error: statusResponse.evcc?.data_error,
+              last_checked: statusResponse.timestamp
+            }
+          },
+          teslamateapi: {
+            ok: true,
+            source: 'teslamateapi',
+            status: {
+              configured: configResponse.teslamateapi_configured,
+              reachable: statusResponse.teslamateapi?.reachable ?? false,
+              level: statusResponse.teslamateapi?.level,
+              status_code: statusResponse.teslamateapi?.status_code,
+              error: statusResponse.teslamateapi?.error,
+              data_error: statusResponse.teslamateapi?.data_error,
+              last_checked: statusResponse.timestamp
+            }
+          }
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
       setError(`Fehler beim Laden: ${message}`);
@@ -131,11 +166,21 @@ export function DataSourcesPage() {
     }
   };
 
-  const getStatusBadge = (status: { configured: boolean; reachable: boolean; error?: string } | undefined) => {
+  const getStatusBadge = (status: { configured: boolean; reachable: boolean; level?: string; status_code?: number; error?: string; data_error?: string; last_checked?: string } | undefined) => {
     if (!status) return <span className="status-badge status-badge--unknown">Nicht getestet</span>;
     if (!status.configured) return <span className="status-badge status-badge--not-configured">Nicht konfiguriert</span>;
-    if (status.reachable) return <span className="status-badge status-badge--ok"><CheckCircle size={12} /> Erreichbar</span>;
+    if (status.reachable && status.level === 'reachable') return <span className="status-badge status-badge--ok"><CheckCircle size={12} /> Erreichbar</span>;
+    if (status.reachable && status.level === 'data_fetch_error') return <span className="status-badge status-badge--warn"><AlertCircle size={12} /> Erreichbar, Datenabruf fehlgeschlagen</span>;
     return <span className="status-badge status-badge--error"><AlertCircle size={12} /> Nicht erreichbar{status.error ? ` (${status.error})` : ''}</span>;
+  };
+
+  const formatLastChecked = (timestamp?: string) => {
+    if (!timestamp) return '';
+    try {
+      return ` (zuletzt: ${new Date(timestamp).toLocaleString('de-DE')})`;
+    } catch {
+      return '';
+    }
   };
 
   const PasswordInput = ({ value, onChange, show, toggleShow, placeholder, label, type = 'password' }: {
@@ -217,6 +262,7 @@ export function DataSourcesPage() {
             <div className="status-card__label">EVCC erreichbar</div>
             <div className="status-card__value">
               {getStatusBadge(testResults.evcc?.status)}
+              {formatLastChecked(testResults.evcc?.status?.last_checked)}
             </div>
           </div>
           <div className="status-card">
@@ -229,6 +275,7 @@ export function DataSourcesPage() {
             <div className="status-card__label">TeslaMateAPI erreichbar</div>
             <div className="status-card__value">
               {getStatusBadge(testResults.teslamateapi?.status)}
+              {formatLastChecked(testResults.teslamateapi?.status?.last_checked)}
             </div>
           </div>
         </div>

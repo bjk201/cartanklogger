@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -74,82 +75,82 @@ def get_data_source_info() -> dict:
 async def check_evcc_reachable() -> dict:
     """Check if EVCC API is reachable."""
     if not settings.EVCC_CONFIGURED:
-        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
-    
+        return {"configured": False, "reachable": False, "level": "unreachable", "error": "Nicht konfiguriert"}
+
     base_url = settings.EVCC_BASE_URL
     if not base_url:
-        return {"configured": True, "reachable": False, "error": "Keine Base URL"}
-    
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Keine Base URL"}
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             # EVCC health endpoint
             response = await client.get(f"{base_url}/api/state", headers={})
             if response.status_code == 200:
-                return {"configured": True, "reachable": True, "status_code": response.status_code}
+                return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
     except httpx.TimeoutException:
-        return {"configured": True, "reachable": False, "error": "Timeout"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:
-        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Verbindungsfehler"}
     except Exception as e:
-        return {"configured": True, "reachable": False, "error": str(e)}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": str(e)}
 
 
 async def check_teslamateapi_reachable() -> dict:
     """Check if TeslaMateAPI is reachable."""
     if not settings.TESLAMATEAPI_CONFIGURED:
-        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
-    
+        return {"configured": False, "reachable": False, "level": "unreachable", "error": "Nicht konfiguriert"}
+
     base_url = settings.TESLAMATEAPI_BASE_URL
     if not base_url:
-        return {"configured": True, "reachable": False, "error": "Keine Base URL"}
-    
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Keine Base URL"}
+
     headers = {}
     if settings.TESLAMATEAPI_TOKEN:
         headers["Authorization"] = f"Bearer {settings.TESLAMATEAPI_TOKEN}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             # TeslaMateAPI health check - use /health or /api/v1/vehicles
             response = await client.get(f"{base_url}/health", headers=headers)
             if response.status_code == 200:
-                return {"configured": True, "reachable": True, "status_code": response.status_code}
+                return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
     except httpx.TimeoutException:
-        return {"configured": True, "reachable": False, "error": "Timeout"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:
-        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Verbindungsfehler"}
     except Exception as e:
-        return {"configured": True, "reachable": False, "error": str(e)}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": str(e)}
 
 
 async def check_evcc_reachable_from_config(config) -> dict:
     """Check if EVCC API is reachable using database config."""
     if not config or not config.evcc_host:
-        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
-    
+        return {"configured": False, "reachable": False, "level": "unreachable", "error": "Nicht konfiguriert"}
+
     protocol = "https" if config.evcc_use_tls else "http"
     base_url = f"{protocol}://{config.evcc_host}:{config.evcc_port or 7070}"
-    
+
     headers = {}
     if config.evcc_api_token:
         headers["Authorization"] = f"Bearer {config.evcc_api_token}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{base_url}/api/state", headers=headers)
             if response.status_code == 200:
-                return {"configured": True, "reachable": True, "status_code": response.status_code}
+                return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
     except httpx.TimeoutException:
-        return {"configured": True, "reachable": False, "error": "Timeout"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:
-        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Verbindungsfehler"}
     except Exception as e:
-        return {"configured": True, "reachable": False, "error": str(e)}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": str(e)}
 
 
 async def check_teslamateapi_reachable_from_config(config) -> dict:
@@ -307,6 +308,7 @@ async def data_source_status():
         "data_source": info["data_source"],
         "data_source_description": info["data_source_description"],
         "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "evcc": evcc_status,
         "teslamateapi": teslamateapi_status,
     }
