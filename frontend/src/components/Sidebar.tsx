@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, GitMerge, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../app/ThemeContext';
 import './Sidebar.css';
 
@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Overview', icon: Home },
   { path: '/sessions', label: 'Sessions', icon: FileText },
   { path: '/statistics', label: 'Statistik', icon: BarChart2 },
+  { path: '/matching', label: 'Matching', icon: GitMerge },
   { path: '/prices', label: 'Preise', icon: Calendar },
   { path: '/extra-costs', label: 'Extra-Kosten', icon: FileText },
   { path: '/import-review', label: 'Import/Review', icon: ExternalLink },
