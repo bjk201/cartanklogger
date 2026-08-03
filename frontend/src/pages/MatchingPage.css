@@ -543,6 +543,12 @@
   font-size: 0.875rem;
 }
 
+.matching-page__charge-energy-used {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
 .matching-page__charge-location {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
@@ -1100,6 +1106,42 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: 0.25rem;
+}
+
+/* Charge sums styles */
+.matching-page__charge-sums {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.matching-page__sum-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 0.75rem;
+}
+
+.matching-page__sum-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.matching-page__sum-separator {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* Reject hint */
+.matching-page__reject-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin-left: 0.5rem;
+  opacity: 0.8;
 }
 
 .matching-page__live-matches h2 {

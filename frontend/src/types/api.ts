@@ -345,6 +345,8 @@ export interface LiveMatchedCharge {
   source_id: string;
   date: string;
   energy_kwh: number | null;
+  charge_energy_added: number | null;
+  charge_energy_used: number | null;
   cost_eur: number | null;
   location: string | null;
   location_original: string | null;

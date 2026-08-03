@@ -485,7 +485,12 @@ const MatchingPage: React.FC = () => {
                                 <div key={charge.charge_id} className="matching-page__charge matching-page__charge--manual">
                                   <div className="matching-page__charge-main">
                                     <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
-                                    <span className="matching-page__charge-energy">{charge.energy_kwh?.toFixed(1)} kWh</span>
+                                    <span className="matching-page__charge-energy">
+                                      {charge.charge_energy_added?.toFixed(1)} kWh (added)
+                                      {charge.charge_energy_used != null && charge.charge_energy_used !== charge.charge_energy_added && (
+                                        <span className="matching-page__charge-energy-used"> / {charge.charge_energy_used?.toFixed(1)} kWh (used)</span>
+                                      )}
+                                    </span>
                                     <span className="matching-page__charge-location">{charge.location}</span>
                                     <span className="matching-page__charge-source matching-page__charge-source--manual">
                                       Manual Override
@@ -526,6 +531,20 @@ const MatchingPage: React.FC = () => {
                                   </div>
                                 </div>
                               ))}
+
+                              {/* Summe der Manual Overrides für diese Session */}
+                              <div className="matching-page__charge-sums">
+                                <span className="matching-page__sum-label">Summe Manual Overrides:</span>
+                                <span className="matching-page__sum-value">
+                                  Added: {manualMatches.reduce((sum, c) => sum + (c.charge_energy_added || 0), 0).toFixed(1)} kWh
+                                  {manualMatches.some(c => c.charge_energy_used != null && c.charge_energy_used !== c.charge_energy_added) && (
+                                    <span className="matching-page__sum-separator"> | </span>
+                                  )}
+                                  {manualMatches.some(c => c.charge_energy_used != null && c.charge_energy_used !== c.charge_energy_added) && (
+                                    <span>Used: {manualMatches.reduce((sum, c) => sum + (c.charge_energy_used || 0), 0).toFixed(1)} kWh</span>
+                                  )}
+                                </span>
+                              </div>
                             </div>
                           )}
 
@@ -575,7 +594,12 @@ const MatchingPage: React.FC = () => {
                                 <div key={charge.charge_id} className="matching-page__charge matching-page__charge--auto">
                                   <div className="matching-page__charge-main">
                                     <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
-                                    <span className="matching-page__charge-energy">{charge.energy_kwh?.toFixed(1)} kWh</span>
+                                    <span className="matching-page__charge-energy">
+                                      {charge.charge_energy_added?.toFixed(1)} kWh (added)
+                                      {charge.charge_energy_used != null && charge.charge_energy_used !== charge.charge_energy_added && (
+                                        <span className="matching-page__charge-energy-used"> / {charge.charge_energy_used?.toFixed(1)} kWh (used)</span>
+                                      )}
+                                    </span>
                                     <span className="matching-page__charge-location">{charge.location}</span>
                                     <span className="matching-page__charge-source matching-page__charge-source--auto">
                                       Auto
@@ -597,6 +621,20 @@ const MatchingPage: React.FC = () => {
                                   </div>
                                 </div>
                               ))}
+
+                              {/* Summe der Auto-Matches für diese Session */}
+                              <div className="matching-page__charge-sums">
+                                <span className="matching-page__sum-label">Summe Auto-Matches:</span>
+                                <span className="matching-page__sum-value">
+                                  Added: {autoMatches.reduce((sum, c) => sum + (c.charge_energy_added || 0), 0).toFixed(1)} kWh
+                                  {autoMatches.some(c => c.charge_energy_used != null && c.charge_energy_used !== c.charge_energy_added) && (
+                                    <span className="matching-page__sum-separator"> | </span>
+                                  )}
+                                  {autoMatches.some(c => c.charge_energy_used != null && c.charge_energy_used !== c.charge_energy_added) && (
+                                    <span>Used: {autoMatches.reduce((sum, c) => sum + (c.charge_energy_used || 0), 0).toFixed(1)} kWh</span>
+                                  )}
+                                </span>
+                              </div>
                             </div>
                           )}
 
@@ -604,12 +642,18 @@ const MatchingPage: React.FC = () => {
                           {rejectedMatches.length > 0 && (
                             <details className="matching-page__charge-group matching-page__charge-group--collapsed">
                               <summary className="matching-page__group-title matching-page__group-title--rejected">
-                                <AlertCircle className="matching-page__group-icon" /> Abgelehnt (Location: {rejectedMatches[0]?.reject_reason}) — {rejectedMatches.length} Charges
+                                <AlertCircle className="matching-page__group-icon" /> 
+                                Abgelehnt (Location: {rejectedMatches[0]?.reject_reason}) — {rejectedMatches.length} Charges
+                                <span className="matching-page__reject-hint">(nur für diese EVCC-Session geprüft)</span>
                               </summary>
                               <div className="matching-page__rejected-list">
                                 {rejectedMatches.slice(0, 5).map((charge) => (
                                   <div key={charge.charge_id} className="matching-page__rejected-item">
-                                    TM #{charge.charge_id} — {charge.energy_kwh?.toFixed(1)} kWh — {charge.location_normalized}
+                                    TM #{charge.charge_id} — {charge.charge_energy_added?.toFixed(1)} kWh (added)
+                                    {charge.charge_energy_used != null && charge.charge_energy_used !== charge.charge_energy_added && (
+                                      <span className="matching-page__charge-energy-used"> / {charge.charge_energy_used?.toFixed(1)} kWh (used)</span>
+                                    )}
+                                    — {charge.location_normalized}
                                   </div>
                                 ))}
                                 {rejectedMatches.length > 5 && (

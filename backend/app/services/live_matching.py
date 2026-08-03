@@ -25,6 +25,8 @@ class LiveMatchedCharge:
     source_id: str
     date: str
     energy_kwh: Optional[float]
+    charge_energy_added: Optional[float]
+    charge_energy_used: Optional[float]
     cost_eur: Optional[float]
     location: Optional[str]
     location_original: Optional[str]
@@ -256,6 +258,8 @@ class LiveMatchingService:
                             source_id=tm.source_id,
                             date=tm.start_date.isoformat(),
                             energy_kwh=tm.charge_energy_added,
+                            charge_energy_added=tm.charge_energy_added,
+                            charge_energy_used=tm.charge_energy_used,
                             cost_eur=tm.cost,
                             location=tm.location,
                             location_original=tm.location,
@@ -280,6 +284,8 @@ class LiveMatchingService:
                             source_id=tm.source_id,
                             date=tm.start_date.isoformat(),
                             energy_kwh=tm.charge_energy_added,
+                            charge_energy_added=tm.charge_energy_added,
+                            charge_energy_used=tm.charge_energy_used,
                             cost_eur=tm.cost,
                             location=tm.location,
                             location_original=tm.location,
@@ -305,6 +311,8 @@ class LiveMatchingService:
                         source_id=tm.source_id,
                         date=tm.start_date.isoformat(),
                         energy_kwh=tm.charge_energy_added,
+                        charge_energy_added=tm.charge_energy_added,
+                        charge_energy_used=tm.charge_energy_used,
                         cost_eur=tm.cost,
                         location=tm.location,
                         location_original=tm_location_original,
@@ -340,6 +348,8 @@ class LiveMatchingService:
                         source_id=tm.source_id,
                         date=tm.start_date.isoformat(),
                         energy_kwh=tm.charge_energy_added,
+                        charge_energy_added=tm.charge_energy_added,
+                        charge_energy_used=tm.charge_energy_used,
                         cost_eur=tm.cost,
                         location=tm.location,
                         location_original=tm_location_original,

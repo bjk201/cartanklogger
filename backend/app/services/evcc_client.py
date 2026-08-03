@@ -75,7 +75,7 @@ class EVCCClient:
                         created=created or datetime.now(),
                         finished=finished,
                         location=item.get("loadpoint", ""),
-                        charged_energy=item.get("chargedEnergy", 0) / 1000.0,  # Wh to kWh
+                        charged_energy=item.get("chargedEnergy", 0),  # Already in kWh
                         cost=item.get("price", 0),
                         price_per_kwh=item.get("pricePerKwh"),
                         vehicle=item.get("vehicle"),
