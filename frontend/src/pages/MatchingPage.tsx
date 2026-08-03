@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe } from 'lucide-react';
+import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe, Wifi as WifiIcon, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import type { 
   MatchingDryRunResponse, 
@@ -7,26 +7,34 @@ import type {
   MatchedCharge,
   MatchingRawDataResponse,
   EVCCRawSession,
-  TMRawCharge
+  TMRawCharge,
+  LiveMatchingDryRunResponse,
+  LiveEVCCSessionMatch,
+  LiveMatchedCharge,
+  LiveMatchingStatusResponse
 } from '../types/api';
 import './MatchingPage.css';
 
 const MatchingPage: React.FC = () => {
   const [dryRun, setDryRun] = useState<MatchingDryRunResponse | null>(null);
+  const [liveDryRun, setLiveDryRun] = useState<LiveMatchingDryRunResponse | null>(null);
   const [rawData, setRawData] = useState<MatchingRawDataResponse | null>(null);
+  const [liveStatus, setLiveStatus] = useState<LiveMatchingStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [rawLoading, setRawLoading] = useState(false);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const [selectedTmCharge, setSelectedTmCharge] = useState<MatchedCharge | null>(null);
-  const [selectedEvccSession, setSelectedEvccSession] = useState<EVCCSessionMatch | null>(null);
+  const [selectedTmCharge, setSelectedTmCharge] = useState<MatchedCharge | LiveMatchedCharge | null>(null);
+  const [selectedEvccSession, setSelectedEvccSession] = useState<EVCCSessionMatch | LiveEVCCSessionMatch | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideError, setOverrideError] = useState<string | null>(null);
   const [overrideSuccess, setOverrideSuccess] = useState<string | null>(null);
   const [limit, setLimit] = useState(200);
   const [showOnlyWithOverrides, setShowOnlyWithOverrides] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
-  const [viewMode, setViewMode] = useState<'summary' | 'raw'>('summary');
+  const [viewMode, setViewMode] = useState<'summary' | 'raw' | 'live'>('live');
+  const [dataSource, setDataSource] = useState<'database' | 'live'>('live');
 
   const fetchDryRun = useCallback(async () => {
     setLoading(true);
@@ -35,12 +43,39 @@ const MatchingPage: React.FC = () => {
       const response = await api.getMatchingDryRun(limit);
       if (!response.ok) throw new Error('API Error');
       setDryRun(response);
+      setDataSource('database');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden');
     } finally {
       setLoading(false);
     }
   }, [limit]);
+
+  const fetchLiveDryRun = useCallback(async () => {
+    setLiveLoading(true);
+    setError(null);
+    try {
+      const response = await api.getMatchingDryRunLive(limit);
+      setLiveDryRun(response);
+      setDataSource('live');
+      if (!response.ok) {
+        setError(response.error || 'Live-Matching fehlgeschlagen');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Live-Daten');
+    } finally {
+      setLiveLoading(false);
+    }
+  }, [limit]);
+
+  const fetchLiveStatus = useCallback(async () => {
+    try {
+      const response = await api.getMatchingLiveStatus();
+      setLiveStatus(response);
+    } catch (err) {
+      console.error('Live status check failed:', err);
+    }
+  }, []);
 
   const fetchRawData = useCallback(async () => {
     setRawLoading(true);
@@ -56,8 +91,16 @@ const MatchingPage: React.FC = () => {
   }, [limit]);
 
   useEffect(() => {
-    fetchDryRun();
-  }, [fetchDryRun]);
+    fetchLiveStatus();
+  }, [fetchLiveStatus]);
+
+  useEffect(() => {
+    if (viewMode === 'live') {
+      fetchLiveDryRun();
+    } else if (viewMode === 'summary') {
+      fetchDryRun();
+    }
+  }, [viewMode, fetchLiveDryRun, fetchDryRun]);
 
   useEffect(() => {
     if (viewMode === 'raw') {
@@ -140,7 +183,7 @@ const MatchingPage: React.FC = () => {
     setOverrideSuccess(null);
   };
 
-  if (loading) {
+  if (loading && viewMode === 'summary') {
     return (
       <div className="matching-page">
         <div className="matching-page__loading">
@@ -158,13 +201,13 @@ const MatchingPage: React.FC = () => {
           <AlertCircle className="matching-page__error-icon" />
           <h2>Fehler</h2>
           <p>{error}</p>
-          <button className="btn btn--primary" onClick={fetchDryRun}>Erneut versuchen</button>
+          <button className="btn btn--primary" onClick={viewMode === 'live' ? fetchLiveDryRun : fetchDryRun}>Erneut versuchen</button>
         </div>
       </div>
     );
   }
 
-  if (!dryRun) {
+  if (viewMode === 'summary' && !dryRun) {
     return (
       <div className="matching-page">
         <div className="matching-page__error">
@@ -176,7 +219,18 @@ const MatchingPage: React.FC = () => {
     );
   }
 
-  const { matches, summary } = dryRun;
+  if (viewMode === 'live' && liveLoading) {
+    return (
+      <div className="matching-page">
+        <div className="matching-page__loading">
+          <Loader2 className="matching-page__spinner" />
+          <p>Live-Matching wird geladen…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { matches, summary } = dryRun || { matches: [], summary: { total_evcc_sessions_checked: 0, total_matched: 0, total_evcc_energy: 0, total_tm_energy: 0 } };
 
   // Filter matches
   let filteredMatches = matches;
@@ -237,50 +291,353 @@ const MatchingPage: React.FC = () => {
           </label>
         </div>
         <div className="matching-page__control-group">
-          <label className="matching-page__label">Ansicht</label>
+          <label className="matching-page__label">Modus</label>
           <select
             className="matching-page__select"
             value={viewMode}
-            onChange={(e) => setViewMode(e.target.value as 'summary' | 'raw')}
+            onChange={(e) => setViewMode(e.target.value as 'summary' | 'raw' | 'live')}
           >
-            <option value="summary">Summary View</option>
-            <option value="raw">Originaldaten View</option>
+            <option value="live">Live (EVCC + TeslaMateAPI)</option>
+            <option value="summary">Summary (DB)</option>
+            <option value="raw">Originaldaten (DB)</option>
           </select>
         </div>
-        <button className="btn btn--secondary" onClick={viewMode === 'raw' ? fetchRawData : fetchDryRun}>
-          <RefreshCw className="btn__icon" /> {viewMode === 'raw' ? 'Raw-Daten laden' : 'Aktualisieren'}
+        <button className="btn btn--secondary" onClick={viewMode === 'raw' ? fetchRawData : (viewMode === 'live' ? fetchLiveDryRun : fetchDryRun)}>
+          <RefreshCw className="btn__icon" /> {viewMode === 'raw' ? 'Raw-Daten laden' : (viewMode === 'live' ? 'Live laden' : 'Aktualisieren')}
         </button>
       </div>
 
-      {/* Summary */}
-      <section className="matching-page__summary">
-        <div className="matching-page__summary-grid">
-          <div className="matching-page__summary-card">
-            <div className="matching-page__summary-value">{summary.total_evcc_sessions_checked}</div>
-            <div className="matching-page__summary-label">EVCC Sessions geprüft</div>
-          </div>
-          <div className="matching-page__summary-card matching-page__summary-card--matched">
-            <div className="matching-page__summary-value">{summary.total_matched}</div>
-            <div className="matching-page__summary-label">Mit Matches</div>
-          </div>
-          <div className="matching-page__summary-card matching-page__summary-card--manual">
-            <div className="matching-page__summary-value">{manualCharges.length}</div>
-            <div className="matching-page__summary-label">Manuelle Overrides</div>
-          </div>
-          <div className="matching-page__summary-card matching-page__summary-card--skipped">
-            <div className="matching-page__summary-value">{skippedCharges.length}</div>
-            <div className="matching-page__summary-label">Skipped (anderer Override)</div>
-          </div>
-          <div className="matching-page__summary-card">
-            <div className="matching-page__summary-value">{summary.total_evcc_energy.toFixed(1)}</div>
-            <div className="matching-page__summary-label">EVCC Energie (kWh)</div>
-          </div>
-          <div className="matching-page__summary-card">
-            <div className="matching-page__summary-value">{summary.total_tm_energy.toFixed(1)}</div>
-            <div className="matching-page__summary-label">TM Energie gematcht (kWh)</div>
-          </div>
+      {/* Live Status Banner */}
+      {liveStatus && viewMode === 'live' && (
+        <div className={`matching-page__live-banner ${liveStatus.live_available ? 'matching-page__live-banner--ok' : 'matching-page__live-banner--error'}`}>
+          <WifiIcon className="matching-page__live-banner-icon" />
+          <span>
+            {liveStatus.live_available 
+              ? '✅ Live-Modus aktiv — EVCC & TeslaMateAPI erreichbar'
+              : `❌ Live nicht verfügbar: ${liveStatus.reason}`}
+          </span>
+          {liveStatus.live_available && (
+            <span className="matching-page__live-banner-detail">
+              EVCC: {liveStatus.evcc_reachable ? '✅' : '❌'} | TeslaMateAPI: {liveStatus.teslamateapi_reachable ? '✅' : '❌'}
+            </span>
+          )}
         </div>
-      </section>
+      )}
+
+      {/* Live Error Banner */}
+      {liveDryRun && !liveDryRun.ok && viewMode === 'live' && (
+        <div className="matching-page__live-banner matching-page__live-banner--error">
+          <AlertTriangle className="matching-page__live-banner-icon" />
+          <span>{liveDryRun.error || 'Live-Matching fehlgeschlagen'}</span>
+          {liveDryRun.config_missing && (
+            <a href="/settings" className="matching-page__live-banner-link">Einstellungen konfigurieren</a>
+          )}
+          {liveDryRun.live_mode && !liveDryRun.config_missing && (
+            <span className="matching-page__live-banner-detail">
+              EVCC: {liveDryRun.evcc_reachable ? '✅ erreichbar' : '❌ nicht erreichbar'} | 
+              TeslaMateAPI: {liveDryRun.teslamateapi_reachable ? '✅ erreichbar' : '❌ nicht erreichbar'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Summary (DB-based) - only show in summary view mode */}
+      {viewMode === 'summary' && (
+        <section className="matching-page__summary">
+          <div className="matching-page__summary-grid">
+            <div className="matching-page__summary-card">
+              <div className="matching-page__summary-value">{summary.total_evcc_sessions_checked}</div>
+              <div className="matching-page__summary-label">EVCC Sessions geprüft</div>
+            </div>
+            <div className="matching-page__summary-card matching-page__summary-card--matched">
+              <div className="matching-page__summary-value">{summary.total_matched}</div>
+              <div className="matching-page__summary-label">Mit Matches</div>
+            </div>
+            <div className="matching-page__summary-card matching-page__summary-card--manual">
+              <div className="matching-page__summary-value">{manualCharges.length}</div>
+              <div className="matching-page__summary-label">Manuelle Overrides</div>
+            </div>
+            <div className="matching-page__summary-card matching-page__summary-card--skipped">
+              <div className="matching-page__summary-value">{skippedCharges.length}</div>
+              <div className="matching-page__summary-label">Skipped (anderer Override)</div>
+            </div>
+            <div className="matching-page__summary-card">
+              <div className="matching-page__summary-value">{summary.total_evcc_energy.toFixed(1)}</div>
+              <div className="matching-page__summary-label">EVCC Energie (kWh)</div>
+            </div>
+            <div className="matching-page__summary-card">
+              <div className="matching-page__summary-value">{summary.total_tm_energy.toFixed(1)}</div>
+              <div className="matching-page__summary-label">TM Energie gematcht (kWh)</div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Live Matching View */}
+      {viewMode === 'live' && liveDryRun && (
+        <section className="matching-page__live-view">
+          <header className="matching-page__live-header">
+            <h2>
+              <WifiIcon className="matching-page__live-header-icon" />
+              Live Matching — EVCC API ↔ TeslaMateAPI
+            </h2>
+            {liveLoading && (
+              <Loader2 className="matching-page__live-spinner" />
+            )}
+          </header>
+
+          {liveDryRun.ok ? (
+            <>
+              {/* Summary Cards for Live */}
+              <div className="matching-page__live-summary">
+                <div className="matching-page__live-summary-card">
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_evcc_sessions_checked}</div>
+                  <div className="matching-page__live-summary-label">EVCC Sessions (Live)</div>
+                </div>
+                <div className="matching-page__live-summary-card matching-page__live-summary-card--matched">
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_matched}</div>
+                  <div className="matching-page__live-summary-label">Mit Matches</div>
+                </div>
+                <div className="matching-page__live-summary-card matching-page__live-summary-card--manual">
+                  <div className="matching-page__live-summary-value">
+                    {liveDryRun.matches.flatMap(m => m.matched_charges).filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate).length}
+                  </div>
+                  <div className="matching-page__live-summary-label">Manuelle Overrides</div>
+                </div>
+                <div className="matching-page__live-summary-card matching-page__live-summary-card--skipped">
+                  <div className="matching-page__live-summary-value">
+                    {liveDryRun.matches.flatMap(m => m.matched_charges).filter(c => c.skipped_due_to_other_override).length}
+                  </div>
+                  <div className="matching-page__live-summary-label">Skipped (anderer Override)</div>
+                </div>
+                <div className="matching-page__live-summary-card">
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_evcc_energy.toFixed(1)}</div>
+                  <div className="matching-page__live-summary-label">EVCC Energie (kWh)</div>
+                </div>
+                <div className="matching-page__live-summary-card">
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_tm_energy.toFixed(1)}</div>
+                  <div className="matching-page__live-summary-label">TM Energie gematcht (kWh)</div>
+                </div>
+              </div>
+
+              {/* Matches List - Live */}
+              <section className="matching-page__live-matches">
+                <h2>Live Matching Details</h2>
+                {liveDryRun.matches.length === 0 ? (
+                  <p className="matching-page__empty">Keine EVCC Sessions von der Live-API gefunden</p>
+                ) : (
+                  liveDryRun.matches.map((session) => {
+                    const manualMatches = session.matched_charges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
+                    const skippedMatches = showSkipped ? session.matched_charges.filter(c => c.skipped_due_to_other_override) : [];
+                    const autoMatches = session.matched_charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
+                    const rejectedMatches = session.matched_charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
+
+                    if (manualMatches.length === 0 && skippedMatches.length === 0 && autoMatches.length === 0 && rejectedMatches.length === 0) {
+                      return null;
+                    }
+
+                    return (
+                      <details key={session.evcc_session_id} className="matching-page__session">
+                        <summary className="matching-page__session-summary">
+                          <div className="matching-page__session-header">
+                            <span className="matching-page__session-id">EVCC #{session.evcc_session_id}</span>
+                            <span className="matching-page__session-source">{session.evcc_source_id}</span>
+                            <span className="matching-page__session-time">
+                              {new Date(session.evcc_start).toLocaleString('de-DE')}
+                            </span>
+                            <span className="matching-page__session-energy">
+                              {session.evcc_energy_kwh?.toFixed(1)} kWh
+                            </span>
+                            <span className="matching-page__session-location">{session.evcc_location}</span>
+                          </div>
+                          <div className="matching-page__session-badges">
+                            {manualMatches.length > 0 && (
+                              <span className="matching-page__badge matching-page__badge--manual">
+                                <Link className="matching-page__badge-icon" /> {manualMatches.length} Manual
+                              </span>
+                            )}
+                            {skippedMatches.length > 0 && (
+                              <span className="matching-page__badge matching-page__badge--skipped">
+                                <MinusCircle className="matching-page__badge-icon" /> {skippedMatches.length} Skipped
+                              </span>
+                            )}
+                            {autoMatches.length > 0 && (
+                              <span className="matching-page__badge matching-page__badge--auto">
+                                <WifiIcon className="matching-page__badge-icon" /> {autoMatches.length} Auto
+                              </span>
+                            )}
+                            {rejectedMatches.length > 0 && (
+                              <span className="matching-page__badge matching-page__badge--rejected">
+                                <AlertCircle className="matching-page__badge-icon" /> {rejectedMatches.length} Rejected
+                              </span>
+                            )}
+                          </div>
+                        </summary>
+
+                        <div className="matching-page__session-content">
+                          {/* Manual Overrides */}
+                          {manualMatches.length > 0 && (
+                            <div className="matching-page__charge-group">
+                              <h4 className="matching-page__group-title matching-page__group-title--manual">
+                                <Link className="matching-page__group-icon" /> Manuelle Overrides
+                              </h4>
+                              {manualMatches.map((charge) => (
+                                <div key={charge.charge_id} className="matching-page__charge matching-page__charge--manual">
+                                  <div className="matching-page__charge-main">
+                                    <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
+                                    <span className="matching-page__charge-energy">{charge.energy_kwh?.toFixed(1)} kWh</span>
+                                    <span className="matching-page__charge-location">{charge.location}</span>
+                                    <span className="matching-page__charge-source matching-page__charge-source--manual">
+                                      Manual Override
+                                    </span>
+                                  </div>
+                                  <div className="matching-page__charge-meta">
+                                    {charge.override_id && (
+                                      <span className="matching-page__meta">
+                                        Override #{charge.override_id}
+                                      </span>
+                                    )}
+                                    {charge.override_reason && (
+                                      <span className="matching-page__meta matching-page__meta--reason">
+                                        Grund: {charge.override_reason}
+                                      </span>
+                                    )}
+                                    {charge.replaced_auto_match && (
+                                      <span className="matching-page__meta matching-page__meta--replaced">
+                                        Ersetzt: {charge.replaced_auto_match}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="matching-page__charge-actions">
+                                    <button
+                                      className="btn btn--ghost btn--small matching-page__btn-reset"
+                                      onClick={() => handleDeleteOverride(charge.override_id!, charge.charge_id)}
+                                      disabled={saving === `delete-${charge.charge_id}`}
+                                    >
+                                      {saving === `delete-${charge.charge_id}` ? (
+                                        <Loader2 className="btn__icon" size={14} />
+                                      ) : (
+                                        <>
+                                          <RefreshCw className="btn__icon" size={14} />
+                                          Zurück auf Auto
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Skipped Charges */}
+                          {skippedMatches.length > 0 && (
+                            <div className="matching-page__charge-group">
+                              <h4 className="matching-page__group-title matching-page__group-title--skipped">
+                                <MinusCircle className="matching-page__group-icon" /> Skipped (Override bei anderer EVCC-Session)
+                              </h4>
+                              {skippedMatches.map((charge) => (
+                                <div key={charge.charge_id} className="matching-page__charge matching-page__charge--skipped">
+                                  <div className="matching-page__charge-main">
+                                    <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
+                                    <span className="matching-page__charge-energy">{charge.energy_kwh?.toFixed(1)} kWh</span>
+                                    <span className="matching-page__charge-location">{charge.location}</span>
+                                    <span className="matching-page__charge-source matching-page__charge-source--skipped">
+                                      Übersprungen
+                                    </span>
+                                  </div>
+                                  <div className="matching-page__charge-meta">
+                                    <span className="matching-page__meta matching-page__meta--skipped">
+                                      Diese Charge hat einen manuellen Override für eine andere EVCC-Session.
+                                      Auto-Matching wird hier übersprungen.
+                                    </span>
+                                  </div>
+                                  <div className="matching-page__charge-actions">
+                                    <button
+                                      className="btn btn--ghost btn--small matching-page__btn-reassign"
+                                      onClick={() => openAssignModalForSkipped(charge as any)}
+                                    >
+                                      <ArrowRight className="btn__icon" size={14} />
+                                      Hierher umhängen
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Auto Matches */}
+                          {autoMatches.length > 0 && (
+                            <div className="matching-page__charge-group">
+                              <h4 className="matching-page__group-title matching-page__group-title--auto">
+                                <WifiIcon className="matching-page__group-icon" /> Auto-Matches
+                              </h4>
+                              {autoMatches.map((charge) => (
+                                <div key={charge.charge_id} className="matching-page__charge matching-page__charge--auto">
+                                  <div className="matching-page__charge-main">
+                                    <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
+                                    <span className="matching-page__charge-energy">{charge.energy_kwh?.toFixed(1)} kWh</span>
+                                    <span className="matching-page__charge-location">{charge.location}</span>
+                                    <span className="matching-page__charge-source matching-page__charge-source--auto">
+                                      Auto
+                                    </span>
+                                  </div>
+                                  <div className="matching-page__charge-meta">
+                                    <span className="matching-page__meta">
+                                      Overlap: {charge.overlap_seconds}s, Containment: {charge.containment}
+                                    </span>
+                                  </div>
+                                  <div className="matching-page__charge-actions">
+                                    <button
+                                      className="btn btn--ghost btn--small matching-page__btn-assign"
+                                      onClick={() => openAssignModal(charge as any, session as any)}
+                                    >
+                                      <PlusCircle className="btn__icon" size={14} />
+                                      Manuell zuordnen
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Rejected (collapsed by default) */}
+                          {rejectedMatches.length > 0 && (
+                            <details className="matching-page__charge-group matching-page__charge-group--collapsed">
+                              <summary className="matching-page__group-title matching-page__group-title--rejected">
+                                <AlertCircle className="matching-page__group-icon" /> Abgelehnt (Location: {rejectedMatches[0]?.reject_reason}) — {rejectedMatches.length} Charges
+                              </summary>
+                              <div className="matching-page__rejected-list">
+                                {rejectedMatches.slice(0, 5).map((charge) => (
+                                  <div key={charge.charge_id} className="matching-page__rejected-item">
+                                    TM #{charge.charge_id} — {charge.energy_kwh?.toFixed(1)} kWh — {charge.location_normalized}
+                                  </div>
+                                ))}
+                                {rejectedMatches.length > 5 && (
+                                  <div className="matching-page__rejected-more">
+                                    … und {rejectedMatches.length - 5} weitere
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      </details>
+                    );
+                  })
+                )}
+              </section>
+            </>
+          ) : (
+            <div className="matching-page__live-error">
+              <AlertTriangle className="matching-page__live-error-icon" />
+              <p>{liveDryRun.error || 'Live-Matching fehlgeschlagen'}</p>
+              {liveDryRun.config_missing && (
+                <a href="/settings" className="btn btn--primary">Einstellungen konfigurieren</a>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Raw Data View */}
       {viewMode === 'raw' && (

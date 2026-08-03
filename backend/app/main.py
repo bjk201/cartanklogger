@@ -156,32 +156,29 @@ async def check_teslamateapi_reachable_from_config(config) -> dict:
     """Check if TeslaMateAPI is reachable using database config."""
     if not config or not config.teslamateapi_base_url:
         return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
-    
+
     base_url = config.teslamateapi_base_url
     # Ensure trailing slash for TeslaMateAPI
     if not base_url.endswith("/"):
         base_url = base_url + "/"
-    
+
     headers = {}
     if config.teslamateapi_token:
         headers["Authorization"] = f"Bearer {config.teslamateapi_token}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # Use the base URL directly - TeslaMateAPI returns info at root
+            # Check base URL
             response = await client.get(base_url, headers=headers)
+            if response.status_code != 200:
+                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"Base URL HTTP {response.status_code}"}
+            
+            # Also verify the charges endpoint exists
+            response = await client.get(f"{base_url}charges", headers=headers)
             if response.status_code == 200:
-                # Verify it's a plausible TeslaMateAPI response
-                try:
-                    data = response.json()
-                    if isinstance(data, dict) and ("message" in data or "path" in data or "version" in data):
-                        return {"configured": True, "reachable": True, "status_code": response.status_code}
-                except:
-                    pass
-                # Even if JSON parsing fails or structure differs, HTTP 200 is a good sign
                 return {"configured": True, "reachable": True, "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"Charges endpoint HTTP {response.status_code}"}
     except httpx.TimeoutException:
         return {"configured": True, "reachable": False, "error": "Timeout"}
     except httpx.ConnectError:

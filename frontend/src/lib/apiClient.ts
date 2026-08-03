@@ -16,6 +16,8 @@ import type {
   MatchingOverrideListResponse,
   MatchingOverrideSingleResponse,
   MatchingRawDataResponse,
+  LiveMatchingDryRunResponse,
+  LiveMatchingStatusResponse,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -144,6 +146,16 @@ export const api = {
     return fetchJson<MatchingOverrideSingleResponse>(`/matching/overrides/${overrideId}`, {
       method: 'DELETE',
     });
+  },
+
+  // Live Matching
+  async getMatchingDryRunLive(limit?: number): Promise<LiveMatchingDryRunResponse> {
+    const params = limit ? `?limit=${limit}` : '';
+    return fetchJson<LiveMatchingDryRunResponse>(`/matching/dry-run/live${params}`);
+  },
+
+  async getMatchingLiveStatus(): Promise<LiveMatchingStatusResponse> {
+    return fetchJson<LiveMatchingStatusResponse>(`/matching/dry-run/status`);
   },
 };
 

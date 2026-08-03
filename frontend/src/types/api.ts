@@ -334,3 +334,79 @@ export interface MatchingRawDataResponse {
   external_tm_charges: number;
   timestamp: string;
 }
+
+// Live Matching Types
+export interface LiveMatchedCharge {
+  charge_id: number;
+  source_id: string;
+  date: string;
+  energy_kwh: number | null;
+  cost_eur: number | null;
+  location: string | null;
+  location_original: string | null;
+  location_normalized: string | null;
+  accepted_as_candidate: boolean;
+  reject_reason: string | null;
+  overlap_seconds: number;
+  containment: string;
+  match_source: 'auto' | 'manual_override';
+  override_id: number | null;
+  override_reason: string | null;
+  replaced_auto_match: string | null;
+  skipped_due_to_other_override: boolean;
+}
+
+export interface LiveEVCCSessionMatch {
+  evcc_session_id: number;
+  evcc_source_id: string;
+  evcc_start: string;
+  evcc_end: string;
+  evcc_energy_kwh: number | null;
+  evcc_cost_eur: number | null;
+  evcc_cost_per_kwh: number | null;
+  evcc_location: string | null;
+  matched_charge_count: number;
+  matched_charge_ids: number[];
+  matched_charges: LiveMatchedCharge[];
+  matched_charge_energy_kwh_sum: number | null;
+  delta_kwh: number | null;
+  match_quality: 'exact' | 'plausible' | 'weak' | 'unmatched';
+  match_notes: string;
+}
+
+export interface LiveMatchingSummary {
+  total_evcc_sessions_checked: number;
+  total_matched: number;
+  total_unmatched: number;
+  total_evcc_energy: number;
+  total_tm_energy: number;
+  total_delta_kwh: number;
+  quality_distribution: Record<string, number>;
+  total_tm_charges: number;
+  accepted_candidates: number;
+  rejected_wrong_location: number;
+  evcc_reachable: boolean;
+  teslamateapi_reachable: boolean;
+}
+
+export interface LiveMatchingDryRunResponse {
+  ok: boolean;
+  matches: LiveEVCCSessionMatch[];
+  summary: LiveMatchingSummary;
+  timestamp: string;
+  error?: string;
+  live_mode: boolean;
+  evcc_reachable?: boolean;
+  teslamateapi_reachable?: boolean;
+  config_missing?: boolean;
+}
+
+export interface LiveMatchingStatusResponse {
+  ok: boolean;
+  live_available: boolean;
+  reason: string;
+  evcc_configured: boolean;
+  teslamateapi_configured: boolean;
+  evcc_reachable?: boolean;
+  teslamateapi_reachable?: boolean;
+}
