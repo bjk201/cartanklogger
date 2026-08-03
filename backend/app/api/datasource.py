@@ -119,40 +119,38 @@ async def _check_evcc_reachable(host: str, port: int, password: str, api_token: 
 
 
 async def _check_teslamateapi_reachable(base_url: str, token: str) -> ReachabilityStatus:
-    """Check TeslaMateAPI reachability."""
+    """Check TeslaMateAPI reachability - verifies both base URL and charges endpoint."""
+    from app.schemas.datasource import ReachabilityLevel
     if not base_url:
-        return ReachabilityStatus(configured=False, reachable=False, error="Nicht konfiguriert")
-    
+        return ReachabilityStatus(configured=False, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Nicht konfiguriert")
+
     # Ensure trailing slash for TeslaMateAPI
     if not base_url.endswith("/"):
         base_url = base_url + "/"
-    
+
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # Use the base URL directly - TeslaMateAPI returns info at root
+            # Check base URL
             response = await client.get(base_url, headers=headers)
+            if response.status_code != 200:
+                return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, status_code=response.status_code, error=f"Base URL HTTP {response.status_code}")
+
+            # Also verify the charges endpoint exists
+            response = await client.get(f"{base_url}charges", headers=headers)
             if response.status_code == 200:
-                # Verify it's a plausible TeslaMateAPI response
-                try:
-                    data = response.json()
-                    if isinstance(data, dict) and ("message" in data or "path" in data or "version" in data):
-                        return ReachabilityStatus(configured=True, reachable=True, status_code=response.status_code)
-                except:
-                    pass
-                # Even if JSON parsing fails or structure differs, HTTP 200 is a good sign
-                return ReachabilityStatus(configured=True, reachable=True, status_code=response.status_code)
+                return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.REACHABLE, status_code=response.status_code)
             else:
-                return ReachabilityStatus(configured=True, reachable=False, status_code=response.status_code, error=f"HTTP {response.status_code}")
+                return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.DATA_FETCH_ERROR, status_code=response.status_code, data_error=f"Charges endpoint HTTP {response.status_code}")
     except httpx.TimeoutException:
-        return ReachabilityStatus(configured=True, reachable=False, error="Timeout")
+        return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Timeout")
     except httpx.ConnectError:
-        return ReachabilityStatus(configured=True, reachable=False, error="Verbindungsfehler")
+        return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Verbindungsfehler")
     except Exception as e:
-        return ReachabilityStatus(configured=True, reachable=False, error=str(e))
+        return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, error=str(e))
 
 
 @router.post("/test", response_model=DataSourceConfigTestResponse)

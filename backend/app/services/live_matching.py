@@ -508,20 +508,48 @@ async def run_live_matching_dry_run(limit: Optional[int] = None, db: Session = N
                 'config_missing': True
             }
         
-        # Check reachability
+        # Check reachability (base URL only)
         evcc_reachable = await evcc_client.is_reachable()
         teslamateapi_reachable = await teslamateapi_client.is_reachable()
         
-        if not evcc_reachable or not teslamateapi_reachable:
+        if not evcc_reachable:
             return {
                 'ok': False,
-                'error': f'Live-Quellen nicht erreichbar: EVCC={"erreichbar" if evcc_reachable else "NICHT erreichbar"}, TeslaMateAPI={"erreichbar" if teslamateapi_reachable else "NICHT erreichbar"}',
+                'error': 'EVCC nicht erreichbar',
                 'matches': [],
                 'summary': {},
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'live_mode': True,
-                'evcc_reachable': evcc_reachable,
+                'evcc_reachable': False,
                 'teslamateapi_reachable': teslamateapi_reachable
+            }
+        
+        if not teslamateapi_reachable:
+            return {
+                'ok': False,
+                'error': 'TeslaMateAPI Basis nicht erreichbar',
+                'matches': [],
+                'summary': {},
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'live_mode': True,
+                'evcc_reachable': True,
+                'teslamateapi_reachable': False
+            }
+        
+        # Try to fetch charges - this is where data fetch errors show up
+        try:
+            tm_charges = await teslamateapi_client.get_charges()
+        except Exception as e:
+            return {
+                'ok': False,
+                'error': f'TeslaMateAPI Basis erreichbar, aber Datenabruf fehlgeschlagen: {e}',
+                'matches': [],
+                'summary': {},
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'live_mode': True,
+                'evcc_reachable': True,
+                'teslamateapi_reachable': True,
+                'data_fetch_error': True
             }
         
         # Run live matching

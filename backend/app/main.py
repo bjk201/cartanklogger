@@ -155,7 +155,7 @@ async def check_evcc_reachable_from_config(config) -> dict:
 async def check_teslamateapi_reachable_from_config(config) -> dict:
     """Check if TeslaMateAPI is reachable using database config."""
     if not config or not config.teslamateapi_base_url:
-        return {"configured": False, "reachable": False, "error": "Nicht konfiguriert"}
+        return {"configured": False, "reachable": False, "level": "unreachable", "error": "Nicht konfiguriert"}
 
     base_url = config.teslamateapi_base_url
     # Ensure trailing slash for TeslaMateAPI
@@ -171,20 +171,20 @@ async def check_teslamateapi_reachable_from_config(config) -> dict:
             # Check base URL
             response = await client.get(base_url, headers=headers)
             if response.status_code != 200:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"Base URL HTTP {response.status_code}"}
+                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"Base URL HTTP {response.status_code}"}
             
             # Also verify the charges endpoint exists
             response = await client.get(f"{base_url}charges", headers=headers)
             if response.status_code == 200:
-                return {"configured": True, "reachable": True, "status_code": response.status_code}
+                return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "status_code": response.status_code, "error": f"Charges endpoint HTTP {response.status_code}"}
+                return {"configured": True, "reachable": True, "level": "data_fetch_error", "status_code": response.status_code, "error": f"Base URL erreichbar, Charges endpoint HTTP {response.status_code}"}
     except httpx.TimeoutException:
-        return {"configured": True, "reachable": False, "error": "Timeout"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:
-        return {"configured": True, "reachable": False, "error": "Verbindungsfehler"}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": "Verbindungsfehler"}
     except Exception as e:
-        return {"configured": True, "reachable": False, "error": str(e)}
+        return {"configured": True, "reachable": False, "level": "unreachable", "error": str(e)}
 
 
 @asynccontextmanager
@@ -280,11 +280,17 @@ async def data_source_status():
     
     # Determine overall message
     if info["is_live"]:
-        if evcc_status["reachable"] and teslamateapi_status["reachable"]:
+        evcc_reachable = evcc_status["reachable"]
+        tesla_reachable = teslamateapi_status["reachable"]
+        tesla_level = teslamateapi_status.get("level", "unreachable")
+        
+        if evcc_reachable and tesla_reachable and tesla_level == "reachable":
             message = "Live-Modus aktiv: EVCC und TeslaMateAPI erreichbar"
-        elif evcc_status["reachable"] and not teslamateapi_status["reachable"]:
+        elif evcc_reachable and tesla_reachable and tesla_level == "data_fetch_error":
+            message = f"Live-Modus: EVCC erreichbar, TeslaMateAPI Basis erreichbar, aber Datenabruf fehlgeschlagen: {teslamateapi_status.get('error', 'Unbekannter Fehler')}"
+        elif evcc_reachable and not tesla_reachable:
             message = "Live-Modus: EVCC erreichbar, TeslaMateAPI nicht erreichbar"
-        elif not evcc_status["reachable"] and teslamateapi_status["reachable"]:
+        elif not evcc_reachable and tesla_reachable:
             message = "Live-Modus: TeslaMateAPI erreichbar, EVCC nicht erreichbar"
         else:
             message = "Live-Modus konfiguriert, aber keine Quelle erreichbar"

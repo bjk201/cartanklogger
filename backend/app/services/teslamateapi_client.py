@@ -41,15 +41,10 @@ class TeslaMateAPIClient:
             self._headers["Authorization"] = f"Bearer {token}"
 
     async def is_reachable(self) -> bool:
-        """Check if TeslaMateAPI is reachable - also verify charges endpoint works."""
+        """Check if TeslaMateAPI base URL is reachable (does not check data endpoints)."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                # Check base URL
                 response = await client.get(self.base_url, headers=self._headers)
-                if response.status_code != 200:
-                    return False
-                # Also verify the charges endpoint exists
-                response = await client.get(f"{self.base_url}charges", headers=self._headers)
                 return response.status_code == 200
         except Exception:
             return False

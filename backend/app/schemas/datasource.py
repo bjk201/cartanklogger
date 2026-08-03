@@ -1,5 +1,13 @@
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional
+from enum import Enum
+
+
+class ReachabilityLevel(str, Enum):
+    """Reachability levels for data sources."""
+    REACHABLE = "reachable"           # Base URL responds
+    DATA_FETCH_ERROR = "data_fetch_error"  # Base reachable, but data endpoint fails
+    UNREACHABLE = "unreachable"       # No connection possible
 
 
 class EVCCConfig(BaseModel):
@@ -71,8 +79,10 @@ class ReachabilityStatus(BaseModel):
     """Connection test result."""
     configured: bool
     reachable: bool
+    level: ReachabilityLevel = ReachabilityLevel.UNREACHABLE
     status_code: Optional[int] = None
     error: Optional[str] = None
+    data_error: Optional[str] = None  # For data fetch errors when reachable
 
 
 class DataSourceConfigTestResponse(BaseModel):
