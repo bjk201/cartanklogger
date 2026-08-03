@@ -268,3 +268,69 @@ export interface MatchingOverrideSingleResponse {
   ok: boolean;
   override: MatchingOverrideRead;
 }
+
+// Matching Raw Data Types
+export interface EVCCRawSession {
+  evcc_session_id: number;
+  source_id: string;
+  created: string | null;
+  finished: string | null;
+  location: string | null;
+  energy_kwh: number | null;
+  cost_eur: number | null;
+  cost_per_kwh: number | null;
+  cost_per_kwh_source: string | null;
+  odometer_km: number | null;
+  distance_km: number | null;
+  note: string | null;
+  solar_percentage: number | null;
+  pv_kwh: number | null;
+  legacy_source: string | null;
+  legacy_table: string | null;
+  legacy_id: number | null;
+  vehicle: string | null;
+  soc_start: number | null;
+  soc_end: number | null;
+}
+
+export interface TMRawCharge {
+  charge_id: number;
+  source_id: string;
+  start_date: string | null;
+  end_date: string | null;
+  location_original: string | null;
+  location_normalized: string | null;
+  energy_kwh: number | null;
+  cost_eur: number | null;
+  cost_per_kwh: number | null;
+  cost_per_kwh_source: string | null;
+  odometer_km: number | null;
+  distance_km: number | null;
+  note: string | null;
+  legacy_source: string | null;
+  legacy_table: string | null;
+  legacy_id: number | null;
+  is_home_location: boolean;
+  override: {
+    override_id: number;
+    evcc_session_id: number | null;
+    override_type: string;
+    reason: string | null;
+    replaced_auto_match: string | null;
+  } | null;
+  provider: string | null;
+  soc_start: number | null;
+  soc_end: number | null;
+}
+
+export interface MatchingRawDataResponse {
+  ok: boolean;
+  evcc_sessions: EVCCRawSession[];
+  teslamate_charges: TMRawCharge[];
+  active_overrides_count: number;
+  total_evcc: number;
+  total_tm: number;
+  home_tm_charges: number;
+  external_tm_charges: number;
+  timestamp: string;
+}

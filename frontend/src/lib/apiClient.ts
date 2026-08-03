@@ -15,6 +15,7 @@ import type {
   MatchingOverrideRead,
   MatchingOverrideListResponse,
   MatchingOverrideSingleResponse,
+  MatchingRawDataResponse,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -121,6 +122,11 @@ export const api = {
   async getMatchingDryRun(limit?: number): Promise<MatchingDryRunResponse> {
     const params = limit ? `?limit=${limit}` : '';
     return fetchJson<MatchingDryRunResponse>(`/matching/dry-run${params}`);
+  },
+
+  async getMatchingRawData(limit?: number): Promise<MatchingRawDataResponse> {
+    const params = limit ? `?limit=${limit}` : '';
+    return fetchJson<MatchingRawDataResponse>(`/matching/raw-data${params}`);
   },
 
   async getMatchingOverrides(): Promise<MatchingOverrideListResponse> {

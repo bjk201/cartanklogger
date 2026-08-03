@@ -763,3 +763,210 @@
     max-width: none;
   }
 }
+
+/* ============================================================
+   Raw Data View Styles
+   ============================================================ */
+
+.matching-page__raw-view {
+  margin-top: 2rem;
+}
+
+.matching-page__raw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.matching-page__raw-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.matching-page__raw-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+}
+
+.matching-page__raw-spinner {
+  animation: spin 1s linear infinite;
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+}
+
+.matching-page__raw-section {
+  margin-bottom: 2rem;
+}
+
+.matching-page__raw-section h3 {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.matching-page__section-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.matching-page__raw-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  background: var(--color-background);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.matching-page__raw-table-container {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.matching-page__raw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.matching-page__raw-table th,
+.matching-page__raw-table td {
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.matching-page__raw-table th {
+  background: var(--color-background);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.6875rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.matching-page__raw-table tbody tr:hover {
+  background: var(--color-background);
+}
+
+.matching-page__raw-table tbody tr.matching-page__raw-row--override {
+  background: var(--color-warning-bg);
+}
+
+.matching-page__raw-table tbody tr.matching-page__raw-row--override:hover {
+  background: var(--color-warning);
+  color: var(--color-warning-text);
+}
+
+.matching-page__raw-table td:last-child,
+.matching-page__raw-table th:last-child {
+  border-right: none;
+}
+
+.matching-page__note-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matching-page__legacy-cell {
+  font-family: monospace;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+.matching-page__cost-source {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.matching-page__cost-source--api {
+  background: var(--color-primary-bg);
+  color: var(--color-primary-text);
+}
+
+.matching-page__cost-source--derived {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.matching-page__cost-source--unknown {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.matching-page__override-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.matching-page__override-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.matching-page__override-badge--manual {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.matching-page__override-badge--none {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.matching-page__override-reason {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .matching-page__raw-table-container {
+    margin: 0 -1rem;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  
+  .matching-page__raw-table {
+    min-width: 800px;
+  }
+  
+  .matching-page__raw-table th,
+  .matching-page__raw-table td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+}

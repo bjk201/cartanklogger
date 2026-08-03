@@ -1,12 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle } from 'lucide-react';
+import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe } from 'lucide-react';
 import { api } from '../lib/apiClient';
-import type { MatchingDryRunResponse, EVCCSessionMatch, MatchedCharge } from '../types/api';
+import type { 
+  MatchingDryRunResponse, 
+  EVCCSessionMatch, 
+  MatchedCharge,
+  MatchingRawDataResponse,
+  EVCCRawSession,
+  TMRawCharge
+} from '../types/api';
 import './MatchingPage.css';
 
 const MatchingPage: React.FC = () => {
   const [dryRun, setDryRun] = useState<MatchingDryRunResponse | null>(null);
+  const [rawData, setRawData] = useState<MatchingRawDataResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rawLoading, setRawLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [selectedTmCharge, setSelectedTmCharge] = useState<MatchedCharge | null>(null);
@@ -17,6 +26,7 @@ const MatchingPage: React.FC = () => {
   const [limit, setLimit] = useState(200);
   const [showOnlyWithOverrides, setShowOnlyWithOverrides] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [viewMode, setViewMode] = useState<'summary' | 'raw'>('summary');
 
   const fetchDryRun = useCallback(async () => {
     setLoading(true);
@@ -32,9 +42,28 @@ const MatchingPage: React.FC = () => {
     }
   }, [limit]);
 
+  const fetchRawData = useCallback(async () => {
+    setRawLoading(true);
+    try {
+      const response = await api.getMatchingRawData(limit);
+      if (!response.ok) throw new Error('API Error');
+      setRawData(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Originaldaten');
+    } finally {
+      setRawLoading(false);
+    }
+  }, [limit]);
+
   useEffect(() => {
     fetchDryRun();
   }, [fetchDryRun]);
+
+  useEffect(() => {
+    if (viewMode === 'raw') {
+      fetchRawData();
+    }
+  }, [viewMode, fetchRawData]);
 
   const handleCreateOverride = async (tmCharge: MatchedCharge, evccSession: EVCCSessionMatch) => {
     if (!overrideReason.trim()) {
@@ -207,8 +236,19 @@ const MatchingPage: React.FC = () => {
             <span>Skipped Charges anzeigen</span>
           </label>
         </div>
-        <button className="btn btn--secondary" onClick={fetchDryRun}>
-          <RefreshCw className="btn__icon" /> Aktualisieren
+        <div className="matching-page__control-group">
+          <label className="matching-page__label">Ansicht</label>
+          <select
+            className="matching-page__select"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value as 'summary' | 'raw')}
+          >
+            <option value="summary">Summary View</option>
+            <option value="raw">Originaldaten View</option>
+          </select>
+        </div>
+        <button className="btn btn--secondary" onClick={viewMode === 'raw' ? fetchRawData : fetchDryRun}>
+          <RefreshCw className="btn__icon" /> {viewMode === 'raw' ? 'Raw-Daten laden' : 'Aktualisieren'}
         </button>
       </div>
 
@@ -241,6 +281,239 @@ const MatchingPage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Raw Data View */}
+      {viewMode === 'raw' && (
+        <section className="matching-page__raw-view">
+          <header className="matching-page__raw-header">
+            <h2>
+              <Database className="matching-page__raw-icon" />
+              Originaldaten — EVCC & TeslaMateAPI
+            </h2>
+            {rawLoading && (
+              <Loader2 className="matching-page__raw-spinner" />
+            )}
+          </header>
+
+          {rawData && (
+            <>
+              {/* EVCC Sessions */}
+              <section className="matching-page__raw-section">
+                <h3>
+                  <Server className="matching-page__section-icon" />
+                  EVCC Sessions (Home) — {rawData.total_evcc} Sessions
+                </h3>
+                <div className="matching-page__raw-table-container">
+                  <table className="matching-page__raw-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Created</th>
+                        <th>Location</th>
+                        <th>Energy (kWh)</th>
+                        <th>Cost (€)</th>
+                        <th>€/kWh</th>
+                        <th>Cost Source</th>
+                        <th>Odometer</th>
+                        <th>SoC</th>
+                        <th>Vehicle</th>
+                        <th>Note</th>
+                        <th>Legacy</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rawData.evcc_sessions.map((evcc) => (
+                        <tr key={evcc.evcc_session_id}>
+                          <td>#{evcc.evcc_session_id}</td>
+                          <td>{evcc.created ? new Date(evcc.created).toLocaleString('de-DE') : '—'}</td>
+                          <td>{evcc.location || '—'}</td>
+                          <td>{evcc.energy_kwh?.toFixed(1) || '—'}</td>
+                          <td>{evcc.cost_eur?.toFixed(2) || '—'}</td>
+                          <td>{evcc.cost_per_kwh?.toFixed(4) || '—'}</td>
+                          <td>
+                            <span className={`matching-page__cost-source matching-page__cost-source--${evcc.cost_per_kwh_source || 'unknown'}`}>
+                              {evcc.cost_per_kwh_source || '—'}
+                            </span>
+                          </td>
+                          <td>{evcc.odometer_km?.toLocaleString('de-DE') || '—'}</td>
+                          <td>
+                            {evcc.soc_start !== null && evcc.soc_end !== null
+                              ? `${evcc.soc_start}→${evcc.soc_end}%`
+                              : '—'}
+                          </td>
+                          <td>{evcc.vehicle || '—'}</td>
+                          <td className="matching-page__note-cell">{evcc.note || '—'}</td>
+                          <td className="matching-page__legacy-cell">
+                            {evcc.legacy_source && evcc.legacy_table && evcc.legacy_id
+                              ? `${evcc.legacy_source}.${evcc.legacy_table}#${evcc.legacy_id}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {/* TeslaMate Charges - Home Location */}
+              <section className="matching-page__raw-section">
+                <h3>
+                  <Link className="matching-page__section-icon" />
+                  TeslaMateAPI — Zuhause — {rawData.home_tm_charges} Charges
+                </h3>
+                {rawData.home_tm_charges === 0 ? (
+                  <p className="matching-page__raw-empty">Keine TeslaMate-Charges mit Location "Zuhause" gefunden.</p>
+                ) : (
+                  <div className="matching-page__raw-table-container">
+                    <table className="matching-page__raw-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Start</th>
+                          <th>Location (Orig.)</th>
+                          <th>Location (Norm.)</th>
+                          <th>Energy (kWh)</th>
+                          <th>Cost (€)</th>
+                          <th>€/kWh</th>
+                          <th>Cost Source</th>
+                          <th>Odometer</th>
+                          <th>SoC</th>
+                          <th>Provider</th>
+                          <th>Override</th>
+                          <th>Legacy</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rawData.teslamate_charges
+                          .filter(c => c.is_home_location)
+                          .map((tm) => (
+                            <tr key={tm.charge_id} className={tm.override ? 'matching-page__raw-row--override' : ''}>
+                              <td>#{tm.charge_id}</td>
+                              <td>{tm.start_date ? new Date(tm.start_date).toLocaleString('de-DE') : '—'}</td>
+                              <td>{tm.location_original || '—'}</td>
+                              <td>{tm.location_normalized || '—'}</td>
+                              <td>{tm.energy_kwh?.toFixed(1) || '—'}</td>
+                              <td>{tm.cost_eur?.toFixed(2) || '—'}</td>
+                              <td>{tm.cost_per_kwh?.toFixed(4) || '—'}</td>
+                              <td>
+                                <span className={`matching-page__cost-source matching-page__cost-source--${tm.cost_per_kwh_source || 'unknown'}`}>
+                                  {tm.cost_per_kwh_source || '—'}
+                                </span>
+                              </td>
+                              <td>{tm.odometer_km?.toLocaleString('de-DE') || '—'}</td>
+                              <td>
+                                {tm.soc_start !== null && tm.soc_end !== null
+                                  ? `${tm.soc_start}→${tm.soc_end}%`
+                                  : '—'}
+                              </td>
+                              <td>{tm.provider || '—'}</td>
+                              <td>
+                                {tm.override ? (
+                                  <span className="matching-page__override-badge matching-page__override-badge--manual">
+                                    <Link className="matching-page__override-icon" />
+                                    Manual → EVCC #{tm.override.evcc_session_id}
+                                    {tm.override.reason && (
+                                      <span className="matching-page__override-reason" title={tm.override.reason}>
+                                        ({tm.override.reason.substring(0, 30)}…)
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="matching-page__override-badge matching-page__override-badge--none">—</span>
+                                )}
+                              </td>
+                              <td className="matching-page__legacy-cell">
+                                {tm.legacy_source && tm.legacy_table && tm.legacy_id
+                                  ? `${tm.legacy_source}.${tm.legacy_table}#${tm.legacy_id}`
+                                  : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/* TeslaMate Charges - External */}
+              <section className="matching-page__raw-section">
+                <h3>
+                  <Globe className="matching-page__section-icon" />
+                  TeslaMateAPI — Extern (Supercharger, etc.) — {rawData.external_tm_charges} Charges
+                </h3>
+                <div className="matching-page__raw-table-container">
+                  <table className="matching-page__raw-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Start</th>
+                        <th>Location (Orig.)</th>
+                        <th>Location (Norm.)</th>
+                        <th>Energy (kWh)</th>
+                        <th>Cost (€)</th>
+                        <th>€/kWh</th>
+                        <th>Cost Source</th>
+                        <th>Odometer</th>
+                        <th>SoC</th>
+                        <th>Provider</th>
+                        <th>Override</th>
+                        <th>Legacy</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rawData.teslamate_charges
+                        .filter(c => !c.is_home_location)
+                        .map((tm) => (
+                          <tr key={tm.charge_id} className={tm.override ? 'matching-page__raw-row--override' : ''}>
+                            <td>#{tm.charge_id}</td>
+                            <td>{tm.start_date ? new Date(tm.start_date).toLocaleString('de-DE') : '—'}</td>
+                            <td>{tm.location_original || '—'}</td>
+                            <td>{tm.location_normalized || '—'}</td>
+                            <td>{tm.energy_kwh?.toFixed(1) || '—'}</td>
+                            <td>{tm.cost_eur?.toFixed(2) || '—'}</td>
+                            <td>{tm.cost_per_kwh?.toFixed(4) || '—'}</td>
+                            <td>
+                              <span className={`matching-page__cost-source matching-page__cost-source--${tm.cost_per_kwh_source || 'unknown'}`}>
+                                {tm.cost_per_kwh_source || '—'}
+                              </span>
+                            </td>
+                            <td>{tm.odometer_km?.toLocaleString('de-DE') || '—'}</td>
+                            <td>
+                              {tm.soc_start !== null && tm.soc_end !== null
+                                ? `${tm.soc_start}→${tm.soc_end}%`
+                                : '—'}
+                            </td>
+                            <td>{tm.provider || '—'}</td>
+                            <td>
+                              {tm.override ? (
+                                <span className="matching-page__override-badge matching-page__override-badge--manual">
+                                  <Link className="matching-page__override-icon" />
+                                  Manual → EVCC #{tm.override.evcc_session_id}
+                                  {tm.override.reason && (
+                                    <span className="matching-page__override-reason" title={tm.override.reason}>
+                                      ({tm.override.reason.substring(0, 30)}…)
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="matching-page__override-badge matching-page__override-badge--none">—</span>
+                              )}
+                            </td>
+                            <td className="matching-page__legacy-cell">
+                              {tm.legacy_source && tm.legacy_table && tm.legacy_id
+                                ? `${tm.legacy_source}.${tm.legacy_table}#${tm.legacy_id}`
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
+        </section>
+      )}
 
       {/* Legend */}
       <section className="matching-page__legend">
@@ -329,7 +602,8 @@ const MatchingPage: React.FC = () => {
             const autoMatches = session.matched_charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
             const rejectedMatches = session.matched_charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
 
-            if (manualMatches.length === 0 && skippedMatches.length === 0 && autoMatches.length === 0) {
+            // Show session if it has ANY charges (manual, skipped, auto, or rejected)
+            if (manualMatches.length === 0 && skippedMatches.length === 0 && autoMatches.length === 0 && rejectedMatches.length === 0) {
               return null;
             }
 
