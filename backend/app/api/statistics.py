@@ -21,11 +21,8 @@ def get_statistics(
     db: Session = Depends(get_db)
 ) -> StatisticsResponse:
     repo = SessionRepository(db)
-    
-    # Insert seed data if empty (MVP)
-    repo.insert_seed_data()
-    
-    # Parse range parameter
+
+    # Parse range parameter (no seed data - only real production data)
     range_days = None
     range_label = range
     if range == "7d":

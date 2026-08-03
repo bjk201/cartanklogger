@@ -24,13 +24,10 @@ def get_recent_sessions(
     db: Session = Depends(get_db)
 ) -> OverviewResponse:
     repo = SessionRepository(db)
-    
-    # Insert seed data if empty (MVP)
-    repo.insert_seed_data()
-    
-    # Get sessions
+
+    # Get sessions (no seed data - only real production data)
     sessions = repo.get_recent_sessions(limit=limit)
-    
+
     # Map to response schema
     data = []
     for s in sessions:
@@ -50,7 +47,7 @@ def get_recent_sessions(
             cost_per_kwh=s.cost_per_kwh,
             cost_per_kwh_source=s.cost_per_kwh_source,
         ))
-    
+
     return OverviewResponse(
         ok=True,
         data=data,
@@ -69,13 +66,10 @@ def get_overview_summary(
     db: Session = Depends(get_db)
 ) -> OverviewSummaryResponse:
     repo = SessionRepository(db)
-    
-    # Insert seed data if empty (MVP)
-    repo.insert_seed_data()
-    
-    # Get all sessions for aggregation
+
+    # Get all sessions for aggregation (no seed data - only real production data)
     sessions = repo.get_recent_sessions(limit=10000)  # Large limit to get all
-    
+
     total_sessions = len(sessions)
     total_energy = sum(s.energy_kwh or 0 for s in sessions)
     total_cost = sum(s.cost_eur or 0 for s in sessions)
@@ -85,10 +79,10 @@ def get_overview_summary(
     external_energy = sum(s.energy_kwh or 0 for s in external_sessions)
     home_cost = sum(s.cost_eur or 0 for s in home_sessions)
     external_cost = sum(s.cost_eur or 0 for s in external_sessions)
-    
+
     avg_cost_per_kwh = round(total_cost / total_energy, 4) if total_energy > 0 else None
     home_share = round((home_energy / total_energy) * 100, 1) if total_energy > 0 else 0
-    
+
     return OverviewSummaryResponse(
         ok=True,
         total_sessions=total_sessions,

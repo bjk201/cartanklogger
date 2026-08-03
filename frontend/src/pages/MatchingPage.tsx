@@ -592,7 +592,6 @@ const MatchingPage: React.FC = () => {
                                       <th>Added (kWh)</th>
                                       <th>Used (kWh)</th>
                                       <th>Location</th>
-                                      <th>Overlap</th>
                                       <th>Containment</th>
                                       <th>Aktion</th>
                                     </tr>
@@ -605,7 +604,6 @@ const MatchingPage: React.FC = () => {
                                         <td>{charge.charge_energy_added?.toFixed(1)}</td>
                                         <td>{charge.charge_energy_used?.toFixed(1)}</td>
                                         <td>{charge.location}</td>
-                                        <td>{charge.overlap_seconds}s</td>
                                         <td>{charge.containment}</td>
                                         <td>
                                           <button

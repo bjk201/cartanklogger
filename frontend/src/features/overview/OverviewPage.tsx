@@ -90,31 +90,18 @@ export function OverviewPage() {
     );
   }
 
-  const isDemoMode = dataSourceStatus?.data_source === 'demo';
-
   return (
     <div className="page-container">
       <div className="overview-page__header">
         <h1 className="overview-page__title">Overview</h1>
         <p className="overview-page__subtitle">
-          {isDemoMode ? 'Demo-Modus aktiv' : 'Produktiver Einstieg'} · 
-          <span className="overview-page__status">{isDemoMode ? 'Demo-Daten' : 'Aktuell'}</span>
+          Produktiver Einstieg · <span className="overview-page__status">Aktuell</span>
         </p>
       </div>
 
-      {isDemoMode && dataSourceStatus && (
-        <PartialError 
-          message={`Demo-Modus: ${dataSourceStatus.message}`}
-          onDismiss={() => {}}
-        />
-      )}
-
-      {/* KPI Cards - Real Data from Summary API */}
-      {summary && (
+      {/* KPI Cards - Real Data from Summary API */}\n      {summary && (
         <section className="overview-page__section" aria-labelledby="kpi-heading">
-          <h2 id="kpi-heading" className="overview-page__section-title">
-            Kennzahlen (gesamt) {isDemoMode && <span className="overview-page__demo-badge">Demo-Daten</span>}
-          </h2>
+          <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
           <div className="overview-page__kpi-grid">
             <KpiCard
               label="Gesamt Sessions"
@@ -180,9 +167,9 @@ export function OverviewPage() {
         {sessions.length === 0 ? (
           <EmptyState
             title="Keine Sessions"
-            message={isDemoMode ? "Demo-Daten enthalten Sessions. Echte Daten folgen nach Import." : "Es wurden noch keine Ladevorgänge importiert."}
+            message="Es wurden noch keine Ladevorgänge importiert."
             action={{
-              label: isDemoMode ? 'Import verstehen' : 'Import starten',
+              label: 'Import starten',
               onClick: () => navigate('/import-review'),
             }}
           />
@@ -211,16 +198,16 @@ export function OverviewPage() {
         <h2 id="data-source-heading" className="overview-page__section-title">
           Datenquellen-Status
           {dataSourceStatus && (
-            <span className={`overview-page__mode-badge ${dataSourceStatus.data_source === 'live' ? 'overview-page__mode-badge--live' : 'overview-page__mode-badge--demo'}`}>
-              {dataSourceStatus.data_source === 'live' ? 'LIVE' : 'DEMO'}
+            <span className="overview-page__mode-badge overview-page__mode-badge--live">
+              LIVE
             </span>
           )}
         </h2>
         <div className="overview-page__import-status">
           <div className="import-status__item">
             <span className="import-status__label">Modus</span>
-            <span className={`import-status__value ${dataSourceStatus?.data_source === 'live' ? 'import-status__value--ok' : 'import-status__value--warn'}`}>
-              {dataSourceStatus?.data_source === 'live' ? 'Live' : 'Demo / Fallback'}
+            <span className="import-status__value import-status__value--ok">
+              Live
             </span>
           </div>
           <div className="import-status__item">

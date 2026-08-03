@@ -1,6 +1,6 @@
 # Dry-Run Migration Report
 
-**Timestamp:** 2026-08-01T12:19:36.742596
+**Timestamp:** 2026-08-02T18:58:35.389874
 **Source DB:** /root/cartanklogger/data/cartanklogger.db
 **Target DB:** /root/cartanklogger/data/cartanklogger-ctl20.db
 **Mode:** APPLY

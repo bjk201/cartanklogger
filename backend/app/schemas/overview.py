@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from datetime import datetime
+import enum
+
+
+class ChargeType(str, enum.Enum):
+    DC = "DC"
+    AC = "AC"
+    UNKNOWN = "unknown"
 
 
 class SessionRead(BaseModel):
@@ -24,6 +31,11 @@ class SessionRead(BaseModel):
     # For TeslaMate: derived from cost / charge_energy_added (source='derived')
     cost_per_kwh: Optional[float] = None
     cost_per_kwh_source: Optional[Literal["api", "derived"]] = None
+    
+    # Charge type details (for external/TeslaMate sessions)
+    charge_type: Optional[ChargeType] = None
+    fast_charger_brand: Optional[str] = None
+    max_charge_power_kw: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -102,6 +114,14 @@ class StatisticsKPIs(BaseModel):
     max_cost_session: Optional[float] = None
     max_energy_session_id: Optional[int] = None
     max_cost_session_id: Optional[int] = None
+    
+    # DC/AC breakdown for external sessions
+    external_dc_sessions: Optional[int] = None
+    external_ac_sessions: Optional[int] = None
+    external_dc_energy_kwh: Optional[float] = None
+    external_ac_energy_kwh: Optional[float] = None
+    external_dc_cost_eur: Optional[float] = None
+    external_ac_cost_eur: Optional[float] = None
 
 
 class StatisticsResponse(BaseModel):

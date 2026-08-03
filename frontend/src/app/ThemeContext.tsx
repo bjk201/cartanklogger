@@ -36,12 +36,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
-  if (!mounted) {
-    return <>{children}</>;
-  }
+  // Immer Provider rendern, aber mit Fallback für !mounted
+  const value: ThemeContextType = {
+    theme: mounted ? theme : 'light',
+    toggleTheme: mounted ? toggleTheme : () => {},
+    setTheme: mounted ? setTheme : () => {},
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

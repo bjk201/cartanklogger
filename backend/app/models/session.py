@@ -1,6 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum as SQLEnum
 from sqlalchemy.sql import func
 from app.database import Base
+import enum
+
+
+class ChargeType(str, enum.Enum):
+    """Charge type: DC (Supercharger/fast), AC (Wallbox/destination), or unknown."""
+    DC = "DC"
+    AC = "AC"
+    UNKNOWN = "unknown"
 
 
 class SessionModel(Base):
@@ -28,6 +36,11 @@ class SessionModel(Base):
     # For TeslaMate: derived from cost / charge_energy_added (source='derived')
     cost_per_kwh = Column(Float, nullable=True)
     cost_per_kwh_source = Column(String(20), nullable=True)  # 'api' | 'derived'
+    
+    # Charge type details (for external/TeslaMate sessions)
+    charge_type = Column(SQLEnum(ChargeType), nullable=True, index=True)  # DC, AC, unknown
+    fast_charger_brand = Column(String(50), nullable=True)  # Tesla, Ionity, etc.
+    max_charge_power_kw = Column(Float, nullable=True)  # Max power during charge
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

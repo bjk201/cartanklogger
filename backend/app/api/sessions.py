@@ -31,11 +31,8 @@ def get_sessions(
     db: Session = Depends(get_db)
 ) -> PaginatedSessionsResponse:
     repo = SessionRepository(db)
-    
-    # Insert seed data if empty (MVP)
-    repo.insert_seed_data()
-    
-    # Get paginated sessions
+
+    # Get paginated sessions (no seed data - only real production data)
     sessions, total = repo.get_sessions_paginated(
         page=page,
         page_size=page_size,

@@ -26,28 +26,28 @@ async def matching_raw_data(
     Get raw EVCC and TeslaMateAPI data for matching inspection.
     Returns original fields from both sources without matching logic applied.
     """
-    
+
     # Get EVCC sessions (home)
     evcc_query = db.query(SessionModel).filter(
         SessionModel.source_type == 'home'
     ).order_by(SessionModel.date.desc())
-    
+
     if limit:
         evcc_query = evcc_query.limit(limit)
-    
+
     evcc_sessions = evcc_query.all()
-    
+
     # Get all TeslaMate charges (external)
     tm_charges = db.query(SessionModel).filter(
         SessionModel.source_type == 'external'
     ).all()
-    
+
     # Get active overrides
     all_overrides = db.query(MatchingOverride).order_by(
         MatchingOverride.teslamate_charge_id,
         MatchingOverride.created_at.desc()
     ).all()
-    
+
     # Keep only latest NON-reset override per TM charge
     latest_per_charge = {}
     for ov in all_overrides:
@@ -55,18 +55,18 @@ async def matching_raw_data(
             continue
         if ov.teslamate_charge_id not in latest_per_charge:
             latest_per_charge[ov.teslamate_charge_id] = ov
-    
+
     active_overrides = list(latest_per_charge.values())
     override_map = {ov.teslamate_charge_id: ov for ov in active_overrides}
-    
+
     # Build EVCC raw data
     evcc_raw = []
     for evcc in evcc_sessions:
         # Try to get additional fields from note or legacy metadata
-        # The sessions table has: id, source_id, source_type, date, location, energy_kwh, cost_eur, 
+        # The sessions table has: id, source_id, source_type, date, location, energy_kwh, cost_eur,
         # odometer_km, distance_km, note, solar_percentage, pv_kwh, cost_per_kwh, cost_per_kwh_source,
         # legacy_source, legacy_table, legacy_id
-        
+
         evcc_raw.append({
             "evcc_session_id": evcc.id,
             "source_id": evcc.source_id,
@@ -90,13 +90,13 @@ async def matching_raw_data(
             "soc_start": _parse_soc_start_from_note(evcc.note),
             "soc_end": _parse_soc_end_from_note(evcc.note),
         })
-    
+
     # Build TM raw data
     tm_raw = []
     for tm in tm_charges:
         override = override_map.get(tm.id)
         is_home_location = _is_home_location(tm.location)
-        
+
         tm_raw.append({
             "charge_id": tm.id,
             "source_id": tm.source_id,
@@ -126,8 +126,12 @@ async def matching_raw_data(
             "provider": _parse_provider_from_note(tm.note),
             "soc_start": _parse_soc_start_from_note(tm.note),
             "soc_end": _parse_soc_end_from_note(tm.note),
+            # Charge type details
+            "charge_type": tm.charge_type,
+            "fast_charger_brand": tm.fast_charger_brand,
+            "max_charge_power_kw": tm.max_charge_power_kw,
         })
-    
+
     return {
         "ok": True,
         "evcc_sessions": evcc_raw,

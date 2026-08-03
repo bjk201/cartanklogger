@@ -39,6 +39,9 @@ class TeslaMateAPICharge:
     soc_start: Optional[float]
     soc_end: Optional[float]
     vehicle: Optional[str]
+    charge_type: Optional[str] = None  # 'DC', 'AC', 'unknown'
+    fast_charger_brand: Optional[str] = None
+    max_charge_power_kw: Optional[float] = None
 
 
 class TeslaMateAPIClient:
@@ -91,8 +94,8 @@ class TeslaMateAPIClient:
     async def get_charges(self) -> List[TeslaMateAPICharge]:
         """Fetch charging sessions from TeslaMateAPI.
 
-        TeslaMateAPI endpoint: GET /cars/{car_id}/charges
-        First fetches cars to determine car_id, then fetches charges for that car.
+        TeslaMateAPI endpoint: GET /cars/{car_id}/charges?page={n}&limit=100
+        Fetches all pages to get complete charge history.
         """
         try:
             # Step 1: Get cars to determine car_id
@@ -103,35 +106,80 @@ class TeslaMateAPIClient:
             # Use first car (or could filter by VIN if multi-car setup)
             car_id = cars[0].car_id
 
-            # Step 2: Fetch charges for this car
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(f"{self.base_url}cars/{car_id}/charges", headers=self._headers)
-                response.raise_for_status()
-                data = response.json()
+            # Step 2: Fetch charges for this car - iterate all pages
+            all_charges = []
+            page = 1
+            limit = 100
 
-                charges = []
-                for item in data.get("data", {}).get("charges", []):
-                    # Parse TeslaMateAPI charge format
-                    start_date = self._parse_datetime(item.get("start_date"))
-                    end_date = self._parse_datetime(item.get("end_date"))
-
-                    charge = TeslaMateAPICharge(
-                        id=item.get("charge_id", 0),
-                        source_id=str(item.get("charge_id", "")),
-                        start_date=start_date or datetime.now(),
-                        end_date=end_date,
-                        location=item.get("address", ""),
-                        charge_energy_added=item.get("charge_energy_added", 0),  # Already in kWh
-                        charge_energy_used=item.get("charge_energy_used"),
-                        cost=item.get("cost"),
-                        odometer=item.get("odometer"),
-                        soc_start=item.get("battery_details", {}).get("start_battery_level"),
-                        soc_end=item.get("battery_details", {}).get("end_battery_level"),
-                        vehicle=None  # Could add car name from cars list
+            while True:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.get(
+                        f"{self.base_url}cars/{car_id}/charges",
+                        params={"page": page, "limit": limit},
+                        headers=self._headers
                     )
-                    charges.append(charge)
+                    response.raise_for_status()
+                    data = response.json()
 
-                return charges
+                    charges = data.get("data", {}).get("charges", [])
+                    if not charges:
+                        break
+
+                    for item in charges:
+                        # Parse TeslaMateAPI charge format
+                        start_date = self._parse_datetime(item.get("start_date"))
+                        end_date = self._parse_datetime(item.get("end_date"))
+
+                        # Determine charge type from fast_charger_info
+                        charge_type = "unknown"
+                        fast_charger_brand = None
+                        max_charge_power_kw = None
+                        
+                        # Check charge_details for fast_charger_info and max power
+                        charge_details = item.get("charge_details", [])
+                        if charge_details:
+                            first_detail = charge_details[0]
+                            fc_info = first_detail.get("fast_charger_info", {})
+                            if fc_info.get("fast_charger_present"):
+                                charge_type = "DC"
+                                fast_charger_brand = fc_info.get("fast_charger_brand")
+                            else:
+                                charge_type = "AC"
+                            
+                            # Calculate max charge power from charge_details
+                            max_power = 0
+                            for detail in charge_details:
+                                charger_power = detail.get("charger_details", {}).get("charger_power")
+                                if charger_power and charger_power > max_power:
+                                    max_power = charger_power
+                            if max_power > 0:
+                                max_charge_power_kw = max_power
+
+                        charge = TeslaMateAPICharge(
+                            id=item.get("charge_id", 0),
+                            source_id=str(item.get("charge_id", "")),
+                            start_date=start_date or datetime.now(),
+                            end_date=end_date,
+                            location=item.get("address", ""),
+                            charge_energy_added=item.get("charge_energy_added", 0),  # Already in kWh
+                            charge_energy_used=item.get("charge_energy_used"),
+                            cost=item.get("cost"),
+                            odometer=item.get("odometer"),
+                            soc_start=item.get("battery_details", {}).get("start_battery_level"),
+                            soc_end=item.get("battery_details", {}).get("end_battery_level"),
+                            vehicle=None,  # Could add car name from cars list
+                            charge_type=charge_type,
+                            fast_charger_brand=fast_charger_brand,
+                            max_charge_power_kw=max_charge_power_kw
+                        )
+                        all_charges.append(charge)
+
+                    # Check if there are more pages
+                    if len(charges) < limit:
+                        break
+                    page += 1
+
+            return all_charges
 
         except Exception as e:
             raise Exception(f"TeslaMateAPI charges error: {e}")

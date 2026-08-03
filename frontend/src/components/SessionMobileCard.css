@@ -72,6 +72,11 @@
   color: var(--color-text);
 }
 
+.session-card__value--pv-pct,
+.session-card__value--pv-kwh {
+  color: var(--color-home);
+}
+
 .session-card__note {
   border-bottom: none;
   padding-top: 0.25rem;

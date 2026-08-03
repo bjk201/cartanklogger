@@ -18,7 +18,7 @@ export function DataSourcesPage() {
     evcc?: DataSourceConfigTestResponse; 
     teslamateapi?: DataSourceConfigTestResponse 
   }>({ evcc: undefined, teslamateapi: undefined });
-  
+
   // Form state
   const [form, setForm] = useState({
     host: '',
@@ -29,7 +29,7 @@ export function DataSourcesPage() {
     base_url: '',
     token: '',
   });
-  
+
   // Password visibility
   const [showEVCCPassword, setShowEVCCPassword] = useState(false);
   const [showEVCCAPIToken, setShowEVCCAPIToken] = useState(false);
@@ -43,7 +43,7 @@ export function DataSourcesPage() {
         api.getDataSourceConfig(),
         api.getDataSourceStatus().catch(() => null) // Optional, don't fail if status endpoint has issues
       ]);
-      
+
       setConfig(configResponse);
       // Populate form with current config (passwords/tokens not returned by API)
       setForm({
@@ -55,7 +55,7 @@ export function DataSourcesPage() {
         base_url: configResponse.teslamateapi_base_url,
         token: '',
       });
-      
+
       // Initialize test results from status endpoint (shows last known reachability)
       if (statusResponse) {
         setTestResults({
@@ -107,10 +107,10 @@ export function DataSourcesPage() {
     setSaving(true);
     setError(null);
     setSuccess(null);
-    
+
     try {
       const response = await api.saveDataSourceConfig(form);
-      
+
       setSuccess('Konfiguration gespeichert');
       // Refetch to get updated computed fields
       await fetchConfig();
@@ -126,7 +126,7 @@ export function DataSourcesPage() {
   const handleTestEVCC = async () => {
     setTestingEVCC(true);
     setTestResults(prev => ({ ...prev, evcc: undefined }));
-    
+
     try {
       const testRequest: DataSourceConfigTestRequest = {
         source: 'evcc',
@@ -149,7 +149,7 @@ export function DataSourcesPage() {
   const handleTestTM = async () => {
     setTestingTM(true);
     setTestResults(prev => ({ ...prev, teslamateapi: undefined }));
-    
+
     try {
       const testRequest: DataSourceConfigTestRequest = {
         source: 'teslamateapi',
@@ -234,8 +234,8 @@ export function DataSourcesPage() {
         <h1 className="page-title">Datenquellen</h1>
         <p className="page-subtitle">
           EVCC & TeslaMateAPI Konfiguration
-          <span className={`mode-badge ${isLive ? 'mode-badge--live' : 'mode-badge--demo'}`}>
-            {isLive ? 'LIVE' : 'DEMO'}
+          <span className="mode-badge mode-badge--live">
+            LIVE
           </span>
         </p>
       </div>
@@ -248,8 +248,8 @@ export function DataSourcesPage() {
         <div className="status-grid">
           <div className="status-card">
             <div className="status-card__label">Modus</div>
-            <div className={`status-card__value ${isLive ? 'status-live' : 'status-demo'}`}>
-              {isLive ? 'Live' : 'Demo / Fallback'}
+            <div className="status-card__value status-live">
+              Live
             </div>
           </div>
           <div className="status-card">
@@ -309,7 +309,7 @@ export function DataSourcesPage() {
               />
             </div>
           </div>
-          
+
           <div className="form-row">
             <div className="form-group form-group--full">
               <label>Passwort (optional)</label>
@@ -323,7 +323,7 @@ export function DataSourcesPage() {
               />
             </div>
           </div>
-          
+
           <div className="form-row">
             <div className="form-group form-group--full">
               <label>API Token (optional, alternativ zu Passwort)</label>
@@ -337,7 +337,7 @@ export function DataSourcesPage() {
               />
             </div>
           </div>
-          
+
           <div className="form-row">
             <div className="form-group form-group--checkbox">
               <label className="checkbox-label">
@@ -350,14 +350,14 @@ export function DataSourcesPage() {
               </label>
             </div>
           </div>
-          
+
           <div className="form-actions">
             <button
               className="btn btn--primary"
               onClick={handleTestEVCC}
               disabled={testingEVCC || !form.host}
             >
-              {testingEVCC ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />} 
+              {testingEVCC ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />}
               {testingEVCC ? 'Teste...' : 'Verbindung testen'}
             </button>
           </div>
@@ -382,7 +382,7 @@ export function DataSourcesPage() {
               />
             </div>
           </div>
-          
+
           <div className="form-row">
             <div className="form-group form-group--full">
               <label>Bearer Token (optional)</label>
@@ -396,7 +396,7 @@ export function DataSourcesPage() {
               />
             </div>
           </div>
-          
+
           <div className="form-actions">
             <button
               className="btn btn--primary"

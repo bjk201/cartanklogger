@@ -40,6 +40,10 @@ class LiveMatchedCharge:
     override_reason: Optional[str] = None
     replaced_auto_match: Optional[str] = None
     skipped_due_to_other_override: bool = False
+    # TM charge details
+    charge_type: Optional[str] = None  # 'DC', 'AC', 'unknown'
+    fast_charger_brand: Optional[str] = None
+    max_charge_power_kw: Optional[float] = None
 
 
 @dataclass
@@ -281,7 +285,10 @@ class LiveMatchingService:
                             match_source='manual_override',
                             override_id=override_info['override_id'],
                             override_reason=override_info['reason'],
-                            replaced_auto_match=override_info.get('replaced_auto_match')
+                            replaced_auto_match=override_info.get('replaced_auto_match'),
+                            charge_type=tm.charge_type,
+                            fast_charger_brand=tm.fast_charger_brand,
+                            max_charge_power_kw=tm.max_charge_power_kw
                         ))
                         matched_charge_ids.append(tm.id)
                         if tm.charge_energy_added:
@@ -305,7 +312,10 @@ class LiveMatchingService:
                             overlap_seconds=0,
                             containment='unmatched',
                             match_source='auto',
-                            skipped_due_to_other_override=True
+                            skipped_due_to_other_override=True,
+                            charge_type=tm.charge_type,
+                            fast_charger_brand=tm.fast_charger_brand,
+                            max_charge_power_kw=tm.max_charge_power_kw
                         ))
                     continue
 
@@ -331,7 +341,10 @@ class LiveMatchingService:
                         reject_reason='wrong_location',
                         overlap_seconds=0,
                         containment='unmatched',
-                        match_source='auto'
+                        match_source='auto',
+                        charge_type=tm.charge_type,
+                        fast_charger_brand=tm.fast_charger_brand,
+                        max_charge_power_kw=tm.max_charge_power_kw
                     ))
                     continue
 
@@ -368,7 +381,10 @@ class LiveMatchingService:
                         reject_reason=None,
                         overlap_seconds=overlap_seconds,
                         containment=containment,
-                        match_source='auto'
+                        match_source='auto',
+                        charge_type=tm.charge_type,
+                        fast_charger_brand=tm.fast_charger_brand,
+                        max_charge_power_kw=tm.max_charge_power_kw
                     ))
                     matched_charge_ids.append(tm.id)
                     if tm.charge_energy_added:

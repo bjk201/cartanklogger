@@ -325,6 +325,10 @@ export interface TMRawCharge {
   provider: string | null;
   soc_start: number | null;
   soc_end: number | null;
+  // Charge type details
+  charge_type: 'DC' | 'AC' | 'unknown' | null;
+  fast_charger_brand: string | null;
+  max_charge_power_kw: number | null;
 }
 
 export interface MatchingRawDataResponse {
@@ -360,6 +364,10 @@ export interface LiveMatchedCharge {
   override_reason: string | null;
   replaced_auto_match: string | null;
   skipped_due_to_other_override: boolean;
+  // TM charge details
+  charge_type: 'DC' | 'AC' | 'unknown' | null;
+  fast_charger_brand: string | null;
+  max_charge_power_kw: number | null;
 }
 
 export interface LiveEVCCSessionMatch {

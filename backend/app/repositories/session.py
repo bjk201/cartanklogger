@@ -89,6 +89,19 @@ class SessionRepository:
         external_cost = external_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
         import_cost = import_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
         
+        # DC/AC breakdown for external sessions
+        external_dc_query = external_query.filter(SessionModel.charge_type == "DC")
+        external_ac_query = external_query.filter(SessionModel.charge_type == "AC")
+        
+        external_dc_sessions = external_dc_query.count()
+        external_ac_sessions = external_ac_query.count()
+        
+        external_dc_energy = external_dc_query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        external_ac_energy = external_ac_query.with_entities(func.coalesce(func.sum(SessionModel.energy_kwh), 0)).scalar() or 0
+        
+        external_dc_cost = external_dc_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        external_ac_cost = external_ac_query.with_entities(func.coalesce(func.sum(SessionModel.cost_eur), 0)).scalar() or 0
+        
         # Average cost per kWh (only where both cost and energy exist and energy > 0)
         avg_cost_per_kwh = None
         if total_energy > 0:
@@ -134,6 +147,13 @@ class SessionRepository:
                 "max_cost_session": round(max_cost_val, 2) if max_cost_val else None,
                 "max_energy_session_id": max_energy_id,
                 "max_cost_session_id": max_cost_id,
+                # DC/AC breakdown for external sessions
+                "external_dc_sessions": external_dc_sessions,
+                "external_ac_sessions": external_ac_sessions,
+                "external_dc_energy_kwh": round(external_dc_energy, 2),
+                "external_ac_energy_kwh": round(external_ac_energy, 2),
+                "external_dc_cost_eur": round(external_dc_cost, 2),
+                "external_ac_cost_eur": round(external_ac_cost, 2),
             },
             "energy_by_source": {
                 "home": round(home_energy, 2),
