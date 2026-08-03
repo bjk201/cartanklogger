@@ -481,56 +481,49 @@ const MatchingPage: React.FC = () => {
                               <h4 className="matching-page__group-title matching-page__group-title--manual">
                                 <Link className="matching-page__group-icon" /> Manuelle Overrides
                               </h4>
-                              {manualMatches.map((charge) => (
-                                <div key={charge.charge_id} className="matching-page__charge matching-page__charge--manual">
-                                  <div className="matching-page__charge-main">
-                                    <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
-                                    <span className="matching-page__charge-energy">
-                                      {charge.charge_energy_added?.toFixed(1)} kWh (added)
-                                      {charge.charge_energy_used != null && charge.charge_energy_used !== charge.charge_energy_added && (
-                                        <span className="matching-page__charge-energy-used"> / {charge.charge_energy_used?.toFixed(1)} kWh (used)</span>
-                                      )}
-                                    </span>
-                                    <span className="matching-page__charge-location">{charge.location}</span>
-                                    <span className="matching-page__charge-source matching-page__charge-source--manual">
-                                      Manual Override
-                                    </span>
-                                  </div>
-                                  <div className="matching-page__charge-meta">
-                                    {charge.override_id && (
-                                      <span className="matching-page__meta">
-                                        Override #{charge.override_id}
-                                      </span>
-                                    )}
-                                    {charge.override_reason && (
-                                      <span className="matching-page__meta matching-page__meta--reason">
-                                        Grund: {charge.override_reason}
-                                      </span>
-                                    )}
-                                    {charge.replaced_auto_match && (
-                                      <span className="matching-page__meta matching-page__meta--replaced">
-                                        Ersetzt: {charge.replaced_auto_match}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="matching-page__charge-actions">
-                                    <button
-                                      className="btn btn--ghost btn--small matching-page__btn-reset"
-                                      onClick={() => handleDeleteOverride(charge.override_id!, charge.charge_id)}
-                                      disabled={saving === `delete-${charge.charge_id}`}
-                                    >
-                                      {saving === `delete-${charge.charge_id}` ? (
-                                        <Loader2 className="btn__icon" size={14} />
-                                      ) : (
-                                        <>
-                                          <RefreshCw className="btn__icon" size={14} />
-                                          Zurück auf Auto
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                              <div className="matching-page__charge-table-wrapper">
+                                <table className="matching-page__charge-table">
+                                  <thead>
+                                    <tr>
+                                      <th>TM #</th>
+                                      <th>Datum</th>
+                                      <th>Added (kWh)</th>
+                                      <th>Used (kWh)</th>
+                                      <th>Location</th>
+                                      <th>Override Grund</th>
+                                      <th>Aktion</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {manualMatches.map((charge) => (
+                                      <tr key={charge.charge_id} className="matching-page__charge-row">
+                                        <td>TM #{charge.charge_id}</td>
+                                        <td>{new Date(charge.date).toLocaleString('de-DE')}</td>
+                                        <td>{charge.charge_energy_added?.toFixed(1)}</td>
+                                        <td>{charge.charge_energy_used?.toFixed(1)}</td>
+                                        <td>{charge.location}</td>
+                                        <td>{charge.override_reason || '-'}</td>
+                                        <td>
+                                          <button
+                                            className="btn btn--ghost btn--small matching-page__btn-reset"
+                                            onClick={() => handleDeleteOverride(charge.override_id!, charge.charge_id)}
+                                            disabled={saving === `delete-${charge.charge_id}`}
+                                          >
+                                            {saving === `delete-${charge.charge_id}` ? (
+                                              <Loader2 className="btn__icon" size={14} />
+                                            ) : (
+                                              <>
+                                                <RefreshCw className="btn__icon" size={14} />
+                                                Zurück auf Auto
+                                              </>
+                                            )}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
 
                               {/* Summe der Manual Overrides für diese Session */}
                               <div className="matching-page__charge-sums">
@@ -590,37 +583,44 @@ const MatchingPage: React.FC = () => {
                               <h4 className="matching-page__group-title matching-page__group-title--auto">
                                 <WifiIcon className="matching-page__group-icon" /> Auto-Matches
                               </h4>
-                              {autoMatches.map((charge) => (
-                                <div key={charge.charge_id} className="matching-page__charge matching-page__charge--auto">
-                                  <div className="matching-page__charge-main">
-                                    <span className="matching-page__charge-id">TM #{charge.charge_id}</span>
-                                    <span className="matching-page__charge-energy">
-                                      {charge.charge_energy_added?.toFixed(1)} kWh (added)
-                                      {charge.charge_energy_used != null && charge.charge_energy_used !== charge.charge_energy_added && (
-                                        <span className="matching-page__charge-energy-used"> / {charge.charge_energy_used?.toFixed(1)} kWh (used)</span>
-                                      )}
-                                    </span>
-                                    <span className="matching-page__charge-location">{charge.location}</span>
-                                    <span className="matching-page__charge-source matching-page__charge-source--auto">
-                                      Auto
-                                    </span>
-                                  </div>
-                                  <div className="matching-page__charge-meta">
-                                    <span className="matching-page__meta">
-                                      Overlap: {charge.overlap_seconds}s, Containment: {charge.containment}
-                                    </span>
-                                  </div>
-                                  <div className="matching-page__charge-actions">
-                                    <button
-                                      className="btn btn--ghost btn--small matching-page__btn-assign"
-                                      onClick={() => openAssignModal(charge as any, session as any)}
-                                    >
-                                      <PlusCircle className="btn__icon" size={14} />
-                                      Manuell zuordnen
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                              <div className="matching-page__charge-table-wrapper">
+                                <table className="matching-page__charge-table">
+                                  <thead>
+                                    <tr>
+                                      <th>TM #</th>
+                                      <th>Datum</th>
+                                      <th>Added (kWh)</th>
+                                      <th>Used (kWh)</th>
+                                      <th>Location</th>
+                                      <th>Overlap</th>
+                                      <th>Containment</th>
+                                      <th>Aktion</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {autoMatches.map((charge) => (
+                                      <tr key={charge.charge_id} className="matching-page__charge-row">
+                                        <td>TM #{charge.charge_id}</td>
+                                        <td>{new Date(charge.date).toLocaleString('de-DE')}</td>
+                                        <td>{charge.charge_energy_added?.toFixed(1)}</td>
+                                        <td>{charge.charge_energy_used?.toFixed(1)}</td>
+                                        <td>{charge.location}</td>
+                                        <td>{charge.overlap_seconds}s</td>
+                                        <td>{charge.containment}</td>
+                                        <td>
+                                          <button
+                                            className="btn btn--ghost btn--small matching-page__btn-assign"
+                                            onClick={() => openAssignModal(charge as any, session as any)}
+                                          >
+                                            <PlusCircle className="btn__icon" size={14} />
+                                            Zuordnen
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
 
                               {/* Summe der Auto-Matches für diese Session */}
                               <div className="matching-page__charge-sums">

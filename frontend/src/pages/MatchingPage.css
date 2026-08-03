@@ -1174,3 +1174,62 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Charge Table Styles */
+.matching-page__charge-table-wrapper {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.matching-page__charge-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.matching-page__charge-table th,
+.matching-page__charge-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.matching-page__charge-table th {
+  background: var(--color-background);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.6875rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.matching-page__charge-table tbody tr:hover {
+  background: var(--color-background);
+}
+
+.matching-page__charge-row td {
+  vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+  .matching-page__charge-table-wrapper {
+    margin: 0.75rem -1rem 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  
+  .matching-page__charge-table {
+    min-width: 700px;
+  }
+  
+  .matching-page__charge-table th,
+  .matching-page__charge-table td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+}

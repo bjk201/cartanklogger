@@ -239,13 +239,23 @@ class LiveMatchingService:
 
             evcc_duration_seconds = int((evcc_end - evcc_start).total_seconds())
 
+            # TIME WINDOW FILTER: Only consider TM charges within ±1 day of EVCC session
+            evcc_date = evcc_start.date()
+            window_start = evcc_start - timedelta(days=1)
+            window_end = evcc_end + timedelta(days=1)
+            
+            tm_charges_in_window = [
+                tm for tm in tm_charges
+                if tm.start_date and window_start <= tm.start_date <= window_end
+            ]
+
             matched_charges: List[LiveMatchedCharge] = []
             matched_charge_ids: List[int] = []
             matched_energy_sum = 0.0
             manual_matches = 0
             auto_matches = 0
 
-            for tm in tm_charges:
+            for tm in tm_charges_in_window:
                 candidate_checks_total += 1
                 override_info = override_map.get(tm.id)
 
