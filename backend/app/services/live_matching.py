@@ -71,23 +71,24 @@ class LiveMatchingSummary:
     total_delta_kwh: float
     quality_distribution: Dict[str, int]
     total_tm_charges: int
-    accepted_candidates: int
-    rejected_wrong_location: int
+    accepted_tm_charges_unique: int
+    rejected_tm_charges_wrong_location_unique: int
+    candidate_checks_total: int
     evcc_reachable: bool
     teslamateapi_reachable: bool
 
 
 class LiveMatchingService:
     """Service for matching LIVE EVCC sessions with LIVE TeslaMateAPI charges."""
-    
+
     # Home location identifier - exact match after normalization
     HOME_LOCATION_KEY = "zuhause"
-    
+
     def __init__(self, evcc_client: EVCCClient, teslamateapi_client: TeslaMateAPIClient, db: Session):
         self.evcc_client = evcc_client
         self.teslamateapi_client = teslamateapi_client
         self.db = db
-    
+
     def _parse_datetime(self, dt_str: str) -> Optional[datetime]:
         """Parse ISO datetime string."""
         if not dt_str:
@@ -97,23 +98,23 @@ class LiveMatchingService:
             return datetime.fromisoformat(dt_str)
         except ValueError:
             return None
-    
+
     def _normalize_location(self, location: Optional[str]) -> str:
         """Normalize location for comparison: lowercase, trim."""
         if not location:
             return ""
         return location.strip().lower()
-    
+
     def _is_home_location(self, location: Optional[str]) -> bool:
         """Check if location is the home location 'Zuhause'."""
         normalized = self._normalize_location(location)
         return normalized == self.HOME_LOCATION_KEY
-    
+
     def _calculate_overlap(
-        self, 
-        evcc_start: datetime, 
+        self,
+        evcc_start: datetime,
         evcc_end: datetime,
-        tm_start: datetime, 
+        tm_start: datetime,
         tm_end: Optional[datetime]
     ) -> tuple[int, str]:
         """Calculate overlap between EVCC session and TeslaMate charge."""
@@ -121,15 +122,15 @@ class LiveMatchingService:
             if evcc_start <= tm_start <= evcc_end:
                 return 0, 'overlaps_start'
             return 0, 'unmatched'
-        
+
         overlap_start = max(evcc_start, tm_start)
         overlap_end = min(evcc_end, tm_end)
-        
+
         if overlap_start >= overlap_end:
             return 0, 'unmatched'
-        
+
         overlap_seconds = int((overlap_end - overlap_start).total_seconds())
-        
+
         if tm_start >= evcc_start and tm_end <= evcc_end:
             return overlap_seconds, 'inside'
         elif tm_start < evcc_start and tm_end > evcc_end:
@@ -140,7 +141,7 @@ class LiveMatchingService:
             return overlap_seconds, 'overlaps_end'
         else:
             return overlap_seconds, 'inside'
-    
+
     def _determine_match_quality(
         self,
         evcc_energy: Optional[float],
@@ -152,24 +153,24 @@ class LiveMatchingService:
         """Determine match quality."""
         if evcc_energy is None or tm_energy_sum is None:
             return 'weak'
-        
+
         if evcc_energy <= 0:
             return 'weak'
-        
+
         energy_ratio = tm_energy_sum / evcc_energy
         time_coverage = overlap_seconds / max(evcc_duration_seconds, 1) if evcc_duration_seconds > 0 else 0
-        
+
         if 0.95 <= energy_ratio <= 1.05 and time_coverage >= 0.8 and containment == 'inside':
             return 'exact'
-        
+
         if 0.8 <= energy_ratio <= 1.2 and time_coverage >= 0.5:
             return 'plausible'
-        
+
         if overlap_seconds > 0:
             return 'weak'
-        
+
         return 'unmatched'
-    
+
     async def match_all_live(self, limit: Optional[int] = None) -> tuple[List[LiveEVCCSessionMatch], LiveMatchingSummary]:
         """
         Match all LIVE EVCC sessions with LIVE TeslaMateAPI charges.
@@ -178,19 +179,21 @@ class LiveMatchingService:
         # Fetch live data
         evcc_sessions = await self.evcc_client.get_sessions(limit)
         tm_charges = await self.teslamateapi_client.get_charges()
-        
+
         # Load manual overrides from DB
         overrides = self._get_active_overrides()
-        
+
         matches: List[LiveEVCCSessionMatch] = []
         total_evcc_energy = 0.0
         total_tm_energy = 0.0
         quality_dist = {'exact': 0, 'plausible': 0, 'weak': 0, 'unmatched': 0}
-        
+
         total_tm_charges = len(tm_charges)
-        accepted_candidates = 0
-        rejected_wrong_location = 0
-        
+        # Unique tracking sets
+        accepted_tm_charge_ids = set()
+        rejected_tm_charge_ids_wrong_location = set()
+        candidate_checks_total = 0
+
         # Build override lookup: tm_charge_id -> override info
         override_map = {}
         for ov in overrides:
@@ -201,16 +204,16 @@ class LiveMatchingService:
                     'reason': ov.reason,
                     'replaced_auto_match': ov.replaced_auto_match
                 }
-        
+
         for evcc in evcc_sessions:
             evcc_start = evcc.created
             evcc_end = evcc.finished
-            
+
             # If no finished time, estimate from energy
             if not evcc_end and evcc.charged_energy > 0:
                 evcc_duration_hours = evcc.charged_energy / 11.0  # assume 11kW
                 evcc_end = evcc_start + timedelta(hours=evcc_duration_hours)
-            
+
             if not evcc_start or not evcc_end:
                 match = LiveEVCCSessionMatch(
                     evcc_session_id=evcc.id,
@@ -231,18 +234,19 @@ class LiveMatchingService:
                 )
                 matches.append(match)
                 continue
-            
+
             evcc_duration_seconds = int((evcc_end - evcc_start).total_seconds())
-            
+
             matched_charges: List[LiveMatchedCharge] = []
             matched_charge_ids: List[int] = []
             matched_energy_sum = 0.0
             manual_matches = 0
             auto_matches = 0
-            
+
             for tm in tm_charges:
+                candidate_checks_total += 1
                 override_info = override_map.get(tm.id)
-                
+
                 if override_info:
                     # Manual override exists
                     if override_info['evcc_session_id'] == evcc.id:
@@ -268,6 +272,7 @@ class LiveMatchingService:
                         matched_charge_ids.append(tm.id)
                         if tm.charge_energy_added:
                             matched_energy_sum += tm.charge_energy_added
+                        accepted_tm_charge_ids.add(tm.id)
                     else:
                         # Override points to different EVCC session - skip here
                         matched_charges.append(LiveMatchedCharge(
@@ -287,14 +292,14 @@ class LiveMatchingService:
                             skipped_due_to_other_override=True
                         ))
                     continue
-                
+
                 # No manual override - auto-matching with location pre-filter
                 tm_location_original = tm.location
                 tm_location_normalized = self._normalize_location(tm.location)
                 is_home = self._is_home_location(tm.location)
-                
+
                 if not is_home:
-                    rejected_wrong_location += 1
+                    rejected_tm_charge_ids_wrong_location.add(tm.id)
                     matched_charges.append(LiveMatchedCharge(
                         charge_id=tm.id,
                         source_id=tm.source_id,
@@ -311,23 +316,23 @@ class LiveMatchingService:
                         match_source='auto'
                     ))
                     continue
-                
+
                 # Location accepted (home)
-                accepted_candidates += 1
-                
+                accepted_tm_charge_ids.add(tm.id)
+
                 tm_start = tm.start_date
                 tm_end = tm.end_date
                 if not tm_end and tm.charge_energy_added > 0:
                     tm_duration_hours = tm.charge_energy_added / 11.0
                     tm_end = tm_start + timedelta(hours=tm_duration_hours)
-                
+
                 if not tm_start:
                     continue
-                
+
                 overlap_seconds, containment = self._calculate_overlap(
                     evcc_start, evcc_end, tm_start, tm_end
                 )
-                
+
                 if overlap_seconds > 0 or containment != 'unmatched':
                     auto_matches += 1
                     matched_charges.append(LiveMatchedCharge(
@@ -348,15 +353,15 @@ class LiveMatchingService:
                     matched_charge_ids.append(tm.id)
                     if tm.charge_energy_added:
                         matched_energy_sum += tm.charge_energy_added
-            
+
             # Filter to only accepted candidates for match calculation
             actual_matches = [c for c in matched_charges if c.accepted_as_candidate]
-            
+
             delta_kwh = None
             if evcc.charged_energy is not None and actual_matches:
                 matched_energy_sum = sum(c.energy_kwh for c in actual_matches if c.energy_kwh)
                 delta_kwh = round(matched_energy_sum - evcc.charged_energy, 2)
-            
+
             best_containment = 'unmatched'
             if actual_matches:
                 containment_order = {'inside': 4, 'envelops': 3, 'overlaps_start': 2, 'overlaps_end': 1, 'manual_override': 5, 'unmatched': 0}
@@ -364,7 +369,7 @@ class LiveMatchingService:
                     [c.containment for c in actual_matches],
                     key=lambda x: containment_order.get(x, 0)
                 )
-            
+
             match_quality = self._determine_match_quality(
                 evcc.charged_energy,
                 sum(c.energy_kwh for c in actual_matches if c.energy_kwh) if actual_matches else None,
@@ -372,9 +377,9 @@ class LiveMatchingService:
                 evcc_duration_seconds,
                 best_containment
             )
-            
+
             quality_dist[match_quality] += 1
-            
+
             notes_parts = []
             if actual_matches:
                 manual_count = sum(1 for c in actual_matches if c.match_source == 'manual_override')
@@ -388,14 +393,14 @@ class LiveMatchingService:
                     notes_parts.append(f"  TM#{c.charge_id}: {c.containment}{oid} [{c.match_source}]")
             else:
                 notes_parts.append("No TM charges matched (home location)")
-            
+
             rejected_count = len([c for c in matched_charges if not c.accepted_as_candidate])
             if rejected_count > 0:
                 notes_parts.append(f"{rejected_count} TM charge(s) rejected: wrong_location")
-            
+
             if delta_kwh is not None:
                 notes_parts.append(f"Delta: {delta_kwh:+.2f} kWh")
-            
+
             match = LiveEVCCSessionMatch(
                 evcc_session_id=evcc.id,
                 evcc_source_id=evcc.source_id,
@@ -413,23 +418,23 @@ class LiveMatchingService:
                 match_quality=match_quality,
                 match_notes='; '.join(notes_parts)
             )
-            
+
             matches.append(match)
-            
+
             if evcc.charged_energy:
                 total_evcc_energy += evcc.charged_energy
             if actual_matches:
                 total_tm_energy += sum(c.energy_kwh for c in actual_matches if c.energy_kwh)
-        
+
         # Summary
         total_delta = round(total_tm_energy - total_evcc_energy, 2)
         matched_count = sum(1 for m in matches if m.matched_charge_count > 0)
         unmatched_count = len(matches) - matched_count
-        
+
         # Check reachability
         evcc_reachable = await self.evcc_client.is_reachable()
         teslamateapi_reachable = await self.teslamateapi_client.is_reachable()
-        
+
         summary = LiveMatchingSummary(
             total_evcc_sessions_checked=len(matches),
             total_matched=matched_count,
@@ -439,28 +444,29 @@ class LiveMatchingService:
             total_delta_kwh=total_delta,
             quality_distribution=quality_dist,
             total_tm_charges=total_tm_charges,
-            accepted_candidates=accepted_candidates,
-            rejected_wrong_location=rejected_wrong_location,
+            accepted_tm_charges_unique=len(accepted_tm_charge_ids),
+            rejected_tm_charges_wrong_location_unique=len(rejected_tm_charge_ids_wrong_location),
+            candidate_checks_total=candidate_checks_total,
             evcc_reachable=evcc_reachable,
             teslamateapi_reachable=teslamateapi_reachable
         )
-        
+
         return matches, summary
-    
+
     def _get_active_overrides(self) -> List[MatchingOverride]:
         """Get all active manual overrides (excluding reset_to_auto)."""
         all_overrides = self.db.query(MatchingOverride).order_by(
             MatchingOverride.teslamate_charge_id,
             MatchingOverride.created_at.desc()
         ).all()
-        
+
         latest_per_charge = {}
         for ov in all_overrides:
             if ov.override_type == OverrideType.reset_to_auto:
                 continue
             if ov.teslamate_charge_id not in latest_per_charge:
                 latest_per_charge[ov.teslamate_charge_id] = ov
-        
+
         return list(latest_per_charge.values())
 
 
@@ -471,17 +477,17 @@ async def run_live_matching_dry_run(limit: Optional[int] = None, db: Session = N
     """
     from app.database import SessionLocal
     from app.models.datasource import DataSourceConfig
-    
+
     if db is None:
         db = SessionLocal()
         close_db = True
     else:
         close_db = False
-    
+
     try:
         # Get config from DB
         config = db.query(DataSourceConfig).first()
-        
+
         if not config or not config.evcc_host or not config.teslamateapi_base_url:
             return {
                 'ok': False,
@@ -492,89 +498,41 @@ async def run_live_matching_dry_run(limit: Optional[int] = None, db: Session = N
                 'live_mode': False,
                 'config_missing': True
             }
-        
+
         # Create clients
         evcc_client = await create_evcc_client_from_config(config)
         teslamateapi_client = await create_teslamateapi_client_from_config(config)
-        
+
         if not evcc_client or not teslamateapi_client:
             return {
                 'ok': False,
-                'error': 'Clients konnten nicht erstellt werden (Konfiguration unvollständig)',
+                'error': 'Client-Erstellung fehlgeschlagen',
                 'matches': [],
                 'summary': {},
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'live_mode': False,
-                'config_missing': True
+                'live_mode': False
             }
-        
-        # Check reachability (base URL only)
-        evcc_reachable = await evcc_client.is_reachable()
-        teslamateapi_reachable = await teslamateapi_client.is_reachable()
-        
-        if not evcc_reachable:
-            return {
-                'ok': False,
-                'error': 'EVCC nicht erreichbar',
-                'matches': [],
-                'summary': {},
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'live_mode': True,
-                'evcc_reachable': False,
-                'teslamateapi_reachable': teslamateapi_reachable
-            }
-        
-        if not teslamateapi_reachable:
-            return {
-                'ok': False,
-                'error': 'TeslaMateAPI Basis nicht erreichbar',
-                'matches': [],
-                'summary': {},
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'live_mode': True,
-                'evcc_reachable': True,
-                'teslamateapi_reachable': False
-            }
-        
-        # Try to fetch charges - this is where data fetch errors show up
-        try:
-            tm_charges = await teslamateapi_client.get_charges()
-        except Exception as e:
-            return {
-                'ok': False,
-                'error': f'TeslaMateAPI Basis erreichbar, aber Datenabruf fehlgeschlagen: {e}',
-                'matches': [],
-                'summary': {},
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'live_mode': True,
-                'evcc_reachable': True,
-                'teslamateapi_reachable': True,
-                'data_fetch_error': True
-            }
-        
-        # Run live matching
+
         service = LiveMatchingService(evcc_client, teslamateapi_client, db)
         matches, summary = await service.match_all_live(limit)
-        
-        return {
+
+        # Get reachability from summary
+        evcc_reachable = summary.evcc_reachable
+        teslamateapi_reachable = summary.teslamateapi_reachable
+
+        # Convert to dict for JSON response
+        result = {
             'ok': True,
             'matches': [asdict(m) for m in matches],
             'summary': asdict(summary),
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'live_mode': True,
-            'evcc_reachable': True,
-            'teslamateapi_reachable': True
+            'evcc_reachable': evcc_reachable,
+            'teslamateapi_reachable': teslamateapi_reachable
         }
-        
-    except Exception as e:
-        return {
-            'ok': False,
-            'error': str(e),
-            'matches': [],
-            'summary': {},
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'live_mode': True
-        }
+
+        return result
+
     finally:
         if close_db:
             db.close()
