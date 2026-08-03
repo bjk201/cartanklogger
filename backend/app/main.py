@@ -112,12 +112,17 @@ async def check_teslamateapi_reachable() -> dict:
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # TeslaMateAPI health check - use /health or /api/v1/vehicles
-            response = await client.get(f"{base_url}/health", headers=headers)
+            # TeslaMateAPI health check - use base URL
+            response = await client.get(base_url, headers=headers)
+            if response.status_code != 200:
+                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"Base URL HTTP {response.status_code}"}
+
+            # Verify the cars endpoint exists (correct endpoint for this API)
+            response = await client.get(f"{base_url}cars", headers=headers)
             if response.status_code == 200:
                 return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"HTTP {response.status_code}"}
+                return {"configured": True, "reachable": True, "level": "data_fetch_error", "status_code": response.status_code, "error": f"Base URL erreichbar, Cars endpoint HTTP {response.status_code}"}
     except httpx.TimeoutException:
         return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:
@@ -173,13 +178,13 @@ async def check_teslamateapi_reachable_from_config(config) -> dict:
             response = await client.get(base_url, headers=headers)
             if response.status_code != 200:
                 return {"configured": True, "reachable": False, "level": "unreachable", "status_code": response.status_code, "error": f"Base URL HTTP {response.status_code}"}
-            
-            # Also verify the charges endpoint exists
-            response = await client.get(f"{base_url}charges", headers=headers)
+
+            # Verify the cars endpoint exists (correct endpoint for this API)
+            response = await client.get(f"{base_url}cars", headers=headers)
             if response.status_code == 200:
                 return {"configured": True, "reachable": True, "level": "reachable", "status_code": response.status_code}
             else:
-                return {"configured": True, "reachable": True, "level": "data_fetch_error", "status_code": response.status_code, "error": f"Base URL erreichbar, Charges endpoint HTTP {response.status_code}"}
+                return {"configured": True, "reachable": True, "level": "data_fetch_error", "status_code": response.status_code, "error": f"Base URL erreichbar, Cars endpoint HTTP {response.status_code}"}
     except httpx.TimeoutException:
         return {"configured": True, "reachable": False, "level": "unreachable", "error": "Timeout"}
     except httpx.ConnectError:

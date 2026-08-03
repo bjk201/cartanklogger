@@ -119,7 +119,7 @@ async def _check_evcc_reachable(host: str, port: int, password: str, api_token: 
 
 
 async def _check_teslamateapi_reachable(base_url: str, token: str) -> ReachabilityStatus:
-    """Check TeslaMateAPI reachability - verifies both base URL and charges endpoint."""
+    """Check TeslaMateAPI reachability - verifies both base URL and cars endpoint."""
     from app.schemas.datasource import ReachabilityLevel
     if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Nicht konfiguriert")
@@ -139,12 +139,12 @@ async def _check_teslamateapi_reachable(base_url: str, token: str) -> Reachabili
             if response.status_code != 200:
                 return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, status_code=response.status_code, error=f"Base URL HTTP {response.status_code}")
 
-            # Also verify the charges endpoint exists
-            response = await client.get(f"{base_url}charges", headers=headers)
+            # Also verify the cars endpoint exists (correct endpoint for this API)
+            response = await client.get(f"{base_url}cars", headers=headers)
             if response.status_code == 200:
                 return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.REACHABLE, status_code=response.status_code)
             else:
-                return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.DATA_FETCH_ERROR, status_code=response.status_code, data_error=f"Charges endpoint HTTP {response.status_code}")
+                return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.DATA_FETCH_ERROR, status_code=response.status_code, data_error=f"Cars endpoint HTTP {response.status_code}")
     except httpx.TimeoutException:
         return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Timeout")
     except httpx.ConnectError:
