@@ -100,8 +100,13 @@ export const api = {
     return fetchJson<PaginatedSessionsResponse>(`/sessions?${searchParams.toString()}`);
   },
 
-  async getStatistics(range: string = '30d'): Promise<StatisticsResponse> {
-    return fetchJson<StatisticsResponse>(`/statistics?range=${range}`);
+  async getStatistics(days?: number, from_date?: string, to_date?: string): Promise<StatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    const query = searchParams.toString();
+    return fetchJson<StatisticsResponse>(`/statistics${query ? `?${query}` : ''}`);
   },
 
   async getOverviewSummary(days?: number, from_date?: string, to_date?: string): Promise<OverviewSummaryResponse> {

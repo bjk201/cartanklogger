@@ -114,14 +114,26 @@ class SessionRepository:
         
         return sessions
 
-    def get_statistics(self, range_days: Optional[int] = None) -> dict:
+    def get_statistics(self, range_days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
         """Get aggregated statistics for the given time range."""
         query = self.db.query(SessionModel)
         
-        # Apply time range filter
-        if range_days is not None:
-            cutoff_date = datetime.now() - timedelta(days=range_days)
-            query = query.filter(SessionModel.date >= cutoff_date)
+        # Apply time range filter - use SQLite date functions for TEXT dates with mixed formats
+        if from_date and to_date:
+            # Use date() function to normalize the stored dates for comparison
+            from_str = from_date
+            to_str = to_date + ' 23:59:59'
+            query = query.filter(
+                func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+                func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+            )
+        elif from_date and not to_date:
+            from_str = from_date
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+        elif range_days is not None:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=range_days)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
         
         # Base aggregations
         total_sessions = query.count()
