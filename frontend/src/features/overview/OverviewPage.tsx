@@ -195,15 +195,13 @@ export function OverviewPage() {
 
   return (
     <div className="page-container">
-      <div className="overview-page__header">
-        <h1 className="overview-page__title">Overview</h1>
-        <p className="overview-page__subtitle">
-          Produktiver Einstieg · <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
-        </p>
-      </div>
-
-      {/* Range Selector - like Statistics page */}
-      <section className="overview-page__section overview-page__section--range" aria-labelledby="range-heading">
+      <header className="overview-page__header">
+        <div>
+          <h1 className="overview-page__title">Overview</h1>
+          <p className="overview-page__subtitle">
+            Produktiver Einstieg · <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
+          </p>
+        </div>
         <div className="overview-page__range-selector">
           <label htmlFor="range-select" className="sr-only">Zeitraum</label>
           <select
@@ -254,7 +252,7 @@ export function OverviewPage() {
             </form>
           )}
         </div>
-      </section>
+      </header>
 
       {/* KPI Cards - Real Data from Summary API */}
       {summary && (
