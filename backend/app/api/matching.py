@@ -22,6 +22,9 @@ router = APIRouter(prefix="/matching", tags=["Matching"])
 @router.get("/dry-run")
 async def matching_dry_run(
     limit: Optional[int] = Query(None, ge=1, le=500, description="Limit number of EVCC sessions to check"),
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -33,7 +36,7 @@ async def matching_dry_run(
     from app.database import SessionLocal
     db_local = SessionLocal()
     try:
-        result = run_matching_dry_run(limit)
+        result = run_matching_dry_run(limit, days, from_date, to_date)
         result['data_source'] = 'database'
         return result
     finally:
@@ -43,6 +46,9 @@ async def matching_dry_run(
 @router.get("/dry-run/live")
 async def matching_dry_run_live(
     limit: Optional[int] = Query(None, ge=1, le=500, description="Limit number of EVCC sessions to check"),
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -53,7 +59,7 @@ async def matching_dry_run_live(
     
     This is the production endpoint - no demo/seed data fallback.
     """
-    result = await run_live_matching_dry_run(limit, db)
+    result = await run_live_matching_dry_run(limit, days, from_date, to_date, db)
     return result
 
 

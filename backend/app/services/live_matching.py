@@ -116,6 +116,46 @@ class LiveMatchingService:
         normalized = self._normalize_location(location)
         return normalized == self.HOME_LOCATION_KEY
 
+    def _filter_by_date_range(self, sessions, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None):
+        """Filter EVCC sessions by date range (in-memory filter)."""
+        from datetime import datetime, timedelta, timezone
+        
+        if not sessions:
+            return sessions
+        
+        if from_date and to_date:
+            from_dt = datetime.fromisoformat(from_date)
+            to_dt = datetime.fromisoformat(to_date + ' 23:59:59')
+            return [s for s in sessions if from_dt <= s.created <= to_dt]
+        elif from_date and not to_date:
+            from_dt = datetime.fromisoformat(from_date)
+            return [s for s in sessions if s.created >= from_dt]
+        elif days is not None:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            return [s for s in sessions if s.created >= cutoff_date]
+        
+        return sessions
+
+    def _filter_tm_by_date_range(self, charges, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None):
+        """Filter TeslaMate charges by date range (in-memory filter)."""
+        from datetime import datetime, timedelta, timezone
+        
+        if not charges:
+            return charges
+        
+        if from_date and to_date:
+            from_dt = datetime.fromisoformat(from_date)
+            to_dt = datetime.fromisoformat(to_date + ' 23:59:59')
+            return [c for c in charges if c.start_date and from_dt <= c.start_date <= to_dt]
+        elif from_date and not to_date:
+            from_dt = datetime.fromisoformat(from_date)
+            return [c for c in charges if c.start_date and c.start_date >= from_dt]
+        elif days is not None:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            return [c for c in charges if c.start_date and c.start_date >= cutoff_date]
+        
+        return charges
+
     def _calculate_overlap(
         self,
         evcc_start: datetime,
@@ -177,7 +217,7 @@ class LiveMatchingService:
 
         return 'unmatched'
 
-    async def match_all_live(self, limit: Optional[int] = None) -> tuple[List[LiveEVCCSessionMatch], LiveMatchingSummary]:
+    async def match_all_live(self, limit: Optional[int] = None, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> tuple[List[LiveEVCCSessionMatch], LiveMatchingSummary]:
         """
         Match all LIVE EVCC sessions with LIVE TeslaMateAPI charges.
         Returns (list of matches, summary).
@@ -185,6 +225,10 @@ class LiveMatchingService:
         # Fetch live data
         evcc_sessions = await self.evcc_client.get_sessions(limit)
         tm_charges = await self.teslamateapi_client.get_charges()
+        
+        # Apply date filtering in memory (APIs don't support date filters)
+        evcc_sessions = self._filter_by_date_range(evcc_sessions, days, from_date, to_date)
+        tm_charges = self._filter_tm_by_date_range(tm_charges, days, from_date, to_date)
 
         # Load manual overrides from DB
         overrides = self._get_active_overrides()
@@ -506,7 +550,7 @@ class LiveMatchingService:
         return list(latest_per_charge.values())
 
 
-async def run_live_matching_dry_run(limit: Optional[int] = None, db: Session = None) -> Dict[str, Any]:
+async def run_live_matching_dry_run(limit: Optional[int] = None, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None, db: Session = None) -> Dict[str, Any]:
     """
     Run the live matching dry-run.
     Requires both EVCC and TeslaMateAPI to be configured and reachable.
@@ -550,7 +594,7 @@ async def run_live_matching_dry_run(limit: Optional[int] = None, db: Session = N
             }
 
         service = LiveMatchingService(evcc_client, teslamateapi_client, db)
-        matches, summary = await service.match_all_live(limit)
+        matches, summary = await service.match_all_live(limit, days, from_date, to_date)
 
         # Get reachability from summary
         evcc_reachable = summary.evcc_reachable

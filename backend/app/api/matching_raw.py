@@ -20,6 +20,9 @@ router = APIRouter(prefix="/matching", tags=["Matching"])
 @router.get("/raw-data")
 async def matching_raw_data(
     limit: Optional[int] = Query(None, ge=1, le=500, description="Limit number of EVCC sessions"),
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -27,20 +30,59 @@ async def matching_raw_data(
     Returns original fields from both sources without matching logic applied.
     """
 
-    # Get EVCC sessions (home)
+    # Build EVCC sessions query
+    from sqlalchemy import func
     evcc_query = db.query(SessionModel).filter(
         SessionModel.source_type == 'home'
-    ).order_by(SessionModel.date.desc())
-
+    )
+    
+    # Apply time range filter
+    if from_date and to_date:
+        from_str = from_date
+        to_str = to_date + ' 23:59:59'
+        evcc_query = evcc_query.filter(
+            func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+            func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+        )
+    elif from_date and not to_date:
+        from_str = from_date
+        evcc_query = evcc_query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+    elif days is not None:
+        from datetime import datetime, timedelta, timezone
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+        evcc_query = evcc_query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+    
+    evcc_query = evcc_query.order_by(SessionModel.date.desc())
+    
     if limit:
         evcc_query = evcc_query.limit(limit)
 
     evcc_sessions = evcc_query.all()
 
-    # Get all TeslaMate charges (external)
-    tm_charges = db.query(SessionModel).filter(
+    # Build TM charges query
+    tm_query = db.query(SessionModel).filter(
         SessionModel.source_type == 'external'
-    ).all()
+    )
+    
+    # Apply time range filter
+    if from_date and to_date:
+        from_str = from_date
+        to_str = to_date + ' 23:59:59'
+        tm_query = tm_query.filter(
+            func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+            func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+        )
+    elif from_date and not to_date:
+        from_str = from_date
+        tm_query = tm_query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+    elif days is not None:
+        from datetime import datetime, timedelta, timezone
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+        tm_query = tm_query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+
+    tm_charges = tm_query.all()
 
     # Get active overrides
     all_overrides = db.query(MatchingOverride).order_by(

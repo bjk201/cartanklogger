@@ -109,22 +109,62 @@ class MatchingService:
         normalized = self._normalize_location(location)
         return normalized == self.HOME_LOCATION_KEY
     
-    def _get_evcc_sessions(self, limit: Optional[int] = None) -> List[SessionModel]:
-        """Get EVCC (home) sessions."""
+    def _get_evcc_sessions(self, limit: Optional[int] = None, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[SessionModel]:
+        """Get EVCC (home) sessions with optional date filtering."""
+        from sqlalchemy import func
         query = self.db.query(SessionModel).filter(
             SessionModel.source_type == 'home'
-        ).order_by(SessionModel.date.desc())
+        )
+        
+        # Apply time range filter
+        if from_date and to_date:
+            from_str = from_date
+            to_str = to_date + ' 23:59:59'
+            query = query.filter(
+                func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+                func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+            )
+        elif from_date and not to_date:
+            from_str = from_date
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+        elif days is not None:
+            from datetime import datetime, timedelta, timezone
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+        
+        query = query.order_by(SessionModel.date.desc())
         
         if limit:
             query = query.limit(limit)
         
         return query.all()
     
-    def _get_teslamate_charges(self) -> List[SessionModel]:
-        """Get TeslaMateAPI (external) charges."""
-        return self.db.query(SessionModel).filter(
+    def _get_teslamate_charges(self, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[SessionModel]:
+        """Get TeslaMateAPI (external) charges with optional date filtering."""
+        from sqlalchemy import func
+        query = self.db.query(SessionModel).filter(
             SessionModel.source_type == 'external'
-        ).all()
+        )
+        
+        # Apply time range filter
+        if from_date and to_date:
+            from_str = from_date
+            to_str = to_date + ' 23:59:59'
+            query = query.filter(
+                func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+                func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+            )
+        elif from_date and not to_date:
+            from_str = from_date
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+        elif days is not None:
+            from datetime import datetime, timedelta, timezone
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+        
+        return query.all()
     
     def _calculate_overlap(
         self, 
@@ -199,13 +239,13 @@ class MatchingService:
         
         return 'unmatched'
     
-    def match_all(self, limit: Optional[int] = None) -> tuple[List[EVCCSessionMatch], MatchingSummary]:
+    def match_all(self, limit: Optional[int] = None, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> tuple[List[EVCCSessionMatch], MatchingSummary]:
         """
         Match all EVCC sessions with TeslaMateAPI charges.
         Returns (list of matches, summary).
         """
-        evcc_sessions = self._get_evcc_sessions(limit)
-        tm_charges = self._get_teslamate_charges()
+        evcc_sessions = self._get_evcc_sessions(limit, days, from_date, to_date)
+        tm_charges = self._get_teslamate_charges(days, from_date, to_date)
         
         # Load manual overrides
         overrides = self._get_active_overrides()

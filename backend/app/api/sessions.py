@@ -20,7 +20,7 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
     "",
     response_model=PaginatedSessionsResponse,
     summary="Get paginated charging sessions",
-    description="Returns paginated sessions with filtering and sorting options."
+    description="Returns paginated sessions with filtering, sorting, and date range options."
 )
 def get_sessions(
     page: int = Query(1, ge=1, description="Page number"),
@@ -28,17 +28,28 @@ def get_sessions(
     source_type: Optional[str] = Query(None, description="Filter by source type: home, external, import, all"),
     search: Optional[str] = Query(None, description="Search in location and note"),
     sort_desc: bool = Query(True, description="Sort by date descending"),
+    # Date range filters (same as overview)
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ) -> PaginatedSessionsResponse:
     repo = SessionRepository(db)
 
-    # Get paginated sessions (no seed data - only real production data)
+    # Default to 30 days if no range specified (same as overview)
+    if not days and not from_date:
+        days = 30
+
+    # Get paginated sessions with date range filtering
     sessions, total = repo.get_sessions_paginated(
         page=page,
         page_size=page_size,
         source_type=source_type,
         search=search,
         sort_desc=sort_desc,
+        days=days,
+        from_date=from_date,
+        to_date=to_date,
     )
     
     # Calculate pagination info

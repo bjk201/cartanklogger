@@ -84,6 +84,9 @@ export const api = {
     source_type?: string;
     search?: string;
     sort_desc?: boolean;
+    days?: number;
+    from_date?: string;
+    to_date?: string;
   }): Promise<PaginatedSessionsResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('page', params.page.toString());
@@ -91,6 +94,9 @@ export const api = {
     if (params.source_type) searchParams.set('source_type', params.source_type);
     if (params.search) searchParams.set('search', params.search);
     if (params.sort_desc !== undefined) searchParams.set('sort_desc', params.sort_desc.toString());
+    if (params.days) searchParams.set('days', params.days.toString());
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
     return fetchJson<PaginatedSessionsResponse>(`/sessions?${searchParams.toString()}`);
   },
 
@@ -131,14 +137,24 @@ export const api = {
   },
 
   // Matching
-  async getMatchingDryRun(limit?: number): Promise<MatchingDryRunResponse> {
-    const params = limit ? `?limit=${limit}` : '';
-    return fetchJson<MatchingDryRunResponse>(`/matching/dry-run${params}`);
+  async getMatchingDryRun(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<MatchingDryRunResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.set('limit', limit.toString());
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    const query = searchParams.toString();
+    return fetchJson<MatchingDryRunResponse>(`/matching/dry-run${query ? `?${query}` : ''}`);
   },
 
-  async getMatchingRawData(limit?: number): Promise<MatchingRawDataResponse> {
-    const params = limit ? `?limit=${limit}` : '';
-    return fetchJson<MatchingRawDataResponse>(`/matching/raw-data${params}`);
+  async getMatchingRawData(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<MatchingRawDataResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.set('limit', limit.toString());
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    const query = searchParams.toString();
+    return fetchJson<MatchingRawDataResponse>(`/matching/raw-data${query ? `?${query}` : ''}`);
   },
 
   async getMatchingOverrides(): Promise<MatchingOverrideListResponse> {
@@ -159,9 +175,14 @@ export const api = {
   },
 
   // Live Matching
-  async getMatchingDryRunLive(limit?: number): Promise<LiveMatchingDryRunResponse> {
-    const params = limit ? `?limit=${limit}` : '';
-    return fetchJson<LiveMatchingDryRunResponse>(`/matching/dry-run/live${params}`);
+  async getMatchingDryRunLive(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<LiveMatchingDryRunResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.set('limit', limit.toString());
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    const query = searchParams.toString();
+    return fetchJson<LiveMatchingDryRunResponse>(`/matching/dry-run/live${query ? `?${query}` : ''}`);
   },
 
   async getMatchingLiveStatus(): Promise<LiveMatchingStatusResponse> {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe, Wifi as WifiIcon, AlertTriangle } from 'lucide-react';
+import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe, Wifi as WifiIcon, AlertTriangle, X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import type { 
   MatchingDryRunResponse, 
@@ -35,12 +35,47 @@ const MatchingPage: React.FC = () => {
   const [showSkipped, setShowSkipped] = useState(false);
   const [viewMode, setViewMode] = useState<'summary' | 'raw' | 'live'>('live');
   const [dataSource, setDataSource] = useState<'database' | 'live'>('live');
+  
+  // Range state (like Overview/Statistics/Sessions)
+  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+
+const RANGE_OPTIONS = [
+  { value: '7d', label: '7 Tage' },
+  { value: '30d', label: '30 Tage' },
+  { value: '90d', label: '90 Tage' },
+  { value: '365d', label: '365 Tage' },
+  { value: 'all', label: 'Alles' },
+] as const;
+
+type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
 
   const fetchDryRun = useCallback(async () => {
     setLoading(true);
     setError(null);
+    
+    // Determine API parameters based on selected range
+    let days: number | undefined;
+    let from_date: string | undefined;
+    let to_date: string | undefined;
+
+    if (selectedRange === 'custom') {
+      if (customFrom) from_date = customFrom;
+      if (customTo) to_date = customTo;
+    } else if (selectedRange === 'all') {
+      days = 36500; // ~100 years
+    } else {
+      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
+      if (option?.value) {
+        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
+        days = daysMap[option.value];
+      }
+    }
+
     try {
-      const response = await api.getMatchingDryRun(limit);
+      const response = await api.getMatchingDryRun(limit, days, from_date, to_date);
       if (!response.ok) throw new Error('API Error');
       setDryRun(response);
       setDataSource('database');
@@ -49,13 +84,32 @@ const MatchingPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [limit]);
+  }, [limit, selectedRange, customFrom, customTo]);
 
   const fetchLiveDryRun = useCallback(async () => {
     setLiveLoading(true);
     setError(null);
+    
+    // Determine API parameters based on selected range
+    let days: number | undefined;
+    let from_date: string | undefined;
+    let to_date: string | undefined;
+
+    if (selectedRange === 'custom') {
+      if (customFrom) from_date = customFrom;
+      if (customTo) to_date = customTo;
+    } else if (selectedRange === 'all') {
+      days = 36500; // ~100 years
+    } else {
+      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
+      if (option?.value) {
+        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
+        days = daysMap[option.value];
+      }
+    }
+
     try {
-      const response = await api.getMatchingDryRunLive(limit);
+      const response = await api.getMatchingDryRunLive(limit, days, from_date, to_date);
       setLiveDryRun(response);
       setDataSource('live');
       if (!response.ok) {
@@ -66,7 +120,7 @@ const MatchingPage: React.FC = () => {
     } finally {
       setLiveLoading(false);
     }
-  }, [limit]);
+  }, [limit, selectedRange, customFrom, customTo]);
 
   const fetchLiveStatus = useCallback(async () => {
     try {
@@ -79,8 +133,27 @@ const MatchingPage: React.FC = () => {
 
   const fetchRawData = useCallback(async () => {
     setRawLoading(true);
+    
+    // Determine API parameters based on selected range
+    let days: number | undefined;
+    let from_date: string | undefined;
+    let to_date: string | undefined;
+
+    if (selectedRange === 'custom') {
+      if (customFrom) from_date = customFrom;
+      if (customTo) to_date = customTo;
+    } else if (selectedRange === 'all') {
+      days = 36500; // ~100 years
+    } else {
+      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
+      if (option?.value) {
+        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
+        days = daysMap[option.value];
+      }
+    }
+
     try {
-      const response = await api.getMatchingRawData(limit);
+      const response = await api.getMatchingRawData(limit, days, from_date, to_date);
       if (!response.ok) throw new Error('API Error');
       setRawData(response);
     } catch (err) {
@@ -88,7 +161,7 @@ const MatchingPage: React.FC = () => {
     } finally {
       setRawLoading(false);
     }
-  }, [limit]);
+  }, [limit, selectedRange, customFrom, customTo]);
 
   useEffect(() => {
     fetchLiveStatus();
@@ -175,6 +248,39 @@ const MatchingPage: React.FC = () => {
     }
   };
 
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+    if (value !== 'custom') {
+      setShowCustomPicker(false);
+      setCustomFrom('');
+      setCustomTo('');
+    } else {
+      setShowCustomPicker(true);
+    }
+  };
+
+  const handleCustomRangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customFrom && customTo) {
+      if (viewMode === 'raw') {
+        fetchRawData();
+      } else if (viewMode === 'live') {
+        fetchLiveDryRun();
+      } else {
+        fetchDryRun();
+      }
+    }
+  };
+
+  const getRangeLabel = (range: RangeValue): string => {
+    if (range === 'custom') {
+      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
+      return 'Benutzerdefiniert';
+    }
+    const option = RANGE_OPTIONS.find(o => o.value === range);
+    return option?.label || range;
+  };
+
   const closeModal = () => {
     setSelectedTmCharge(null);
     setSelectedEvccSession(null);
@@ -248,10 +354,62 @@ const MatchingPage: React.FC = () => {
   return (
     <div className="matching-page">
       <header className="matching-page__header">
-        <h1>Matching & Overrides</h1>
-        <p className="matching-page__subtitle">
-          EVCC ↔ TeslaMateAPI Zuordnung — Dry-Run mit manueller Korrektur
-        </p>
+        <div>
+          <h1 className="matching-page__title">Matching & Overrides</h1>
+          <p className="matching-page__subtitle">
+            EVCC ↔ TeslaMateAPI Zuordnung — Dry-Run mit manueller Korrektur · <span className="matching-page__status">{getRangeLabel(selectedRange)}</span>
+          </p>
+        </div>
+        <div className="matching-page__range-selector">
+          <label htmlFor="range-select" className="sr-only">Zeitraum</label>
+          <select
+            id="range-select"
+            value={selectedRange}
+            onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
+            className="matching-page__range-select"
+          >
+            {RANGE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+            <option value="custom">Benutzerdefiniert…</option>
+          </select>
+
+          {showCustomPicker && (
+            <form onSubmit={handleCustomRangeSubmit} className="matching-page__custom-range">
+              <div className="matching-page__date-inputs">
+                <div className="matching-page__date-input-group">
+                  <label htmlFor="custom-from" className="matching-page__date-label">Von</label>
+                  <input
+                    id="custom-from"
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="matching-page__date-input"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div className="matching-page__date-input-group">
+                  <label htmlFor="custom-to" className="matching-page__date-label">Bis</label>
+                  <input
+                    id="custom-to"
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="matching-page__date-input"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              </div>
+              <div className="matching-page__custom-actions">
+                <button type="submit" className="matching-page__apply-btn">Anwenden</button>
+                <button type="button" onClick={() => handleRangeChange('30d')} className="matching-page__cancel-btn">
+                  <X size={16} aria-hidden="true" />
+                  Abbrechen
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </header>
 
       {/* Controls */}
@@ -685,13 +843,29 @@ const MatchingPage: React.FC = () => {
       {viewMode === 'raw' && (
         <section className="matching-page__raw-view">
           <header className="matching-page__raw-header">
-            <h2>
-              <Database className="matching-page__raw-icon" />
-              Originaldaten — EVCC & TeslaMateAPI
-            </h2>
-            {rawLoading && (
-              <Loader2 className="matching-page__raw-spinner" />
-            )}
+            <div>
+              <h2 className="matching-page__raw-title">
+                <Database className="matching-page__raw-icon" />
+                Originaldaten — EVCC & TeslaMateAPI
+              </h2>
+              <p className="matching-page__raw-subtitle">
+                Rohdaten aus der Datenbank · <span className="matching-page__raw-status">{getRangeLabel(selectedRange)}</span>
+              </p>
+            </div>
+            <div className="matching-page__raw-range-selector">
+              <label htmlFor="raw-range-select" className="sr-only">Zeitraum</label>
+              <select
+                id="raw-range-select"
+                value={selectedRange}
+                onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
+                className="matching-page__raw-range-select"
+              >
+                {RANGE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                <option value="custom">Benutzerdefiniert…</option>
+              </select>
+            </div>
           </header>
 
           {rawData && (
