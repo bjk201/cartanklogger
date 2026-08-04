@@ -553,7 +553,7 @@ class MatchingService:
         return list(latest_per_charge.values())
 
 
-def run_matching_dry_run(limit: Optional[int] = None) -> Dict[str, Any]:
+def run_matching_dry_run(limit: Optional[int] = None, days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> Dict[str, Any]:
     """
     Run the matching dry-run.
     Can be called directly or via API endpoint.
@@ -562,7 +562,7 @@ def run_matching_dry_run(limit: Optional[int] = None) -> Dict[str, Any]:
     db = SessionLocal()
     try:
         service = MatchingService(db)
-        matches, summary = service.match_all(limit)
+        matches, summary = service.match_all(limit, days, from_date, to_date)
         return {
             'ok': True,
             'matches': [asdict(m) for m in matches],
