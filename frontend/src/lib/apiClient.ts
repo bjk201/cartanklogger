@@ -51,8 +51,13 @@ export const api = {
     return fetchJson<HealthResponse>('/health');
   },
 
-  async getRecentSessions(limit: number = 10): Promise<OverviewResponse> {
-    return fetchJson<OverviewResponse>(`/overview/recent-sessions?limit=${limit}`);
+  async getRecentSessions(limit: number = 100, days?: number, from_date?: string, to_date?: string): Promise<OverviewResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('limit', limit.toString());
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    return fetchJson<OverviewResponse>(`/overview/recent-sessions?${searchParams.toString()}`);
   },
 
   async getSessions(params?: { 
@@ -93,8 +98,13 @@ export const api = {
     return fetchJson<StatisticsResponse>(`/statistics?range=${range}`);
   },
 
-  async getOverviewSummary(): Promise<OverviewSummaryResponse> {
-    return fetchJson<OverviewSummaryResponse>(`/overview/summary`);
+  async getOverviewSummary(days?: number, from_date?: string, to_date?: string): Promise<OverviewSummaryResponse> {
+    const searchParams = new URLSearchParams();
+    if (days) searchParams.set('days', days.toString());
+    if (from_date) searchParams.set('from_date', from_date);
+    if (to_date) searchParams.set('to_date', to_date);
+    const query = searchParams.toString();
+    return fetchJson<OverviewSummaryResponse>(`/overview/summary${query ? `?${query}` : ''}`);
   },
 
   async getDataSourceStatus(): Promise<DataSourceStatusResponse> {

@@ -1,11 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
-import { LoadingState, ErrorState, EmptyState, PartialError } from '../../components/StateViews';
-import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse } from '../../lib/apiClient';
+import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
+import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse, type PaginationInfo } from '../../lib/apiClient';
 import './OverviewPage.css';
+
+const RANGE_OPTIONS = [
+  { value: '7d', label: '7 Tage' },
+  { value: '30d', label: '30 Tage' },
+  { value: '90d', label: '90 Tage' },
+  { value: '365d', label: '365 Tage' },
+  { value: 'all', label: 'Alles' },
+] as const;
+
+type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
+
+const OVERVIEW_PAGE_SIZE = 10;
 
 export function OverviewPage() {
   const navigate = useNavigate();
@@ -14,15 +27,49 @@ export function OverviewPage() {
   const [dataSourceStatus, setDataSourceStatus] = useState<DataSourceStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Range state
+  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    page_size: OVERVIEW_PAGE_SIZE,
+    total: 0,
+    total_pages: 0,
+    has_next: false,
+    has_prev: false,
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
+    // Determine API parameters based on selected range
+    let days: number | undefined;
+    let from_date: string | undefined;
+    let to_date: string | undefined;
+
+    if (selectedRange === 'custom') {
+      if (customFrom) from_date = customFrom;
+      if (customTo) to_date = customTo;
+    } else if (selectedRange !== 'all') {
+      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
+      if (option?.value) {
+        // Map preset values to days
+        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
+        days = daysMap[option.value];
+      }
+    }
+    // For 'all', we pass no days/from/to
+
     try {
       const [recentResponse, summaryResponse, statusResponse] = await Promise.all([
-        api.getRecentSessions(10),
-        api.getOverviewSummary(),
+        api.getRecentSessions(OVERVIEW_PAGE_SIZE * pagination.page, days, from_date, to_date), // We'll implement pagination manually by fetching more
+        api.getOverviewSummary(days, from_date, to_date),
         api.getDataSourceStatus(),
       ]);
 
@@ -30,9 +77,27 @@ export function OverviewPage() {
         throw new Error('API returned error status');
       }
 
-      setSessions(recentResponse.data);
+      // For pagination, we need total count - get it from summary or fetch separately
+      // For now, use the full dataset for pagination calculation
+      const allSessions = recentResponse.data;
+      const totalSessions = summaryResponse.total_sessions;
+      const totalPages = Math.ceil(totalSessions / OVERVIEW_PAGE_SIZE);
+
+      // Slice for current page
+      const startIdx = (pagination.page - 1) * OVERVIEW_PAGE_SIZE;
+      const endIdx = startIdx + OVERVIEW_PAGE_SIZE;
+      const pageSessions = allSessions.slice(startIdx, endIdx);
+
+      setSessions(pageSessions);
       setSummary(summaryResponse);
       setDataSourceStatus(statusResponse);
+      setPagination(p => ({
+        ...p,
+        total: totalSessions,
+        total_pages: totalPages,
+        has_next: pagination.page < totalPages,
+        has_prev: pagination.page > 1,
+      }));
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -40,7 +105,7 @@ export function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedRange, customFrom, customTo, pagination.page]);
 
   useEffect(() => {
     fetchData();
@@ -48,6 +113,33 @@ export function OverviewPage() {
 
   const handleRetry = () => {
     fetchData();
+  };
+
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+    setPagination(p => ({ ...p, page: 1 })); // Reset to page 1 on range change
+    if (value !== 'custom') {
+      setShowCustomPicker(false);
+      setCustomFrom('');
+      setCustomTo('');
+    } else {
+      setShowCustomPicker(true);
+    }
+  };
+
+  const handleCustomRangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customFrom && customTo) {
+      setPagination(p => ({ ...p, page: 1 }));
+      fetchData();
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.total_pages) {
+      setPagination(p => ({ ...p, page: newPage }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   // Helper functions for data source status display
@@ -74,6 +166,15 @@ export function OverviewPage() {
     return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
   };
 
+  const getRangeLabel = (range: RangeValue): string => {
+    if (range === 'custom') {
+      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
+      return 'Benutzerdefiniert';
+    }
+    const option = RANGE_OPTIONS.find(o => o.value === range);
+    return option?.label || range;
+  };
+
   if (loading) {
     return (
       <div className="page-container">
@@ -95,11 +196,66 @@ export function OverviewPage() {
       <div className="overview-page__header">
         <h1 className="overview-page__title">Overview</h1>
         <p className="overview-page__subtitle">
-          Produktiver Einstieg · <span className="overview-page__status">Aktuell</span>
+          Produktiver Einstieg · <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
         </p>
       </div>
 
-      {/* KPI Cards - Real Data from Summary API */}\n      {summary && (
+      {/* Range Selector - like Statistics page */}
+      <section className="overview-page__section overview-page__section--range" aria-labelledby="range-heading">
+        <div className="overview-page__range-selector">
+          <label htmlFor="range-select" className="sr-only">Zeitraum</label>
+          <select
+            id="range-select"
+            value={selectedRange}
+            onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
+            className="overview-page__range-select"
+          >
+            {RANGE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+            <option value="custom">Benutzerdefiniert…</option>
+          </select>
+
+          {showCustomPicker && (
+            <form onSubmit={handleCustomRangeSubmit} className="overview-page__custom-range">
+              <div className="overview-page__date-inputs">
+                <div className="overview-page__date-input-group">
+                  <label htmlFor="custom-from" className="overview-page__date-label">Von</label>
+                  <input
+                    id="custom-from"
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="overview-page__date-input"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div className="overview-page__date-input-group">
+                  <label htmlFor="custom-to" className="overview-page__date-label">Bis</label>
+                  <input
+                    id="custom-to"
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="overview-page__date-input"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              </div>
+              <div className="overview-page__custom-actions">
+                <button type="submit" className="overview-page__apply-btn">Anwenden</button>
+                <button type="button" onClick={() => handleRangeChange('30d')} className="overview-page__cancel-btn">
+                  <X size={16} aria-hidden="true" />
+                  Abbrechen
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {/* KPI Cards - Real Data from Summary API */}
+      {summary && (
         <section className="overview-page__section" aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
           <div className="overview-page__kpi-grid">
@@ -152,10 +308,10 @@ export function OverviewPage() {
         </section>
       )}
 
-      {/* Sessions List */}
+      {/* Sessions List with Pagination */}
       <section className="overview-page__section" aria-labelledby="sessions-heading">
         <div className="overview-page__section-header">
-          <h2 id="sessions-heading" className="overview-page__section-title">Letzte 10 Sessions</h2>
+          <h2 id="sessions-heading" className="overview-page__section-title">Sessions im Zeitraum</h2>
           <button
             className="overview-page__view-all"
             onClick={() => navigate('/sessions')}
@@ -166,11 +322,11 @@ export function OverviewPage() {
 
         {sessions.length === 0 ? (
           <EmptyState
-            title="Keine Sessions"
-            message="Es wurden noch keine Ladevorgänge importiert."
+            title="Keine Sessions im Zeitraum"
+            message="Für den gewählten Zeitraum wurden keine Ladevorgänge gefunden."
             action={{
-              label: 'Import starten',
-              onClick: () => navigate('/import-review'),
+              label: 'Anderen Zeitraum wählen',
+              onClick: () => handleRangeChange('30d'),
             }}
           />
         ) : (
@@ -181,6 +337,35 @@ export function OverviewPage() {
                 <SessionMobileCard key={session.id} session={session} />
               ))}
             </div>
+
+            {/* Pagination */}
+            {pagination.total_pages > 1 && (
+              <nav className="overview-page__pagination" aria-label="Seiten-Navigation">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={!pagination.has_prev}
+                  className="overview-page__page-btn"
+                  aria-label="Vorherige Seite"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                <div className="overview-page__page-info">
+                  <span>
+                    Seite {pagination.page} von {pagination.total_pages} ({pagination.total} Sessions)
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={!pagination.has_next}
+                  className="overview-page__page-btn"
+                  aria-label="Nächste Seite"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </nav>
+            )}
           </div>
         )}
       </section>

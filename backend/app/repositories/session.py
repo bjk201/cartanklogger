@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, text, func
 from typing import List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.session import SessionModel
 
 
@@ -55,6 +55,43 @@ class SessionRepository:
         sessions = query.offset(offset).limit(page_size).all()
         
         return sessions, total
+
+    def get_sessions_by_date_range(
+        self,
+        range_days: Optional[int] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        limit: int = 10000,
+    ) -> List[SessionModel]:
+        """Get sessions filtered by date range, sorted by date descending."""
+        from sqlalchemy import func
+        query = self.db.query(SessionModel)
+        
+        # Apply time range filter - use SQLite date functions for TEXT dates with mixed formats
+        # SQLite date() can parse both 'YYYY-MM-DD HH:MM:SS' and 'YYYY-MM-DDTHH:MM:SS' formats
+        if from_date and to_date:
+            # Use date() function to normalize the stored dates for comparison
+            from_str = from_date
+            to_str = to_date + 'T23:59:59'
+            query = query.filter(
+                func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+                func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+            )
+        elif from_date and not to_date:
+            from_str = from_date
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+        elif range_days is not None:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=range_days)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+        
+        # Sort by date descending (newest first)
+        query = query.order_by(desc(SessionModel.date))
+        
+        # Apply limit
+        sessions = query.limit(limit).all()
+        
+        return sessions
 
     def get_statistics(self, range_days: Optional[int] = None) -> dict:
         """Get aggregated statistics for the given time range."""

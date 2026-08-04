@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-from datetime import datetime, timedelta
+from typing import List, Optional
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 
 from app.database import get_db
@@ -17,16 +17,47 @@ router = APIRouter(prefix="/overview", tags=["Overview"])
     response_model=OverviewResponse,
     summary="Get recent charging sessions",
     description="Returns globally sorted recent sessions from all sources (home, external, import). "
-                "Limit: min 1, max 100. Results sorted by date descending."
+                "Can be filtered by date range using 'days', 'from', and 'to' parameters. "
+                "If no range specified, defaults to last 30 days. Results sorted by date descending."
 )
 def get_recent_sessions(
-    limit: int = Query(10, ge=1, le=100, description="Number of sessions to return"),
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
+    limit: int = Query(100, ge=1, le=10000, description="Maximum number of sessions to return"),
     db: Session = Depends(get_db)
 ) -> OverviewResponse:
     repo = SessionRepository(db)
 
+    # Parse from/to dates - keep as strings for TEXT comparison in SQLite
+    from_dt = None
+    to_dt = None
+    if from_date:
+        try:
+            # Validate format
+            datetime.fromisoformat(from_date)
+            from_dt = from_date  # Pass as string
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid from_date format. Use YYYY-MM-DD")
+    if to_date:
+        try:
+            # Validate format
+            datetime.fromisoformat(to_date + "T23:59:59")
+            to_dt = to_date  # Pass as string (repository will add T23:59:59)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid to_date format. Use YYYY-MM-DD")
+
+    # Default to 30 days if no range specified
+    if not days and not from_dt:
+        days = 30
+
     # Get sessions (no seed data - only real production data)
-    sessions = repo.get_recent_sessions(limit=limit)
+    sessions = repo.get_sessions_by_date_range(
+        range_days=days,
+        from_date=from_dt,
+        to_date=to_dt,
+        limit=limit,
+    )
 
     # Map to response schema
     data = []
@@ -60,15 +91,45 @@ def get_recent_sessions(
     "/summary",
     response_model=OverviewSummaryResponse,
     summary="Get overview summary KPIs",
-    description="Returns aggregated KPIs for the overview page (all time)."
+    description="Returns aggregated KPIs for the overview page for the given time range."
 )
 def get_overview_summary(
+    days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
+    from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ) -> OverviewSummaryResponse:
     repo = SessionRepository(db)
 
-    # Get all sessions for aggregation (no seed data - only real production data)
-    sessions = repo.get_recent_sessions(limit=10000)  # Large limit to get all
+    # Parse from/to dates - keep as strings for TEXT comparison in SQLite
+    from_dt = None
+    to_dt = None
+    if from_date:
+        try:
+            # Validate format
+            datetime.fromisoformat(from_date)
+            from_dt = from_date
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid from_date format. Use YYYY-MM-DD")
+    if to_date:
+        try:
+            # Validate format
+            datetime.fromisoformat(to_date + "T23:59:59")
+            to_dt = to_date
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid to_date format. Use YYYY-MM-DD")
+
+    # Default to 30 days if no range specified
+    if not days and not from_dt:
+        days = 30
+
+    # Get all sessions for aggregation for the given range
+    sessions = repo.get_sessions_by_date_range(
+        range_days=days,
+        from_date=from_dt,
+        to_date=to_dt,
+        limit=10000,  # Large limit to get all
+    )
 
     total_sessions = len(sessions)
     total_energy = sum(s.energy_kwh or 0 for s in sessions)
