@@ -56,7 +56,10 @@ export function OverviewPage() {
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
-    } else if (selectedRange !== 'all') {
+    } else if (selectedRange === 'all') {
+      // For 'all', pass a very large days value to get all sessions
+      days = 36500; // ~100 years
+    } else {
       const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
       if (option?.value) {
         // Map preset values to days
@@ -64,7 +67,6 @@ export function OverviewPage() {
         days = daysMap[option.value];
       }
     }
-    // For 'all', we pass no days/from/to
 
     try {
       const [recentResponse, summaryResponse, statusResponse] = await Promise.all([
