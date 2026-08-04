@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# CarTankLogger – Auto-Update für CTL 1.0 und CTL 2.0
-# ------------------------------------------------
+# CarTankLogger 2.0 – Auto-Update für CTL 2.0 (V1 archiviert)
+# ---------------------------------------------------------
 # Einfach ausführen:  ./update.sh
 #
 # Was passiert:
 #   1. git pull (neuester Code von GitHub)
-#   2. CTL 1.0 (Legacy Flask) neu bauen & starten  -> Port 13131
-#   3. CTL 2.0 (FastAPI Backend) neu bauen & starten -> Port 13132
+#   2. CTL 2.0 (FastAPI Backend) neu bauen & starten -> Port 13132
+#   3. Frontend neu bauen & starten -> Port 5173
 #   4. Gesundheits-Checks für beide Services
 #
 # Verwendet reines 'docker' (kein docker-compose), weil docker-compose < v2
@@ -19,16 +19,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # ============================================================
-# KONFIGURATION
+# KONFIGURATION – NUR NOCH CTL 2.0
 # ============================================================
-
-# --- CTL 1.0 (Legacy Flask) ---
-CTL10_APP_NAME="cartanklogger"
-CTL10_IMAGE="${CTL10_APP_NAME}:latest"
-CTL10_HOST_PORT=13131
-CTL10_CONTAINER_PORT=5000
-CTL10_DB_PATH="/app/data/cartanklogger.db"
-CTL10_CONFIG_FILE="/app/config.yaml"
 
 # --- CTL 2.0 (FastAPI Backend) ---
 CTL20_APP_NAME="cartanklogger-backend"
@@ -39,6 +31,14 @@ CTL20_DB_PATH="/app/data/cartanklogger-ctl20.db"
 CTL20_CONFIG_FILE="/app/config.yaml"
 CTL20_BUILD_CONTEXT="./backend"
 CTL20_DOCKERFILE="backend/Dockerfile"
+
+# --- Frontend (React/Vite) ---
+FE_APP_NAME="cartanklogger-frontend"
+FE_IMAGE="${FE_APP_NAME}:latest"
+FE_HOST_PORT=5173
+FE_CONTAINER_PORT=5173
+FE_BUILD_CONTEXT="./frontend"
+FE_DOCKERFILE="frontend/Dockerfile"
 
 # --- Allgemein ---
 BUILD_TIME="$(date +%s)"
@@ -131,7 +131,7 @@ show_container_logs() {
 # ============================================================
 
 echo "============================================================"
-echo "CarTankLogger Deployment - Build: ${BUILD_TIME} - Commit: ${COMMIT_HASH}"
+echo "CarTankLogger 2.0 Deployment - Build: ${BUILD_TIME} - Commit: ${COMMIT_HASH}"
 echo "============================================================"
 
 # ------------------------------------------------------------
@@ -141,38 +141,7 @@ log_step "git pull (neuester Code)"
 git pull --ff-only
 
 # ------------------------------------------------------------
-# 2. CTL 1.0 (LEGACY FLASK) DEPLOYEN
-# ------------------------------------------------------------
-log_step "CTL 1.0 (Legacy Flask) deployen"
-
-stop_container "${CTL10_APP_NAME}"
-
-build_image "${CTL10_IMAGE}" "." "Dockerfile" "CTL 1.0 Legacy"
-
-log_info "Starte Container: ${CTL10_APP_NAME} auf Port ${CTL10_HOST_PORT}"
-# shellcheck disable=SC2086
-docker run -d \
-  --name "${CTL10_APP_NAME}" \
-  --restart unless-stopped \
-  -p "${CTL10_HOST_PORT}:${CTL10_CONTAINER_PORT}" \
-  -v "$(pwd)/config.yaml:${CTL10_CONFIG_FILE}" \
-  -v "$(pwd)/data:/app/data" \
-  -e CONFIG_PATH="${CTL10_CONFIG_FILE}" \
-  -e DB_PATH="${CTL10_DB_PATH}" \
-  -e MOCK_MODE="${MOCK_MODE}" \
-  -e APP_VERSION="${BUILD_TIME}" \
-  "${CTL10_IMAGE}"
-
-if wait_for_health "http://localhost:${CTL10_HOST_PORT}" "CTL 1.0"; then
-  log_success "CTL 1.0 läuft auf http://localhost:${CTL10_HOST_PORT}"
-else
-  log_error "CTL 1.0 Start fehlgeschlagen"
-  show_container_logs "${CTL10_APP_NAME}"
-  exit 1
-fi
-
-# ------------------------------------------------------------
-# 3. CTL 2.0 (FASTAPI BACKEND) DEPLOYEN
+# 2. CTL 2.0 (FASTAPI BACKEND) DEPLOYEN
 # ------------------------------------------------------------
 log_step "CTL 2.0 (FastAPI Backend) deployen"
 
@@ -183,11 +152,6 @@ build_image "${CTL20_IMAGE}" "${CTL20_BUILD_CONTEXT}" "${CTL20_DOCKERFILE}" "CTL
 # DB-Datei für CTL 2.0 explizit ausgeben
 CTL20_DB_FILE="$(pwd)/data/cartanklogger-ctl20.db"
 log_info "CTL 2.0 Datenbank: ${CTL20_DB_FILE}"
-
-# Prüfen ob Dry-Run-DB verwendet wird (für Logging)
-if [ -f "$(pwd)/data/cartanklogger-ctl20-dryrun.db" ] && [ ! -f "${CTL20_DB_FILE}" ]; then
-  log_info "HINWEIS: Dry-Run-DB vorhanden, aber keine finale CTL-2.0-DB. Starte mit leerer DB."
-fi
 
 # shellcheck disable=SC2086
 docker run -d \
@@ -204,11 +168,9 @@ docker run -d \
 
 if wait_for_health "http://localhost:${CTL20_HOST_PORT}/health" "CTL 2.0"; then
   log_success "CTL 2.0 läuft auf http://localhost:${CTL20_HOST_PORT}"
-  
+
   # DB-Typ im Log kennzeichnen
-  if [ -f "$(pwd)/data/cartanklogger-ctl20-dryrun.db" ] && [ ! -f "${CTL20_DB_FILE}" ]; then
-    log_info "CTL 2.0 running with DRY-RUN database (cartanklogger-ctl20-dryrun.db)"
-  elif [ -f "${CTL20_DB_FILE}" ]; then
+  if [ -f "${CTL20_DB_FILE}" ]; then
     log_info "CTL 2.0 running with PRODUCTION database (cartanklogger-ctl20.db)"
   else
     log_info "CTL 2.0 running with EMPTY database (first start)"
@@ -220,25 +182,50 @@ else
 fi
 
 # ------------------------------------------------------------
+# 3. FRONTEND DEPLOYEN
+# ------------------------------------------------------------
+log_step "Frontend (React/Vite) deployen"
+
+stop_container "${FE_APP_NAME}"
+
+build_image "${FE_IMAGE}" "${FE_BUILD_CONTEXT}" "${FE_DOCKERFILE}" "Frontend"
+
+docker run -d \
+  --name "${FE_APP_NAME}" \
+  --restart unless-stopped \
+  -p "${FE_HOST_PORT}:${FE_CONTAINER_PORT}" \
+  -v "$(pwd)/frontend:/app" \
+  -v "/app/node_modules" \
+  -e VITE_API_BASE=/api \
+  "${FE_IMAGE}"
+
+if wait_for_health "http://localhost:${FE_HOST_PORT}" "Frontend"; then
+  log_success "Frontend läuft auf http://localhost:${FE_HOST_PORT}"
+else
+  log_error "Frontend Start fehlgeschlagen"
+  show_container_logs "${FE_APP_NAME}"
+  exit 1
+fi
+
+# ------------------------------------------------------------
 # 4. ZUSAMMENFASSUNG
 # ------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo "✅ DEPLOYMENT ERFOLGREICH ABGESCHLOSSEN"
+echo "✅ DEPLOYMENT ERFOLGREICH ABGESCHLOSSEN (CTL 2.0 only)"
 echo "============================================================"
 echo ""
 echo "Services:"
-echo "  CTL 1.0 (Legacy Flask) : http://localhost:${CTL10_HOST_PORT}"
 echo "  CTL 2.0 (FastAPI Backend): http://localhost:${CTL20_HOST_PORT}"
 echo "                            API Docs: http://localhost:${CTL20_HOST_PORT}/docs"
+echo "  Frontend (React/Vite)     : http://localhost:${FE_HOST_PORT}"
 echo ""
-echo "Datenbanken:"
-echo "  CTL 1.0 : $(pwd)/data/cartanklogger.db"
+echo "Datenbank:"
 echo "  CTL 2.0 : $(pwd)/data/cartanklogger-ctl20.db"
 echo ""
 echo "Container:"
-echo "  ${CTL10_APP_NAME}  (Port ${CTL10_HOST_PORT})"
 echo "  ${CTL20_APP_NAME}  (Port ${CTL20_HOST_PORT})"
+echo "  ${FE_APP_NAME}   (Port ${FE_HOST_PORT})"
 echo ""
 echo "Build-Info:"
 echo "  Zeitstempel: ${BUILD_TIME}"

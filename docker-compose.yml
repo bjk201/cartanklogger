@@ -1,4 +1,5 @@
-# CarTankLogger – Docker Compose (Portainer-Stack via Git Repository)
+# CarTankLogger 2.0 – Docker Compose (Portainer-Stack via Git Repository)
+# V1 (Legacy Flask) archiviert – nur noch V2 aktiv
 #
 # So einrichten in Portainer:
 #   1) Stacks -> Add stack -> Repository (Git)
@@ -21,24 +22,7 @@
 #   - Passe die Pfade ggf. an dein Arbeitsverzeichnis an (relativ zum Compose-File).
 
 services:
-  # Legacy Flask App (CTL 1.0) - remains unchanged
-  cartanklogger:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: cartanklogger:latest
-    ports:
-      - "13131:5000"
-    volumes:
-      - ./data:/app/data
-      - ./config:/app/config
-    environment:
-      - CONFIG_PATH=/app/config/config.yaml
-      - DB_PATH=/app/data/cartanklogger.db
-      - MOCK_MODE=${MOCK_MODE:-false}
-    restart: unless-stopped
-
-  # New FastAPI Backend (CTL 2.0)
+  # FastAPI Backend (CTL 2.0) – einziger aktiver Service
   cartanklogger-backend:
     build:
       context: ./backend
@@ -55,11 +39,26 @@ services:
       - MOCK_MODE=${MOCK_MODE:-false}
       - ALLOWED_ORIGINS=http://localhost:13131,http://127.0.0.1:13131,http://localhost:13132,http://127.0.0.1:13132
     restart: unless-stopped
-    depends_on:
-      - cartanklogger
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+
+  # Frontend (Vite dev server für Development, für Production: nginx/serve-static)
+  cartanklogger-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: cartanklogger-frontend:latest
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE=/api
+    restart: unless-stopped
+    depends_on:
+      - cartanklogger-backend
