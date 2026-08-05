@@ -1,8 +1,61 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Minus, BarChart, BarChart3 } from 'lucide-react';
-import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, type StatisticsResponse, type StatisticsKPIs, type SourceBreakdown } from '../lib/apiClient';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Zap,
+  Hash,
+  ChevronLeft,
+  ChevronRight,
+  BarChart2,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight,
+  MapPin,
+  Minus,
+  BarChart,
+  BarChart3,
+} from 'lucide-react';
+import {
+  LoadingState,
+  ErrorState,
+  EmptyState,
+} from '../components/StateViews';
+import {
+  api,
+  type StatisticsResponse,
+  type StatisticsKPIs,
+  type SourceBreakdown,
+} from '../lib/apiClient';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  ArcElement,
+} from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
 import './StatisticsPage.css';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  ArcElement
+);
 
 const RANGE_OPTIONS = [
   { value: '7d', label: '7 Tage' },
@@ -28,7 +81,7 @@ export function StatisticsPage() {
   const fetchStatistics = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     // Determine API parameters based on selected range
     let days: number | undefined;
     let from_date: string | undefined;
@@ -40,20 +93,29 @@ export function StatisticsPage() {
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
     } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
+      const option = RANGE_OPTIONS.find((o) => o.value === selectedRange);
       if (option?.value) {
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
+        const daysMap: Record<string, number> = {
+          '7d': 7,
+          '30d': 30,
+          '90d': 90,
+          '365d': 365,
+        };
         days = daysMap[option.value];
       }
     }
 
     try {
-      const response: StatisticsResponse = await api.getStatistics(days, from_date, to_date);
-      
+      const response: StatisticsResponse = await api.getStatistics(
+        days,
+        from_date,
+        to_date
+      );
+
       if (!response.ok) {
         throw new Error('API returned error status');
       }
-      
+
       setData(response);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -90,7 +152,7 @@ export function StatisticsPage() {
       if (customFrom && customTo) return `${customFrom} – ${customTo}`;
       return 'Benutzerdefiniert';
     }
-    const option = RANGE_OPTIONS.find(o => o.value === range);
+    const option = RANGE_OPTIONS.find((o) => o.value === range);
     return option?.label || range;
   };
 
@@ -109,18 +171,260 @@ export function StatisticsPage() {
   };
 
   const formatEur = (num: number): string => {
-    return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    return (
+      num.toLocaleString('de-DE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }) + ' €'
+    );
   };
 
   const formatCostPerKWh = (num: number | null): string => {
     if (num === null || num === undefined) return '—';
-    return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
+    return (
+      num.toLocaleString('de-DE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 3,
+      }) + ' €/kWh'
+    );
   };
 
   const getPercentage = (value: number, total: number): number => {
     if (total === 0) return 0;
     return Math.round((value / total) * 100);
   };
+
+  // Chart data for Daily Drives (km and kWh)
+  const dailyDrivesChartData = useMemo(() => {
+    if (!data?.kpis?.daily_dates || data.kpis.daily_dates.length === 0) return null;
+
+    return {
+      labels: data.kpis.daily_dates.map((d) => d.slice(5)), // MM-DD format
+      datasets: [
+        {
+          label: 'km',
+          data: data.kpis.daily_km || [],
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'y',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+        {
+          label: 'kWh',
+          data: data.kpis.daily_kwh || [],
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'y1',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    };
+  }, [data?.kpis?.daily_dates, data?.kpis?.daily_km, data?.kpis?.daily_kwh]);
+
+  const dailyDrivesChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          font: { size: 13, family: 'system-ui' },
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: 12,
+        titleFont: { size: 13, family: 'system-ui' },
+        bodyFont: { size: 12, family: 'system-ui' },
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} ${label === 'km' ? 'km' : 'kWh'}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#666',
+          maxTicksLimit: 12,
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+          display: true,
+          text: 'km',
+          font: { size: 12, family: 'system-ui', weight: '500' as const },
+          color: '#3b82f6',
+        },
+        grid: {
+          color: '#e0e0e0',
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#444',
+        },
+        min: 0,
+      },
+      y1: {
+        type: 'linear' as const,
+        display: true,
+        position: 'right' as const,
+        title: {
+          display: true,
+          text: 'kWh',
+          font: { size: 12, family: 'system-ui', weight: '500' as const },
+          color: '#f59e0b',
+        },
+        grid: {
+          drawOnChartArea: false,
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#444',
+        },
+        min: 0,
+      },
+    },
+  }), []);
+
+  // Chart data for Daily Charged Energy (stacked bars + line)
+  const dailyChargedChartData = useMemo(() => {
+    if (!data?.kpis?.daily_charged_dates || data.kpis.daily_charged_dates.length === 0)
+      return null;
+
+    return {
+      labels: data.kpis.daily_charged_dates.map((d) => d.slice(5)), // MM-DD format
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Home',
+          data: data.kpis.daily_home_kwh || [],
+          backgroundColor: '#22c55e',
+          borderColor: '#16a34a',
+          borderWidth: 1,
+          yAxisID: 'y',
+          order: 3,
+        },
+        {
+          type: 'bar',
+          label: 'Extern',
+          data: data.kpis.daily_external_kwh || [],
+          backgroundColor: '#3b82f6',
+          borderColor: '#2563eb',
+          borderWidth: 1,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: 'Gesamt',
+          data: data.kpis.daily_total_kwh || [],
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          borderWidth: 3,
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'y',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#f59e0b',
+          order: 1,
+        },
+      ],
+    };
+  }, [
+    data?.kpis?.daily_charged_dates,
+    data?.kpis?.daily_home_kwh,
+    data?.kpis?.daily_external_kwh,
+    data?.kpis?.daily_total_kwh,
+  ]);
+
+  const dailyChargedChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          font: { size: 13, family: 'system-ui' },
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: 12,
+        titleFont: { size: 13, family: 'system-ui' },
+        bodyFont: { size: 12, family: 'system-ui' },
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: {
+          display: false,
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#666',
+          maxTicksLimit: 12,
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        stacked: true,
+        title: {
+          display: true,
+          text: 'kWh',
+          font: { size: 12, family: 'system-ui', weight: '500' as const },
+          color: '#444',
+        },
+        grid: {
+          color: '#e0e0e0',
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#444',
+        },
+        min: 0,
+      },
+    },
+  }), []);
 
   if (loading) {
     return <LoadingState message="Statistiken werden geladen…" />;
@@ -134,7 +438,13 @@ export function StatisticsPage() {
     return <EmptyState title="Keine Daten" message="Keine statistischen Daten verfügbar." />;
   }
 
-  const { kpis, energy_by_source, cost_by_source, sessions_by_source, range_label } = data;
+  const {
+    kpis,
+    energy_by_source,
+    cost_by_source,
+    sessions_by_source,
+    range_label,
+  } = data;
 
   return (
     <div className="page-container">
@@ -143,19 +453,26 @@ export function StatisticsPage() {
           <div>
             <h1 className="statistics-page__title">Statistik</h1>
             <p className="statistics-page__subtitle">
-              Auswertung der Ladevorgänge · <span className="statistics-page__range-badge">{getRangeLabel(selectedRange)}</span>
+              Auswertung der Ladevorgänge ·{' '}
+              <span className="statistics-page__range-badge">
+                {getRangeLabel(selectedRange)}
+              </span>
             </p>
           </div>
           <div className="statistics-page__range-selector">
-            <label htmlFor="range-select" className="sr-only">Zeitraum</label>
+            <label htmlFor="range-select" className="sr-only">
+              Zeitraum
+            </label>
             <select
               id="range-select"
               value={selectedRange}
               onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
               className="statistics-page__range-select"
             >
-              {RANGE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              {RANGE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
 
@@ -163,7 +480,9 @@ export function StatisticsPage() {
               <form onSubmit={handleCustomRangeSubmit} className="statistics-page__custom-range">
                 <div className="statistics-page__date-inputs">
                   <div className="statistics-page__date-input-group">
-                    <label htmlFor="custom-from" className="statistics-page__date-label">Von</label>
+                    <label htmlFor="custom-from" className="statistics-page__date-label">
+                      Von
+                    </label>
                     <input
                       id="custom-from"
                       type="date"
@@ -174,7 +493,9 @@ export function StatisticsPage() {
                     />
                   </div>
                   <div className="statistics-page__date-input-group">
-                    <label htmlFor="custom-to" className="statistics-page__date-label">Bis</label>
+                    <label htmlFor="custom-to" className="statistics-page__date-label">
+                      Bis
+                    </label>
                     <input
                       id="custom-to"
                       type="date"
@@ -186,8 +507,14 @@ export function StatisticsPage() {
                   </div>
                 </div>
                 <div className="statistics-page__custom-actions">
-                  <button type="submit" className="statistics-page__apply-btn">Anwenden</button>
-                  <button type="button" onClick={() => handleRangeChange('30d')} className="statistics-page__cancel-btn">
+                  <button type="submit" className="statistics-page__apply-btn">
+                    Anwenden
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRangeChange('30d')}
+                    className="statistics-page__cancel-btn"
+                  >
                     Abbrechen
                   </button>
                 </div>
@@ -198,7 +525,9 @@ export function StatisticsPage() {
 
         {/* KPI Cards */}
         <section className="statistics-page__section" aria-labelledby="kpis-heading">
-          <h2 id="kpis-heading" className="statistics-page__section-title">Kennzahlen</h2>
+          <h2 id="kpis-heading" className="statistics-page__section-title">
+            Kennzahlen
+          </h2>
           <div className="statistics-page__kpi-grid">
             <article className="kpi-card">
               <div className="kpi-card__icon" aria-hidden="true">
@@ -206,7 +535,9 @@ export function StatisticsPage() {
               </div>
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Gesamt geladen</span>
-                <span className="kpi-card__value">{formatKWh(kpis.total_energy_kwh)} kWh</span>
+                <span className="kpi-card__value">
+                  {formatKWh(kpis.total_energy_kwh)} kWh
+                </span>
               </div>
             </article>
 
@@ -226,7 +557,9 @@ export function StatisticsPage() {
               </div>
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Ø Kosten/kWh</span>
-                <span className="kpi-card__value">{formatCostPerKWh(kpis.avg_cost_per_kwh)}</span>
+                <span className="kpi-card__value">
+                  {formatCostPerKWh(kpis.avg_cost_per_kwh)}
+                </span>
               </div>
             </article>
 
@@ -268,11 +601,24 @@ export function StatisticsPage() {
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Ladeverlust</span>
                 <span className="kpi-card__value">
-                  {kpis.charging_losses_kwh !== null && kpis.charging_losses_pct !== null ? (
+                  {kpis.charging_losses_kwh !== null &&
+                  kpis.charging_losses_pct !== null ? (
                     <>
-                      <span className="kpi-card__value-main">{formatKWh(Math.abs(kpis.charging_losses_kwh))} kWh</span>
+                      <span className="kpi-card__value-main">
+                        {formatKWh(Math.abs(kpis.charging_losses_kwh))} kWh
+                      </span>
                       <span className="kpi-card__value-sub">
-                        {kpis.charging_losses_kwh >= 0 ? <ArrowUpRight size={12} className="kpi-card__loss-positive" /> : <ArrowDownRight size={12} className="kpi-card__loss-negative" />}
+                        {kpis.charging_losses_kwh >= 0 ? (
+                          <ArrowUpRight
+                            size={12}
+                            className="kpi-card__loss-positive"
+                          />
+                        ) : (
+                          <ArrowDownRight
+                            size={12}
+                            className="kpi-card__loss-negative"
+                          />
+                        )}
                         {Math.abs(kpis.charging_losses_pct).toFixed(1)}%
                       </span>
                     </>
@@ -291,15 +637,20 @@ export function StatisticsPage() {
               <div className="kpi-card__content">
                 <span className="kpi-card__label">DC / AC (External)</span>
                 <span className="kpi-card__value">
-                  {kpis.external_dc_sessions !== null && kpis.external_ac_sessions !== null ? (
+                  {kpis.external_dc_sessions !== null &&
+                  kpis.external_ac_sessions !== null ? (
                     <>
                       <span className="kpi-card__value-main">
-                        DC: {kpis.external_dc_sessions} · AC: {kpis.external_ac_sessions}
+                        DC: {kpis.external_dc_sessions} · AC:{' '}
+                        {kpis.external_ac_sessions}
                       </span>
                       <span className="kpi-card__value-sub">
-                        {kpis.external_dc_energy_kwh !== null && kpis.external_ac_energy_kwh !== null && (
+                        {kpis.external_dc_energy_kwh !== null &&
+                        kpis.external_ac_energy_kwh !== null && (
                           <>
-                            DC: {formatKWh(kpis.external_dc_energy_kwh)} kWh · AC: {formatKWh(kpis.external_ac_energy_kwh)} kWh
+                            DC:{' '}
+                            {formatKWh(kpis.external_dc_energy_kwh)} kWh · AC:{' '}
+                            {formatKWh(kpis.external_ac_energy_kwh)} kWh
                           </>
                         )}
                       </span>
@@ -319,11 +670,18 @@ export function StatisticsPage() {
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Externer Ladeverlust</span>
                 <span className="kpi-card__value">
-                  {kpis.external_charging_losses_kwh !== null && kpis.external_charging_losses_pct !== null ? (
+                  {kpis.external_charging_losses_kwh !== null &&
+                  kpis.external_charging_losses_pct !== null ? (
                     <>
-                      <span className="kpi-card__value-main">{formatKWh(Math.abs(kpis.external_charging_losses_kwh))} kWh</span>
+                      <span className="kpi-card__value-main">
+                        {formatKWh(Math.abs(kpis.external_charging_losses_kwh))} kWh
+                      </span>
                       <span className="kpi-card__value-sub">
-                        {kpis.external_charging_losses_kwh >= 0 ? <ArrowUpRight size={12} className="kpi-card__loss-positive" /> : <ArrowDownRight size={12} className="kpi-card__loss-negative" />}
+                        {kpis.external_charging_losses_kwh >= 0 ? (
+                          <ArrowUpRight size={12} className="kpi-card__loss-positive" />
+                        ) : (
+                          <ArrowDownRight size={12} className="kpi-card__loss-negative" />
+                        )}
                         {Math.abs(kpis.external_charging_losses_pct).toFixed(1)}%
                       </span>
                     </>
@@ -338,28 +696,38 @@ export function StatisticsPage() {
 
         {/* Pro Session */}
         <section className="statistics-page__section" aria-labelledby="session-stats-heading">
-          <h2 id="session-stats-heading" className="statistics-page__section-title">Pro Session</h2>
+          <h2 id="session-stats-heading" className="statistics-page__section-title">
+            Pro Session
+          </h2>
           <div className="statistics-page__session-stats-grid">
             <article className="session-stat-card">
               <span className="session-stat-card__label">Ø Energie / Session</span>
               <span className="session-stat-card__value">
-                {kpis.avg_energy_per_session !== null ? formatKWh(kpis.avg_energy_per_session) + ' kWh' : '—'}
+                {kpis.avg_energy_per_session !== null
+                  ? formatKWh(kpis.avg_energy_per_session) + ' kWh'
+                  : '—'}
               </span>
             </article>
 
             <article className="session-stat-card">
               <span className="session-stat-card__label">Ø Kosten / Session</span>
               <span className="session-stat-card__value">
-                {kpis.avg_cost_per_session !== null ? formatEur(kpis.avg_cost_per_session) : '—'}
+                {kpis.avg_cost_per_session !== null
+                  ? formatEur(kpis.avg_cost_per_session)
+                  : '—'}
               </span>
             </article>
 
             <article className="session-stat-card">
               <span className="session-stat-card__label">Größte Session (kWh)</span>
               <span className="session-stat-card__value">
-                {kpis.max_energy_session !== null ? formatKWh(kpis.max_energy_session) + ' kWh' : '—'}
+                {kpis.max_energy_session !== null
+                  ? formatKWh(kpis.max_energy_session) + ' kWh'
+                  : '—'}
                 {kpis.max_energy_session_id && (
-                  <span className="session-stat-card__id">ID: {kpis.max_energy_session_id}</span>
+                  <span className="session-stat-card__id">
+                    ID: {kpis.max_energy_session_id}
+                  </span>
                 )}
               </span>
             </article>
@@ -367,9 +735,13 @@ export function StatisticsPage() {
             <article className="session-stat-card">
               <span className="session-stat-card__label">Teuerste Session</span>
               <span className="session-stat-card__value">
-                {kpis.max_cost_session !== null ? formatEur(kpis.max_cost_session) : '—'}
+                {kpis.max_cost_session !== null
+                  ? formatEur(kpis.max_cost_session)
+                  : '—'}
                 {kpis.max_cost_session_id && (
-                  <span className="session-stat-card__id">ID: {kpis.max_cost_session_id}</span>
+                  <span className="session-stat-card__id">
+                    ID: {kpis.max_cost_session_id}
+                  </span>
                 )}
               </span>
             </article>
@@ -377,13 +749,17 @@ export function StatisticsPage() {
         </section>
 
         {/* Daily Drives Chart */}
-        {(kpis.daily_dates && kpis.daily_dates.length > 0) && (
+        {kpis.daily_dates && kpis.daily_dates.length > 0 && (
           <section className="statistics-page__section" aria-labelledby="daily-drives-heading">
             <div className="statistics-page__chart-header">
-              <h2 id="daily-drives-heading" className="statistics-page__section-title">Tägliche Fahrten (TeslaMate)</h2>
+              <h2 id="daily-drives-heading" className="statistics-page__section-title">
+                Tägliche Fahrten (TeslaMate)
+              </h2>
               <div className="statistics-page__chart-toggle">
                 <button
-                  className={`statistics-page__chart-toggle-btn ${chartType === 'line' ? 'active' : ''}`}
+                  className={`statistics-page__chart-toggle-btn ${
+                    chartType === 'line' ? 'active' : ''
+                  }`}
                   onClick={() => setChartType('line')}
                   aria-pressed={chartType === 'line'}
                   title="Liniendiagramm"
@@ -391,7 +767,9 @@ export function StatisticsPage() {
                   <BarChart3 size={16} />
                 </button>
                 <button
-                  className={`statistics-page__chart-toggle-btn ${chartType === 'bar' ? 'active' : ''}`}
+                  className={`statistics-page__chart-toggle-btn ${
+                    chartType === 'bar' ? 'active' : ''
+                  }`}
                   onClick={() => setChartType('bar')}
                   aria-pressed={chartType === 'bar'}
                   title="Balkendiagramm"
@@ -401,80 +779,152 @@ export function StatisticsPage() {
               </div>
             </div>
             <div className="statistics-page__chart-container">
-              <DailyDrivesChart 
-                dates={kpis.daily_dates} 
-                km={kpis.daily_km} 
-                kwh={kpis.daily_kwh}
-                type={chartType}
-              />
+              {dailyDrivesChartData && (
+                <div className="statistics-page__chart-wrapper">
+                  {chartType === 'line' ? (
+                    <Line
+                      data={dailyDrivesChartData}
+                      options={dailyDrivesChartOptions as any}
+                      aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Linien)`}
+                    />
+                  ) : (
+                    <Bar
+                      data={{
+                        ...dailyDrivesChartData,
+                        datasets: dailyDrivesChartData.datasets.map((ds) => ({
+                          ...ds,
+                          type: 'bar' as const,
+                          fill: true,
+                          backgroundColor: ds.backgroundColor,
+                          borderColor: ds.borderColor,
+                          borderWidth: 1,
+                        })),
+                      }}
+                      options={{
+                        ...dailyDrivesChartOptions,
+                        scales: {
+                          ...dailyDrivesChartOptions.scales,
+                          x: {
+                            ...dailyDrivesChartOptions.scales.x,
+                            stacked: false,
+                          },
+                          y: {
+                            ...dailyDrivesChartOptions.scales.y,
+                            stacked: false,
+                          },
+                          y1: {
+                            ...dailyDrivesChartOptions.scales.y1,
+                            stacked: false,
+                          },
+                        },
+                      } as any}
+                      aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Balken)`}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </section>
         )}
 
         {/* Daily Charged Energy Chart */}
-        {(kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0) && (
+        {kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0 && (
           <section className="statistics-page__section" aria-labelledby="daily-charged-heading">
-            <h2 id="daily-charged-heading" className="statistics-page__section-title">Täglich geladene Energie</h2>
+            <h2 id="daily-charged-heading" className="statistics-page__section-title">
+              Täglich geladene Energie
+            </h2>
             <div className="statistics-page__chart-container">
-              <DailyChargedChart 
-                dates={kpis.daily_charged_dates} 
-                home_kwh={kpis.daily_home_kwh} 
-                external_kwh={kpis.daily_external_kwh}
-                total_kwh={kpis.daily_total_kwh}
-              />
+              {dailyChargedChartData && (
+                <div className="statistics-page__chart-wrapper">
+                  <Bar
+                    data={dailyChargedChartData as any}
+                    options={dailyChargedChartOptions as any}
+                    aria-label={`Täglich geladene Energie: ${kpis.daily_charged_dates.length} Tage, Home/Extern/Gesamt kWh`}
+                  />
+                </div>
+              )}
             </div>
           </section>
         )}
 
         {/* Energy Distribution */}
         <section className="statistics-page__section" aria-labelledby="energy-dist-heading">
-          <h2 id="energy-dist-heading" className="statistics-page__section-title">Energie-Verteilung (kWh)</h2>
+          <h2 id="energy-dist-heading" className="statistics-page__section-title">
+            Energie-Verteilung (kWh)
+          </h2>
           <div className="statistics-page__distribution-grid">
             <article className="distribution-card distribution-card--home">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Home (EVCC)</span>
-                <span className="distribution-card__percentage">{getPercentage(energy_by_source.home, energy_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(energy_by_source.home, energy_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--home"
-                  style={{ width: `${getPercentage(energy_by_source.home, energy_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      energy_by_source.home,
+                      energy_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatKWh(energy_by_source.home)} kWh</span>
+                <span className="distribution-card__value">
+                  {formatKWh(energy_by_source.home)} kWh
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--external">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">External (TeslaMate)</span>
-                <span className="distribution-card__percentage">{getPercentage(energy_by_source.external, energy_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(energy_by_source.external, energy_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--external"
-                  style={{ width: `${getPercentage(energy_by_source.external, energy_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      energy_by_source.external,
+                      energy_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatKWh(energy_by_source.external)} kWh</span>
+                <span className="distribution-card__value">
+                  {formatKWh(energy_by_source.external)} kWh
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--import">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
-                <span className="distribution-card__percentage">{getPercentage(energy_by_source.import, energy_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(energy_by_source.import, energy_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--import"
-                  style={{ width: `${getPercentage(energy_by_source.import, energy_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      energy_by_source.import,
+                      energy_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatKWh(energy_by_source.import)} kWh</span>
+                <span className="distribution-card__value">
+                  {formatKWh(energy_by_source.import)} kWh
+                </span>
               </footer>
             </article>
           </div>
@@ -482,53 +932,82 @@ export function StatisticsPage() {
 
         {/* Cost Distribution */}
         <section className="statistics-page__section" aria-labelledby="cost-dist-heading">
-          <h2 id="cost-dist-heading" className="statistics-page__section-title">Kosten-Verteilung</h2>
+          <h2 id="cost-dist-heading" className="statistics-page__section-title">
+            Kosten-Verteilung
+          </h2>
           <div className="statistics-page__distribution-grid">
             <article className="distribution-card distribution-card--home">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Home (EVCC)</span>
-                <span className="distribution-card__percentage">{getPercentage(cost_by_source.home, cost_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(cost_by_source.home, cost_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--home"
-                  style={{ width: `${getPercentage(cost_by_source.home, cost_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      cost_by_source.home,
+                      cost_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatEur(cost_by_source.home)}</span>
+                <span className="distribution-card__value">
+                  {formatEur(cost_by_source.home)}
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--external">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">External (TeslaMate)</span>
-                <span className="distribution-card__percentage">{getPercentage(cost_by_source.external, cost_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(cost_by_source.external, cost_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--external"
-                  style={{ width: `${getPercentage(cost_by_source.external, cost_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      cost_by_source.external,
+                      cost_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatEur(cost_by_source.external)}</span>
+                <span className="distribution-card__value">
+                  {formatEur(cost_by_source.external)}
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--import">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
-                <span className="distribution-card__percentage">{getPercentage(cost_by_source.import, cost_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(cost_by_source.import, cost_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--import"
-                  style={{ width: `${getPercentage(cost_by_source.import, cost_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      cost_by_source.import,
+                      cost_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{formatEur(cost_by_source.import)}</span>
+                <span className="distribution-card__value">
+                  {formatEur(cost_by_source.import)}
+                </span>
               </footer>
             </article>
           </div>
@@ -536,351 +1015,87 @@ export function StatisticsPage() {
 
         {/* Sessions Distribution */}
         <section className="statistics-page__section" aria-labelledby="sessions-dist-heading">
-          <h2 id="sessions-dist-heading" className="statistics-page__section-title">Sessions-Verteilung</h2>
+          <h2 id="sessions-dist-heading" className="statistics-page__section-title">
+            Sessions-Verteilung
+          </h2>
           <div className="statistics-page__distribution-grid">
             <article className="distribution-card distribution-card--home">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Home (EVCC)</span>
-                <span className="distribution-card__percentage">{getPercentage(sessions_by_source.home, sessions_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(sessions_by_source.home, sessions_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--home"
-                  style={{ width: `${getPercentage(sessions_by_source.home, sessions_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      sessions_by_source.home,
+                      sessions_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{sessions_by_source.home.toFixed(0)} Sessions</span>
+                <span className="distribution-card__value">
+                  {sessions_by_source.home.toFixed(0)} Sessions
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--external">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">External (TeslaMate)</span>
-                <span className="distribution-card__percentage">{getPercentage(sessions_by_source.external, sessions_by_source.total)}%</span>
+                <span className="distribution-page__percentage">
+                  {getPercentage(sessions_by_source.external, sessions_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--external"
-                  style={{ width: `${getPercentage(sessions_by_source.external, sessions_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      sessions_by_source.external,
+                      sessions_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{sessions_by_source.external.toFixed(0)} Sessions</span>
+                <span className="distribution-card__value">
+                  {sessions_by_source.external.toFixed(0)} Sessions
+                </span>
               </footer>
             </article>
 
             <article className="distribution-card distribution-card--import">
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
-                <span className="distribution-card__percentage">{getPercentage(sessions_by_source.import, sessions_by_source.total)}%</span>
+                <span className="distribution-card__percentage">
+                  {getPercentage(sessions_by_source.import, sessions_by_source.total)}%
+                </span>
               </header>
               <div className="distribution-card__bar">
-                <div 
+                <div
                   className="distribution-card__fill distribution-card__fill--import"
-                  style={{ width: `${getPercentage(sessions_by_source.import, sessions_by_source.total)}%` }}
+                  style={{
+                    width: `${getPercentage(
+                      sessions_by_source.import,
+                      sessions_by_source.total
+                    )}%`,
+                  }}
                 />
               </div>
               <footer className="distribution-card__footer">
-                <span className="distribution-card__value">{sessions_by_source.import.toFixed(0)} Sessions</span>
+                <span className="distribution-card__value">
+                  {sessions_by_source.import.toFixed(0)} Sessions
+                </span>
               </footer>
             </article>
           </div>
         </section>
       </div>
     </div>
-  );
-}
-
-// Daily Drives Chart Component
-interface DailyDrivesChartProps {
-  dates: string[];
-  km: number[];
-  kwh: number[];
-  type: 'line' | 'bar';
-}
-
-function DailyDrivesChart({ dates, km, kwh, type }: DailyDrivesChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Set canvas size for high DPI
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
-
-      const width = rect.width;
-      const height = rect.height;
-      const padding = { top: 30, right: 60, bottom: 50, left: 60 };
-      const chartWidth = width - padding.left - padding.right;
-      const chartHeight = height - padding.top - padding.bottom;
-
-      // Clear
-      ctx.clearRect(0, 0, width, height);
-
-      // Find max values for scaling
-      const maxKm = Math.max(...km, 0);
-      const maxKwh = Math.max(...kwh, 0);
-      const maxKmScaled = maxKm > 0 ? maxKm * 1.1 : 10;
-      const maxKwhScaled = maxKwh > 0 ? maxKwh * 1.1 : 10;
-
-      // Draw grid lines and Y-axis labels
-      ctx.strokeStyle = '#e0e0e0';
-      ctx.font = '13px system-ui';
-      ctx.fillStyle = '#444';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-
-      // Grid lines (5 horizontal lines)
-      for (let i = 0; i <= 4; i++) {
-        const y = padding.top + (chartHeight / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(width - padding.right, y);
-        ctx.stroke();
-
-        // Left Y-axis (km)
-        const kmVal = maxKmScaled * (1 - i / 4);
-        ctx.fillText(kmVal.toFixed(1) + ' km', padding.left - 10, y);
-
-        // Right Y-axis (kWh)
-        const kwhVal = maxKwhScaled * (1 - i / 4);
-        ctx.fillText(kwhVal.toFixed(1) + ' kWh', width - padding.right + 10, y);
-      }
-
-      // X-axis labels (dates)
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.font = '12px system-ui';
-      ctx.fillStyle = '#444';
-      const step = Math.max(1, Math.floor(dates.length / 10)); // Show max ~10 labels
-      dates.forEach((date, i) => {
-        if (i % step === 0 || i === dates.length - 1) {
-          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-          ctx.fillText(date.slice(5), x, height - padding.bottom + 8); // MM-DD format
-        }
-      });
-
-      const barWidth = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.6 : chartWidth * 0.6;
-      const barOffset = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.2 : 0;
-
-      if (type === 'bar') {
-        // Draw km bars (blue)
-        ctx.fillStyle = '#3b82f6';
-        km.forEach((val, i) => {
-          const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2 + barOffset;
-          const barHeight = (val / maxKmScaled) * chartHeight;
-          const y = padding.top + chartHeight - barHeight;
-          ctx.fillRect(x, y, barWidth, barHeight);
-        });
-
-        // Draw kWh bars (orange) - offset to the right
-        ctx.fillStyle = '#f59e0b';
-        kwh.forEach((val, i) => {
-          const x = padding.left + (chartWidth / (dates.length - 1)) * i + barWidth / 2 + barOffset;
-          const barHeight = (val / maxKwhScaled) * chartHeight;
-          const y = padding.top + chartHeight - barHeight;
-          ctx.fillRect(x, y, barWidth, barHeight);
-        });
-      } else {
-        // Draw km line (blue)
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        km.forEach((val, i) => {
-          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-          const y = padding.top + chartHeight * (1 - val / maxKmScaled);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        // Draw kWh line (orange)
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        kwh.forEach((val, i) => {
-          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-          const y = padding.top + chartHeight * (1 - val / maxKwhScaled);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-      }
-
-      // Legend
-      ctx.font = '13px system-ui';
-      ctx.fillStyle = '#3b82f6';
-      ctx.fillRect(padding.left, padding.top - 22, 14, 14);
-      ctx.fillStyle = '#333';
-      ctx.textAlign = 'left';
-      ctx.fillText('km', padding.left + 20, padding.top - 10);
-
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(padding.left + 60, padding.top - 22, 14, 14);
-      ctx.fillStyle = '#333';
-      ctx.fillText('kWh', padding.left + 78, padding.top - 10);
-
-    }, [dates, km, kwh, type]);
-
-  return (
-    <canvas 
-      ref={canvasRef} 
-      className="statistics-page__chart-canvas"
-      width={800} 
-      height={300}
-      role="img"
-      aria-label={`Tägliche Fahrten: ${dates.length} Tage, km und kWh (${type === 'line' ? 'Linien' : 'Balken'})`}
-    />
-  );
-}
-
-// Daily Charged Energy Chart Component
-interface DailyChargedChartProps {
-  dates: string[];
-  home_kwh: number[];
-  external_kwh: number[];
-  total_kwh: number[];
-}
-
-function DailyChargedChart({ dates, home_kwh, external_kwh, total_kwh }: DailyChargedChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Set canvas size for high DPI
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    const width = rect.width;
-    const height = rect.height;
-    const padding = { top: 30, right: 60, bottom: 50, left: 60 };
-    const chartWidth = width - padding.left - padding.right;
-    const chartHeight = height - padding.top - padding.bottom;
-
-    // Clear
-    ctx.clearRect(0, 0, width, height);
-
-    // Find max values for scaling
-    const maxTotal = Math.max(...total_kwh, 0);
-    const maxTotalScaled = maxTotal > 0 ? maxTotal * 1.1 : 10;
-
-    // Draw grid lines and Y-axis labels
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.font = '13px system-ui';
-    ctx.fillStyle = '#444';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-
-    // Grid lines (5 horizontal lines)
-    for (let i = 0; i <= 4; i++) {
-      const y = padding.top + (chartHeight / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(width - padding.right, y);
-      ctx.stroke();
-
-      // Y-axis (kWh)
-      const kwhVal = maxTotalScaled * (1 - i / 4);
-      ctx.fillText(kwhVal.toFixed(1) + ' kWh', padding.left - 10, y);
-    }
-
-    // X-axis labels (dates)
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = '#444';
-    const step = Math.max(1, Math.floor(dates.length / 10));
-    dates.forEach((date, i) => {
-      if (i % step === 0 || i === dates.length - 1) {
-        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-        ctx.fillText(date.slice(5), x, height - padding.bottom + 8);
-      }
-    });
-
-    const barWidth = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.7 : chartWidth * 0.7;
-
-    // Draw stacked bars: Home (bottom) + External (top)
-    // Home bars (green)
-    ctx.fillStyle = '#22c55e';
-    home_kwh.forEach((val, i) => {
-      const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2;
-      const barHeight = (val / maxTotalScaled) * chartHeight;
-      const y = padding.top + chartHeight - barHeight;
-      ctx.fillRect(x, y, barWidth, barHeight);
-    });
-
-    // External bars (blue) stacked on top
-    ctx.fillStyle = '#3b82f6';
-    external_kwh.forEach((val, i) => {
-      const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2;
-      const barHeight = (val / maxTotalScaled) * chartHeight;
-      const homeHeight = (home_kwh[i] / maxTotalScaled) * chartHeight;
-      const y = padding.top + chartHeight - homeHeight - barHeight;
-      ctx.fillRect(x, y, barWidth, barHeight);
-    });
-
-    // Total line (orange) on top
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    total_kwh.forEach((val, i) => {
-      const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-      const y = padding.top + chartHeight * (1 - val / maxTotalScaled);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Legend
-    ctx.font = '13px system-ui';
-    ctx.fillStyle = '#22c55e';
-    ctx.fillRect(padding.left, padding.top - 22, 14, 14);
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'left';
-    ctx.fillText('Home', padding.left + 20, padding.top - 10);
-
-    ctx.fillStyle = '#3b82f6';
-    ctx.fillRect(padding.left + 70, padding.top - 22, 14, 14);
-    ctx.fillStyle = '#333';
-    ctx.fillText('Extern', padding.left + 90, padding.top - 10);
-
-    ctx.fillStyle = '#f59e0b';
-    ctx.beginPath();
-    ctx.moveTo(padding.left + 140, padding.top - 15);
-    ctx.lineTo(padding.left + 160, padding.top - 15);
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = '#333';
-    ctx.fillText('Gesamt', padding.left + 170, padding.top - 10);
-
-  }, [dates, home_kwh, external_kwh, total_kwh]);
-
-  return (
-    <canvas 
-      ref={canvasRef} 
-      className="statistics-page__chart-canvas"
-      width={800} 
-      height={300}
-      role="img"
-      aria-label={`Täglich geladene Energie: ${dates.length} Tage, Home/Extern/Gesamt kWh`}
-    />
   );
 }

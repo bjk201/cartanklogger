@@ -502,14 +502,29 @@
   .statistics-page__chart-container {
     max-width: 100%;
   }
-  
+}
+
+@media (max-width: 480px) {
   .statistics-page__chart-canvas {
+    height: 220px;
+  }
+}
+
+/* Chart Wrapper for react-chartjs-2 */
+.statistics-page__chart-wrapper {
+  width: 100%;
+  height: 300px;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .statistics-page__chart-wrapper {
     height: 260px;
   }
 }
 
 @media (max-width: 480px) {
-  .statistics-page__chart-canvas {
+  .statistics-page__chart-wrapper {
     height: 220px;
   }
 }
