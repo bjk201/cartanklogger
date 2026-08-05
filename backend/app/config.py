@@ -21,27 +21,15 @@ class Settings(BaseSettings):
     # API
     API_PREFIX: str = "/api"
 
-    # EVCC Configuration
-    EVCC_HOST: str = ""
-    EVCC_PORT: int = 7070
-    EVCC_PASSWORD: str = ""
-    EVCC_API_TOKEN: str = ""
-    EVCC_USE_TLS: bool = False
-
-    @property
-    def EVCC_BASE_URL(self) -> str:
-        if not self.EVCC_HOST:
-            return ""
-        protocol = "https" if self.EVCC_USE_TLS else "http"
-        return f"{protocol}://{self.EVCC_HOST}:{self.EVCC_PORT}"
+    # EVCC Configuration - Full base URL
+    EVCC_BASE_URL: str = ""
 
     @property
     def EVCC_CONFIGURED(self) -> bool:
-        return bool(self.EVCC_HOST)
+        return bool(self.EVCC_BASE_URL)
 
     # TeslaMateAPI Configuration (via TeslaMateAPI service)
     TESLAMATEAPI_BASE_URL: str = ""
-    TESLAMATEAPI_TOKEN: str = ""
 
     @property
     def TESLAMATEAPI_CONFIGURED(self) -> bool:

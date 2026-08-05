@@ -25,7 +25,7 @@ def get_data_source_info_from_db(db: Session) -> dict:
     """Determine data source mode from database config."""
     config = db.query(DataSourceConfig).first()
     
-    evcc_configured = bool(config and config.evcc_host)
+    evcc_configured = bool(config and config.evcc_base_url)
     teslamateapi_configured = bool(config and config.teslamateapi_base_url)
     
     # If both are configured, we're in live mode
@@ -133,11 +133,10 @@ async def check_teslamateapi_reachable() -> dict:
 
 async def check_evcc_reachable_from_config(config) -> dict:
     """Check if EVCC API is reachable using database config."""
-    if not config or not config.evcc_host:
+    if not config or not config.evcc_base_url:
         return {"configured": False, "reachable": False, "level": "unreachable", "error": "Nicht konfiguriert"}
 
-    protocol = "https" if config.evcc_use_tls else "http"
-    base_url = f"{protocol}://{config.evcc_host}:{config.evcc_port or 7070}"
+    base_url = config.evcc_base_url
 
     headers = {}
     if config.evcc_api_token:

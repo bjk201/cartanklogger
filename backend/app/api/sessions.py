@@ -21,7 +21,7 @@ def _get_configured_sources(db: Session) -> dict:
     """Check which data sources are configured."""
     config = db.query(DataSourceConfig).first()
     return {
-        "evcc": bool(config and config.evcc_host),
+        "evcc": bool(config and config.evcc_base_url),
         "teslamateapi": bool(config and config.teslamateapi_base_url),
     }
 

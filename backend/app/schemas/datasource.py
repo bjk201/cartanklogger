@@ -12,11 +12,8 @@ class ReachabilityLevel(str, Enum):
 
 class EVCCConfig(BaseModel):
     """EVCC configuration fields."""
-    host: str = Field(default="", description="EVCC Hostname oder IP")
-    port: int = Field(default=7070, ge=1, le=65535, description="EVCC Port")
-    password: str = Field(default="", description="EVCC Admin-Passwort (optional)")
-    api_token: str = Field(default="", description="EVCC API-Token (optional, alternativ zu Passwort)")
-    use_tls: bool = Field(default=False, description="HTTPS verwenden")
+    base_url: str = Field(default="", description="EVCC Base URL, z.B. http://192.168.1.15:7070")
+    api_token: str = Field(default="", description="EVCC API-Token (optional)")
 
 
 class TeslaMateAPIConfig(BaseModel):
@@ -28,11 +25,8 @@ class TeslaMateAPIConfig(BaseModel):
 class DataSourceConfigRead(BaseModel):
     """Full data source configuration for reading."""
     # EVCC
-    evcc_host: str
-    evcc_port: int
-    evcc_password: str  # wird nicht im Frontend angezeigt, nur gesetzt
+    evcc_base_url: str
     evcc_api_token: str
-    evcc_use_tls: bool
     
     # TeslaMateAPI
     teslamateapi_base_url: str
@@ -50,29 +44,23 @@ class DataSourceConfigRead(BaseModel):
 class DataSourceConfigWrite(BaseModel):
     """Data source configuration for writing (password/token optional)."""
     # EVCC
-    host: str = Field(default="")
-    port: int = Field(default=7070, ge=1, le=65535)
-    password: Optional[str] = None
-    api_token: Optional[str] = None
-    use_tls: bool = False
+    evcc_base_url: str = Field(default="")
+    evcc_api_token: Optional[str] = None
     
     # TeslaMateAPI
-    base_url: str = Field(default="")
-    token: Optional[str] = None
+    teslamateapi_base_url: str = Field(default="")
+    teslamateapi_token: Optional[str] = None
 
 
 class DataSourceConfigTestRequest(BaseModel):
     """Request for testing a single data source connection."""
     source: str  # "evcc" | "teslamateapi"
     # EVCC fields
-    host: Optional[str] = None
-    port: Optional[int] = None
-    password: Optional[str] = None
-    api_token: Optional[str] = None
-    use_tls: Optional[bool] = None
+    evcc_base_url: Optional[str] = None
+    evcc_api_token: Optional[str] = None
     # TeslaMateAPI fields
-    base_url: Optional[str] = None
-    token: Optional[str] = None
+    teslamateapi_base_url: Optional[str] = None
+    teslamateapi_token: Optional[str] = None
 
 
 class ReachabilityStatus(BaseModel):

@@ -42,7 +42,7 @@ async def matching_dry_run(
     
     # Matching requires BOTH EVCC and TM
     config = db.query(DataSourceConfig).first()
-    if not config or not config.evcc_host or not config.teslamateapi_base_url:
+    if not config or not config.evcc_base_url or not config.teslamateapi_base_url:
         return {
             'ok': True,
             'matches': [],

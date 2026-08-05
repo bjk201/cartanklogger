@@ -568,7 +568,7 @@ async def run_live_matching_dry_run(limit: Optional[int] = None, days: Optional[
         # Get config from DB
         config = db.query(DataSourceConfig).first()
 
-        if not config or not config.evcc_host or not config.teslamateapi_base_url:
+        if not config or not config.evcc_base_url or not config.teslamateapi_base_url:
             return {
                 'ok': False,
                 'error': 'Live-Modus nicht konfiguriert: EVCC und/oder TeslaMateAPI fehlen in den Einstellungen',

@@ -15,6 +15,7 @@ from app.schemas.datasource import (
     TeslaMateAPIConfig,
 )
 from app.config import settings as app_settings
+from app.services.sync_service import run_full_sync
 
 
 router = APIRouter(prefix="/settings/data-sources", tags=["Data Sources"])
@@ -37,16 +38,13 @@ def get_data_source_config(db: Session = Depends(get_db)):
     config = get_or_create_config(db)
     
     return DataSourceConfigRead(
-        evcc_host=config.evcc_host or "",
-        evcc_port=config.evcc_port or 7070,
-        evcc_password="",  # Never return password
+        evcc_base_url=config.evcc_base_url or "",
         evcc_api_token=config.evcc_api_token or "",
-        evcc_use_tls=config.evcc_use_tls or False,
         teslamateapi_base_url=config.teslamateapi_base_url or "",
         teslamateapi_token="",  # Never return token
-        evcc_configured=bool(config.evcc_host),
+        evcc_configured=bool(config.evcc_base_url),
         teslamateapi_configured=bool(config.teslamateapi_base_url),
-        data_source="live" if (config.evcc_host and config.teslamateapi_base_url) else "demo",
+        data_source="live" if (config.evcc_base_url and config.teslamateapi_base_url) else "demo",
     )
 
 
@@ -56,13 +54,9 @@ def save_data_source_config(payload: DataSourceConfigWrite, db: Session = Depend
     config = get_or_create_config(db)
     
     # Update EVCC fields
-    config.evcc_host = payload.host.strip() if payload.host else ""
-    config.evcc_port = payload.port if payload.port else 7070
-    if payload.password is not None:
-        config.evcc_password = payload.password.strip()
+    config.evcc_base_url = payload.base_url.strip() if payload.base_url else ""
     if payload.api_token is not None:
         config.evcc_api_token = payload.api_token.strip()
-    config.evcc_use_tls = payload.use_tls
     
     # Update TeslaMateAPI fields
     config.teslamateapi_base_url = payload.base_url.strip() if payload.base_url else ""
@@ -75,33 +69,24 @@ def save_data_source_config(payload: DataSourceConfigWrite, db: Session = Depend
     db.refresh(config)
     
     return DataSourceConfigRead(
-        evcc_host=config.evcc_host or "",
-        evcc_port=config.evcc_port or 7070,
-        evcc_password="",
+        evcc_base_url=config.evcc_base_url or "",
         evcc_api_token=config.evcc_api_token or "",
-        evcc_use_tls=config.evcc_use_tls or False,
         teslamateapi_base_url=config.teslamateapi_base_url or "",
         teslamateapi_token="",
-        evcc_configured=bool(config.evcc_host),
+        evcc_configured=bool(config.evcc_base_url),
         teslamateapi_configured=bool(config.teslamateapi_base_url),
-        data_source="live" if (config.evcc_host and config.teslamateapi_base_url) else "demo",
+        data_source="live" if (config.evcc_base_url and config.teslamateapi_base_url) else "demo",
     )
 
 
-async def _check_evcc_reachable(host: str, port: int, password: str, api_token: str, use_tls: bool) -> ReachabilityStatus:
+async def _check_evcc_reachable(base_url: str, api_token: str) -> ReachabilityStatus:
     """Check EVCC reachability."""
-    if not host:
+    if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, error="Nicht konfiguriert")
-    
-    protocol = "https" if use_tls else "http"
-    base_url = f"{protocol}://{host}:{port}"
     
     headers = {}
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
-    elif password:
-        # EVCC basic auth would be different, but we'll try Bearer for token
-        pass
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -123,22 +108,22 @@ async def _check_teslamateapi_reachable(base_url: str, token: str) -> Reachabili
     from app.schemas.datasource import ReachabilityLevel
     if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Nicht konfiguriert")
-
+    
     # Ensure trailing slash for TeslaMateAPI
     if not base_url.endswith("/"):
         base_url = base_url + "/"
-
+    
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-
+    
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             # Check base URL
             response = await client.get(base_url, headers=headers)
             if response.status_code != 200:
                 return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, status_code=response.status_code, error=f"Base URL HTTP {response.status_code}")
-
+            
             # Also verify the cars endpoint exists (correct endpoint for this API)
             response = await client.get(f"{base_url}cars", headers=headers)
             if response.status_code == 200:
@@ -158,11 +143,8 @@ async def test_data_source_connection(payload: DataSourceConfigTestRequest):
     """Test connection to a data source (EVCC or TeslaMateAPI)."""
     if payload.source == "evcc":
         status_result = await _check_evcc_reachable(
-            host=payload.host or "",
-            port=payload.port or 7070,
-            password=payload.password or "",
+            base_url=payload.base_url or "",
             api_token=payload.api_token or "",
-            use_tls=payload.use_tls or False,
         )
         return DataSourceConfigTestResponse(ok=True, source="evcc", status=status_result)
     
@@ -175,3 +157,13 @@ async def test_data_source_connection(payload: DataSourceConfigTestRequest):
     
     else:
         raise HTTPException(status_code=400, detail="Unbekannte Quelle: 'evcc' oder 'teslamateapi'")
+
+
+@router.post("/sync", response_model=dict)
+async def sync_data_sources(db: Session = Depends(get_db)):
+    """Trigger full sync of all configured data sources (EVCC + TM)."""
+    result = await run_full_sync(db)
+    return {
+        "ok": True,
+        "result": result
+    }

@@ -33,11 +33,9 @@ class EVCCLiveSession:
 class EVCCClient:
     """Client for EVCC API."""
 
-    def __init__(self, base_url: str, api_token: Optional[str] = None, password: Optional[str] = None, use_tls: bool = False):
+    def __init__(self, base_url: str, api_token: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.api_token = api_token
-        self.password = password
-        self.use_tls = use_tls
         self._headers = {}
         if api_token:
             self._headers["Authorization"] = f"Bearer {api_token}"
@@ -114,15 +112,10 @@ class EVCCClient:
 
 async def create_evcc_client_from_config(config) -> Optional[EVCCClient]:
     """Create EVCC client from database config."""
-    if not config or not config.evcc_host:
+    if not config or not config.evcc_base_url:
         return None
 
-    protocol = "https" if config.evcc_use_tls else "http"
-    base_url = f"{protocol}://{config.evcc_host}:{config.evcc_port or 7070}"
-
     return EVCCClient(
-        base_url=base_url,
-        api_token=config.evcc_api_token or None,
-        password=config.evcc_password or None,
-        use_tls=config.evcc_use_tls
+        base_url=config.evcc_base_url,
+        api_token=config.evcc_api_token or None
     )
