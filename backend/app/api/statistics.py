@@ -5,6 +5,7 @@ from typing import Optional, List
 from app.database import get_db
 from app.repositories.session import SessionRepository
 from app.services.matching import run_matching_dry_run
+from app.services.live_matching import run_live_matching_dry_run
 from app.schemas.overview import StatisticsResponse, ErrorDetail
 from app.models.datasource import DataSourceConfig
 
@@ -38,7 +39,8 @@ def _get_allowed_source_types(db: Session) -> List[str]:
     summary="Get charging statistics",
     description="Returns aggregated statistics for the given time range. Supports days, from_date, to_date parameters (like other endpoints)."
 )
-def get_statistics(
+async def get_statistics(
+    limit: Optional[int] = Query(None, ge=1, le=500, description="Limit number of EVCC sessions to check"),
     days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
     from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
@@ -175,7 +177,8 @@ def get_statistics(
     # Calculate charging losses from live matching (only if both EVCC and TM configured)
     if configured["evcc"] and configured["teslamateapi"]:
         try:
-            matching_result = run_matching_dry_run(days=range_days, from_date=from_date, to_date=to_date)
+            # Use live matching which fetches TM home charges from API (not DB)
+            matching_result = await run_live_matching_dry_run(limit, range_days, from_date, to_date, db)
             if matching_result.get('ok') and matching_result.get('summary'):
                 summary = matching_result['summary']
                 total_evcc_energy = summary.get('total_evcc_energy', 0)
@@ -208,7 +211,77 @@ def get_statistics(
         stats['kpis']['evcc_energy_matched_kwh'] = None
         stats['kpis']['tm_energy_matched_kwh'] = None
     
-    # Trip analysis - only if TM configured
+    # Calculate external charging losses from TM API (charge_energy_used - charge_energy_added)
+    # This is independent of EVCC - only needs TM configured
+    if configured["teslamateapi"]:
+        try:
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            config = db.query(DataSourceConfig).first()
+            tm_client = await create_teslamateapi_client_from_config(config)
+            if tm_client:
+                tm_charges = await tm_client.get_charges()
+                # Filter by date range if provided
+                if range_days or from_date or to_date:
+                    tm_charges = tm_client._filter_tm_by_date_range(tm_charges, range_days, from_date, to_date)
+                
+                total_external_added = sum(c.charge_energy_added for c in tm_charges if c.charge_energy_added)
+                total_external_used = sum(c.charge_energy_used for c in tm_charges if c.charge_energy_used)
+                
+                if total_external_added > 0:
+                    external_losses_kwh = round(total_external_used - total_external_added, 2)
+                    external_losses_pct = round((external_losses_kwh / total_external_added) * 100, 1)
+                    stats['kpis']['external_charging_losses_kwh'] = external_losses_kwh
+                    stats['kpis']['external_charging_losses_pct'] = external_losses_pct
+                else:
+                    stats['kpis']['external_charging_losses_kwh'] = None
+                    stats['kpis']['external_charging_losses_pct'] = None
+        except Exception:
+            stats['kpis']['external_charging_losses_kwh'] = None
+            stats['kpis']['external_charging_losses_pct'] = None
+    else:
+        stats['kpis']['external_charging_losses_kwh'] = None
+        stats['kpis']['external_charging_losses_pct'] = None
+    
+    # Add daily drives data for chart (km/day and kWh/day from TM drives)
+    if configured["teslamateapi"]:
+        try:
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            config = db.query(DataSourceConfig).first()
+            tm_client = await create_teslamateapi_client_from_config(config)
+            if tm_client:
+                tm_drives = await tm_client.get_drives()
+                # Filter by date range if provided
+                if range_days or from_date or to_date:
+                    tm_drives = tm_client._filter_tm_by_date_range(tm_drives, range_days, from_date, to_date)
+                
+                # Group by date
+                from collections import defaultdict
+                daily_data = defaultdict(lambda: {"km": 0.0, "kwh": 0.0})
+                for drive in tm_drives:
+                    if drive.start_date:
+                        date_key = drive.start_date.strftime("%Y-%m-%d")
+                        if drive.odometer_distance:
+                            daily_data[date_key]["km"] += drive.odometer_distance
+                        if drive.energy_consumed_net:
+                            daily_data[date_key]["kwh"] += drive.energy_consumed_net
+                
+                # Convert to sorted list for frontend chart
+                sorted_dates = sorted(daily_data.keys())
+                daily_km = [round(daily_data[d]["km"], 1) for d in sorted_dates]
+                daily_kwh = [round(daily_data[d]["kwh"], 2) for d in sorted_dates]
+                
+                stats['kpis']['daily_dates'] = sorted_dates
+                stats['kpis']['daily_km'] = daily_km
+                stats['kpis']['daily_kwh'] = daily_kwh
+        except Exception:
+            stats['kpis']['daily_dates'] = []
+            stats['kpis']['daily_km'] = []
+            stats['kpis']['daily_kwh'] = []
+    else:
+        stats['kpis']['daily_dates'] = []
+        stats['kpis']['daily_km'] = []
+        stats['kpis']['daily_kwh'] = []
+    
     if configured["teslamateapi"]:
         trip_stats = repo.get_trip_analysis(range_days=range_days, from_date=from_date, to_date=to_date)
         stats['kpis'].update(trip_stats)

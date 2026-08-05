@@ -135,6 +135,15 @@ class StatisticsKPIs(BaseModel):
     trip_total_cost_eur: Optional[float] = None
     trip_avg_distance_km: Optional[float] = None
 
+    # NEW: External charging losses (TM charge_energy_used - charge_energy_added)
+    external_charging_losses_kwh: Optional[float] = None
+    external_charging_losses_pct: Optional[float] = None
+
+    # NEW: Daily drives data for chart
+    daily_dates: Optional[List[str]] = None
+    daily_km: Optional[List[float]] = None
+    daily_kwh: Optional[List[float]] = None
+
 
 class StatisticsResponse(BaseModel):
     """Response contract for GET /api/statistics"""

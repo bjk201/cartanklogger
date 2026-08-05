@@ -112,11 +112,12 @@ def get_sessions(
         days=days,
         from_date=from_date,
         to_date=to_date,
+        allowed_sources=allowed_sources,
     )
     
-    # Filter by allowed source types (in case source_type was "all" or None)
-    sessions = [s for s in sessions if s.source_type in allowed_sources]
-    total = len(sessions)  # Recalculate total after filtering
+    # No need to filter again - already done in repository
+    # sessions = [s for s in sessions if s.source_type in allowed_sources]
+    # total = len(sessions)  # Recalculate total after filtering
 
     # Calculate pagination info
     total_pages = (total + page_size - 1) // page_size

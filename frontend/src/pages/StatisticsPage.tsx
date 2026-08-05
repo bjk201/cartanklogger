@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Route, Minus } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Minus, BarChart } from 'lucide-react';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
 import { api, type StatisticsResponse, type StatisticsKPIs, type SourceBreakdown } from '../lib/apiClient';
 import './StatisticsPage.css';
@@ -310,30 +310,24 @@ export function StatisticsPage() {
               </div>
             </article>
 
-            {/* NEU: Trip-Auswertung */}
+            {/* NEU: Externer Ladeverlust (TM charge_energy_used - charge_energy_added) */}
             <article className="kpi-card">
-              <div className="kpi-card__icon kpi-card__icon--trip" aria-hidden="true">
-                <Route size={24} />
+              <div className="kpi-card__icon kpi-card__icon--loss" aria-hidden="true">
+                <Activity size={24} />
               </div>
               <div className="kpi-card__content">
-                <span className="kpi-card__label">Urlaubstrips</span>
+                <span className="kpi-card__label">Externer Ladeverlust</span>
                 <span className="kpi-card__value">
-                  {kpis.trip_count !== null && kpis.trip_count > 0 ? (
+                  {kpis.external_charging_losses_kwh !== null && kpis.external_charging_losses_pct !== null ? (
                     <>
-                      <span className="kpi-card__value-main">{kpis.trip_count} Trip(s)</span>
+                      <span className="kpi-card__value-main">{formatKWh(Math.abs(kpis.external_charging_losses_kwh))} kWh</span>
                       <span className="kpi-card__value-sub">
-                        {kpis.trip_total_energy_kwh !== null && kpis.trip_total_cost_eur !== null && (
-                          <>
-                            {formatKWh(kpis.trip_total_energy_kwh)} kWh · {formatEur(kpis.trip_total_cost_eur)}
-                            {kpis.trip_avg_distance_km !== null && (
-                              <> · Ø {kpis.trip_avg_distance_km.toFixed(0)} km</>
-                            )}
-                          </>
-                        )}
+                        {kpis.external_charging_losses_kwh >= 0 ? <ArrowUpRight size={12} className="kpi-card__loss-positive" /> : <ArrowDownRight size={12} className="kpi-card__loss-negative" />}
+                        {Math.abs(kpis.external_charging_losses_pct).toFixed(1)}%
                       </span>
                     </>
                   ) : (
-                    'Keine Trips'
+                    '—'
                   )}
                 </span>
               </div>
@@ -341,7 +335,7 @@ export function StatisticsPage() {
           </div>
         </section>
 
-        {/* Session-based Stats */}
+        {/* Pro Session */}
         <section className="statistics-page__section" aria-labelledby="session-stats-heading">
           <h2 id="session-stats-heading" className="statistics-page__section-title">Pro Session</h2>
           <div className="statistics-page__session-stats-grid">
@@ -380,6 +374,20 @@ export function StatisticsPage() {
             </article>
           </div>
         </section>
+
+        {/* Daily Drives Chart */}
+        {(kpis.daily_dates && kpis.daily_dates.length > 0) && (
+          <section className="statistics-page__section" aria-labelledby="daily-drives-heading">
+            <h2 id="daily-drives-heading" className="statistics-page__section-title">Tägliche Fahrten (TeslaMate)</h2>
+            <div className="statistics-page__chart-container">
+              <DailyDrivesChart 
+                dates={kpis.daily_dates} 
+                km={kpis.daily_km} 
+                kwh={kpis.daily_kwh} 
+              />
+            </div>
+          </section>
+        )}
 
         {/* Energy Distribution */}
         <section className="statistics-page__section" aria-labelledby="energy-dist-heading">
@@ -544,5 +552,130 @@ export function StatisticsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+// Daily Drives Chart Component
+interface DailyDrivesChartProps {
+  dates: string[];
+  km: number[];
+  kwh: number[];
+}
+
+function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Set canvas size for high DPI
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const width = rect.width;
+      const height = rect.height;
+      const padding = { top: 20, right: 60, bottom: 40, left: 60 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+
+      // Clear
+      ctx.clearRect(0, 0, width, height);
+
+      // Find max values for scaling
+      const maxKm = Math.max(...km, 0);
+      const maxKwh = Math.max(...kwh, 0);
+      const maxKmScaled = maxKm > 0 ? maxKm * 1.1 : 10;
+      const maxKwhScaled = maxKwh > 0 ? maxKwh * 1.1 : 10;
+
+      // Draw grid lines and Y-axis labels
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.font = '11px system-ui';
+      ctx.fillStyle = '#666';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+
+      // Grid lines (5 horizontal lines)
+      for (let i = 0; i <= 4; i++) {
+        const y = padding.top + (chartHeight / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+
+        // Left Y-axis (km)
+        const kmVal = maxKmScaled * (1 - i / 4);
+        ctx.fillText(kmVal.toFixed(1) + ' km', padding.left - 8, y);
+
+        // Right Y-axis (kWh)
+        const kwhVal = maxKwhScaled * (1 - i / 4);
+        ctx.fillText(kwhVal.toFixed(1) + ' kWh', width - padding.right + 8, y);
+      }
+
+      // X-axis labels (dates)
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const step = Math.max(1, Math.floor(dates.length / 10)); // Show max ~10 labels
+      dates.forEach((date, i) => {
+        if (i % step === 0 || i === dates.length - 1) {
+          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+          ctx.fillText(date.slice(5), x, height - padding.bottom + 8); // MM-DD format
+        }
+      });
+
+      // Draw km line (blue)
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      km.forEach((val: number, i: number) => {
+        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+        const y = padding.top + chartHeight * (1 - val / maxKmScaled);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Draw kWh line (orange)
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      kwh.forEach((val: number, i: number) => {
+        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+        const y = padding.top + chartHeight * (1 - val / maxKwhScaled);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+    // Legend
+    ctx.font = '12px system-ui';
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(padding.left, padding.top, 12, 12);
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'left';
+    ctx.fillText('km', padding.left + 18, padding.top + 10);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(padding.left + 60, padding.top, 12, 12);
+    ctx.fillStyle = '#333';
+    ctx.fillText('kWh', padding.left + 78, padding.top + 10);
+
+  }, [dates, km, kwh]);
+
+  return (
+    <canvas 
+      ref={canvasRef} 
+      className="statistics-page__chart-canvas"
+      width={800} 
+      height={300}
+      role="img"
+      aria-label={`Tägliche Fahrten: ${dates.length} Tage, km und kWh`}
+    />
   );
 }

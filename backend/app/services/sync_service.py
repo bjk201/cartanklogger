@@ -121,8 +121,25 @@ class SyncService:
         return result
     
     async def _sync_teslamateapi(self, config: DataSourceConfig) -> dict:
-        """Sync TeslaMateAPI charges to database."""
+        """Sync TeslaMateAPI charges to database.
+        
+        Rule: EVCC is leading for home charging. If EVCC is configured,
+        skip TM charges at home location (Zuhause/Garage) to avoid duplicates.
+        Only import TM charges at external locations (Supercharger, public AC, etc.).
+        """
         result = {"synced": 0, "errors": []}
+        
+        # Check if EVCC is configured (leading for home charging)
+        evcc_configured = bool(config.evcc_base_url)
+        
+        # Home location keywords (normalized)
+        home_keywords = {"zuhause", "garage", "home", "haus"}
+        
+        def _is_home_location(location: Optional[str]) -> bool:
+            if not location:
+                return False
+            normalized = location.strip().lower()
+            return normalized in home_keywords
         
         try:
             client = await create_teslamateapi_client_from_config(config)
@@ -134,6 +151,11 @@ class SyncService:
             
             for live_charge in live_charges:
                 try:
+                    # Skip home location charges if EVCC is configured (EVCC leading)
+                    if evcc_configured and _is_home_location(live_charge.location):
+                        # Skip this charge - EVCC handles home charging
+                        continue
+                    
                     # Check if already exists (by source_id)
                     existing = self.db.query(SessionModel).filter(
                         and_(

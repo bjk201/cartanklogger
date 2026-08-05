@@ -28,9 +28,14 @@ class SessionRepository:
         days: Optional[int] = None,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
+        allowed_sources: Optional[List[str]] = None,
     ) -> tuple[List[SessionModel], int]:
         """Get sessions with pagination, filtering, sorting, and date range."""
         query = self.db.query(SessionModel)
+        
+        # Filter by allowed source types (EVCC/TM configured) - apply early for correct pagination
+        if allowed_sources:
+            query = query.filter(SessionModel.source_type.in_(allowed_sources))
         
         # Filter by source_type
         if source_type and source_type != "all":

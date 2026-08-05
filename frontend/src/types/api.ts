@@ -132,6 +132,15 @@ export interface StatisticsKPIs {
   trip_total_energy_kwh: number | null;
   trip_total_cost_eur: number | null;
   trip_avg_distance_km: number | null;
+
+  // External charging losses (TM charge_energy_used - charge_energy_added)
+  external_charging_losses_kwh: number | null;
+  external_charging_losses_pct: number | null;
+
+  // Daily drives data for chart
+  daily_dates: string[];
+  daily_km: number[];
+  daily_kwh: number[];
 }
 
 export interface StatisticsResponse {
