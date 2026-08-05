@@ -562,3 +562,102 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Quality Grid */
+.statistics-page__quality-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .statistics-page__quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .statistics-page__quality-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.quality-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  transition: all var(--transition-fast);
+}
+
+.quality-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.quality-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.quality-card__icon--energy {
+  background: var(--color-primary-light);
+  color: var(--color-home);
+}
+
+.quality-card__icon--cost {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.quality-card__icon--km {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.quality-card__icon--source {
+  background: #e0e7ff;
+  color: #6366f1;
+}
+
+.quality-card__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.quality-card__label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.quality-card__value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.quality-card__status-ok {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.quality-card__status-warn {
+  color: #f59e0b;
+  font-weight: 600;
+}

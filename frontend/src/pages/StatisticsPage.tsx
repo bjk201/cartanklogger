@@ -15,6 +15,10 @@ import {
   Minus,
   BarChart,
   BarChart3,
+  AlertTriangle,
+  Battery,
+  Gauge,
+  TrendingUp as TrendingUpIcon,
 } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import {
@@ -386,6 +390,97 @@ export function StatisticsPage() {
     },
   }), []);
 
+  // Cumulative kilometers chart data
+  const cumulativeKmChartData = useMemo(() => {
+    if (!data?.kpis?.daily_dates || data.kpis.daily_dates.length === 0) return null;
+
+    // Calculate cumulative km from daily_km
+    const dailyKm = data.kpis.daily_km || [];
+    const cumulativeKm: number[] = [];
+    let runningTotal = 0;
+    for (const km of dailyKm) {
+      runningTotal += km;
+      cumulativeKm.push(runningTotal);
+    }
+
+    return {
+      labels: data.kpis.daily_dates.map((d) => d.slice(5)), // MM-DD format
+      datasets: [
+        {
+          label: 'Kumulierte km',
+          data: cumulativeKm,
+          borderColor: '#0d9488',
+          backgroundColor: 'rgba(13, 148, 136, 0.15)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#0d9488',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          borderWidth: 2,
+        },
+      ],
+    };
+  }, [data?.kpis?.daily_dates, data?.kpis?.daily_km]);
+
+  const cumulativeKmChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: 12,
+        titleFont: { size: 13, family: 'system-ui' },
+        bodyFont: { size: 12, family: 'system-ui' },
+        callbacks: {
+          label: (context: any) => {
+            const value = context.parsed.y;
+            return `Kumuliert: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#666',
+          maxTicksLimit: 12,
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+          display: true,
+          text: 'km',
+          font: { size: 12, family: 'system-ui', weight: '500' as const },
+          color: '#0d9488',
+        },
+        grid: {
+          color: '#e0e0e0',
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: '#444',
+        },
+        min: 0,
+      },
+    },
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+  }), []);
+
   if (loading) {
     return <LoadingState message="Statistiken werden geladen…" />;
   }
@@ -736,6 +831,25 @@ export function StatisticsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Cumulative Kilometers Chart */}
+              {kpis.daily_dates && kpis.daily_dates.length > 0 && cumulativeKmChartData && (
+                <div className="statistics-page__chart-card">
+                  <div className="statistics-page__chart-header">
+                    <h3 className="statistics-page__chart-subtitle">Kumulierte gefahrene Kilometer</h3>
+                  </div>
+                  <div className="statistics-page__chart-container">
+                    <div className="statistics-page__chart-wrapper">
+                      <Line
+                        data={cumulativeKmChartData as any}
+                        options={cumulativeKmChartOptions as any}
+                        aria-label={`Kumulierte Kilometer: ${kpis.daily_dates.length} Tage`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </section>
         ) : null}
