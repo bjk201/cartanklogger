@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from app.database import get_db
 from app.repositories.session import SessionRepository
@@ -17,10 +17,24 @@ from app.models.datasource import DataSourceConfig
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
 
-def _is_live_mode(db: Session) -> bool:
-    """Check if both EVCC and TeslaMateAPI are configured (live mode)."""
+def _get_configured_sources(db: Session) -> dict:
+    """Check which data sources are configured."""
     config = db.query(DataSourceConfig).first()
-    return bool(config and config.evcc_host and config.teslamateapi_base_url)
+    return {
+        "evcc": bool(config and config.evcc_host),
+        "teslamateapi": bool(config and config.teslamateapi_base_url),
+    }
+
+
+def _get_allowed_source_types(db: Session) -> List[str]:
+    """Get list of source types that should be included based on configuration."""
+    configured = _get_configured_sources(db)
+    allowed = ["import"]  # Import is always allowed (manual data)
+    if configured["evcc"]:
+        allowed.append("home")
+    if configured["teslamateapi"]:
+        allowed.append("external")
+    return allowed
 
 
 @router.get(
@@ -41,8 +55,11 @@ def get_sessions(
     to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ) -> PaginatedSessionsResponse:
-    # If not in live mode (no EVCC/TM config), return empty results
-    if not _is_live_mode(db):
+    # Get allowed source types based on configuration
+    allowed_sources = _get_allowed_source_types(db)
+    
+    # If no EVCC and no TM configured, return empty
+    if "home" not in allowed_sources and "external" not in allowed_sources:
         return PaginatedSessionsResponse(
             ok=True,
             data=[],
@@ -58,6 +75,27 @@ def get_sessions(
             errors=[]
         )
 
+    # Apply source_type filter in combination with allowed sources
+    effective_source_type = source_type
+    if source_type and source_type != "all":
+        # User requested a specific source type - check if it's allowed
+        if source_type not in allowed_sources:
+            # Requested source type not configured - return empty
+            return PaginatedSessionsResponse(
+                ok=True,
+                data=[],
+                meta=MetaInfo(count=0, limit=page_size),
+                pagination=PaginationInfo(
+                    page=page,
+                    page_size=page_size,
+                    total=0,
+                    total_pages=0,
+                    has_next=False,
+                    has_prev=False,
+                ),
+                errors=[]
+            )
+
     repo = SessionRepository(db)
 
     # Default to 30 days if no range specified (same as overview)
@@ -68,7 +106,7 @@ def get_sessions(
     sessions, total = repo.get_sessions_paginated(
         page=page,
         page_size=page_size,
-        source_type=source_type,
+        source_type=effective_source_type,
         search=search,
         sort_desc=sort_desc,
         days=days,
@@ -76,6 +114,10 @@ def get_sessions(
         to_date=to_date,
     )
     
+    # Filter by allowed source types (in case source_type was "all" or None)
+    sessions = [s for s in sessions if s.source_type in allowed_sources]
+    total = len(sessions)  # Recalculate total after filtering
+
     # Calculate pagination info
     total_pages = (total + page_size - 1) // page_size
     has_next = page < total_pages

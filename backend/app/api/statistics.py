@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from app.database import get_db
 from app.repositories.session import SessionRepository
@@ -12,10 +12,24 @@ from app.models.datasource import DataSourceConfig
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
 
 
-def _is_live_mode(db: Session) -> bool:
-    """Check if both EVCC and TeslaMateAPI are configured (live mode)."""
+def _get_configured_sources(db: Session) -> dict:
+    """Check which data sources are configured."""
     config = db.query(DataSourceConfig).first()
-    return bool(config and config.evcc_host and config.teslamateapi_base_url)
+    return {
+        "evcc": bool(config and config.evcc_host),
+        "teslamateapi": bool(config and config.teslamateapi_base_url),
+    }
+
+
+def _get_allowed_source_types(db: Session) -> List[str]:
+    """Get list of source types that should be included based on configuration."""
+    configured = _get_configured_sources(db)
+    allowed = ["import"]  # Import is always allowed (manual data)
+    if configured["evcc"]:
+        allowed.append("home")
+    if configured["teslamateapi"]:
+        allowed.append("external")
+    return allowed
 
 
 @router.get(
@@ -31,8 +45,11 @@ def get_statistics(
     legacy_range: Optional[str] = Query(None, alias="range", description="Legacy range parameter: 7d, 30d, 90d, 365d, all (deprecated, use days/from_date/to_date)"),
     db: Session = Depends(get_db)
 ) -> StatisticsResponse:
-    # If not in live mode (no EVCC/TM config), return empty results
-    if not _is_live_mode(db):
+    # Get allowed source types based on configuration
+    allowed_sources = _get_allowed_source_types(db)
+    
+    # If no EVCC and no TM configured, return empty
+    if "home" not in allowed_sources and "external" not in allowed_sources:
         return StatisticsResponse(
             ok=True,
             kpis={
@@ -123,38 +140,83 @@ def get_statistics(
     # Get base statistics
     stats = repo.get_statistics(range_days=range_days, from_date=from_date, to_date=to_date)
     
-    # Calculate charging losses from live matching
-    try:
-        matching_result = run_matching_dry_run(days=range_days, from_date=from_date, to_date=to_date)
-        if matching_result.get('ok') and matching_result.get('summary'):
-            summary = matching_result['summary']
-            total_evcc_energy = summary.get('total_evcc_energy', 0)
-            total_tm_energy = summary.get('total_tm_energy', 0)
-            if total_evcc_energy > 0:
-                charging_losses_kwh = round(total_tm_energy - total_evcc_energy, 2)
-                charging_losses_pct = round((charging_losses_kwh / total_evcc_energy) * 100, 1)
+    # Filter stats based on configured sources
+    configured = _get_configured_sources(db)
+    
+    # Zero out home stats if EVCC not configured
+    if not configured["evcc"]:
+        stats["kpis"]["home_sessions"] = 0
+        stats["energy_by_source"]["home"] = 0.0
+        stats["cost_by_source"]["home"] = 0.0
+        stats["sessions_by_source"]["home"] = 0
+    
+    # Zero out external stats if TM not configured
+    if not configured["teslamateapi"]:
+        stats["kpis"]["external_sessions"] = 0
+        stats["energy_by_source"]["external"] = 0.0
+        stats["cost_by_source"]["external"] = 0.0
+        stats["sessions_by_source"]["external"] = 0
+        # Also zero DC/AC breakdown
+        stats["kpis"]["external_dc_sessions"] = 0
+        stats["kpis"]["external_ac_sessions"] = 0
+        stats["kpis"]["external_dc_energy_kwh"] = 0.0
+        stats["kpis"]["external_ac_energy_kwh"] = 0.0
+        stats["kpis"]["external_dc_cost_eur"] = 0.0
+        stats["kpis"]["external_ac_cost_eur"] = 0.0
+    
+    # Recalculate totals based on filtered values
+    stats["energy_by_source"]["total"] = stats["energy_by_source"]["home"] + stats["energy_by_source"]["external"] + stats["energy_by_source"]["import"]
+    stats["cost_by_source"]["total"] = stats["cost_by_source"]["home"] + stats["cost_by_source"]["external"] + stats["cost_by_source"]["import"]
+    stats["sessions_by_source"]["total"] = stats["sessions_by_source"]["home"] + stats["sessions_by_source"]["external"] + stats["sessions_by_source"]["import"]
+    stats["kpis"]["total_energy_kwh"] = stats["energy_by_source"]["total"]
+    stats["kpis"]["total_cost_eur"] = stats["cost_by_source"]["total"]
+    stats["kpis"]["total_sessions"] = stats["sessions_by_source"]["total"]
+    
+    # Calculate charging losses from live matching (only if both EVCC and TM configured)
+    if configured["evcc"] and configured["teslamateapi"]:
+        try:
+            matching_result = run_matching_dry_run(days=range_days, from_date=from_date, to_date=to_date)
+            if matching_result.get('ok') and matching_result.get('summary'):
+                summary = matching_result['summary']
+                total_evcc_energy = summary.get('total_evcc_energy', 0)
+                total_tm_energy = summary.get('total_tm_energy', 0)
+                if total_evcc_energy > 0:
+                    charging_losses_kwh = round(total_tm_energy - total_evcc_energy, 2)
+                    charging_losses_pct = round((charging_losses_kwh / total_evcc_energy) * 100, 1)
+                else:
+                    charging_losses_kwh = None
+                    charging_losses_pct = None
+                
+                stats['kpis']['charging_losses_kwh'] = charging_losses_kwh
+                stats['kpis']['charging_losses_pct'] = charging_losses_pct
+                stats['kpis']['evcc_energy_matched_kwh'] = round(total_evcc_energy, 2)
+                stats['kpis']['tm_energy_matched_kwh'] = round(total_tm_energy, 2)
             else:
-                charging_losses_kwh = None
-                charging_losses_pct = None
-            
-            stats['kpis']['charging_losses_kwh'] = charging_losses_kwh
-            stats['kpis']['charging_losses_pct'] = charging_losses_pct
-            stats['kpis']['evcc_energy_matched_kwh'] = round(total_evcc_energy, 2)
-            stats['kpis']['tm_energy_matched_kwh'] = round(total_tm_energy, 2)
-        else:
+                stats['kpis']['charging_losses_kwh'] = None
+                stats['kpis']['charging_losses_pct'] = None
+                stats['kpis']['evcc_energy_matched_kwh'] = None
+                stats['kpis']['tm_energy_matched_kwh'] = None
+        except Exception:
             stats['kpis']['charging_losses_kwh'] = None
             stats['kpis']['charging_losses_pct'] = None
             stats['kpis']['evcc_energy_matched_kwh'] = None
             stats['kpis']['tm_energy_matched_kwh'] = None
-    except Exception:
+    else:
+        # Not both configured - no matching possible
         stats['kpis']['charging_losses_kwh'] = None
         stats['kpis']['charging_losses_pct'] = None
         stats['kpis']['evcc_energy_matched_kwh'] = None
         stats['kpis']['tm_energy_matched_kwh'] = None
     
-    # Trip analysis - find trips (external sessions grouped by proximity)
-    trip_stats = repo.get_trip_analysis(range_days=range_days, from_date=from_date, to_date=to_date)
-    stats['kpis'].update(trip_stats)
+    # Trip analysis - only if TM configured
+    if configured["teslamateapi"]:
+        trip_stats = repo.get_trip_analysis(range_days=range_days, from_date=from_date, to_date=to_date)
+        stats['kpis'].update(trip_stats)
+    else:
+        stats['kpis']['trip_count'] = 0
+        stats['kpis']['trip_total_energy_kwh'] = 0.0
+        stats['kpis']['trip_total_cost_eur'] = 0.0
+        stats['kpis']['trip_avg_distance_km'] = None
     
     return StatisticsResponse(
         ok=True,

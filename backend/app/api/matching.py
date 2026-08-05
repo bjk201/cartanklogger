@@ -33,14 +33,16 @@ async def matching_dry_run(
     Uses imported database data (may be stale).
     
     For production use /dry-run/live instead.
-    Returns empty result if EVCC/TM not configured.
+    Matching requires BOTH EVCC and TM to be configured.
+    Returns empty result if either is not configured.
     """
     from app.models.datasource import DataSourceConfig
+    from app.services.matching import run_matching_dry_run
+    from app.database import SessionLocal
     
-    # If not in live mode (no EVCC/TM config), return empty results
+    # Matching requires BOTH EVCC and TM
     config = db.query(DataSourceConfig).first()
     if not config or not config.evcc_host or not config.teslamateapi_base_url:
-        from app.services.matching import MatchingSummary
         return {
             'ok': True,
             'matches': [],
@@ -58,11 +60,9 @@ async def matching_dry_run(
             },
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'data_source': 'database',
-            'message': 'EVCC und/oder TeslaMateAPI nicht konfiguriert - Keine Demo-Daten'
+            'message': 'EVCC und/oder TeslaMateAPI nicht konfiguriert - Matching nicht möglich'
         }
     
-    from app.database import SessionLocal
-    from app.services.matching import run_matching_dry_run
     db_local = SessionLocal()
     try:
         result = run_matching_dry_run(limit, days, from_date, to_date)
