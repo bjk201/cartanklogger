@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X, Zap, Euro, MapPin, Sun, Activity, List } from 'lucide-react';
+import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
@@ -32,16 +33,6 @@ ChartJS.register(
   Filler
 );
 
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '365d', label: '365 Tage' },
-  { value: 'all', label: 'Alles' },
-] as const;
-
-type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
-
 const OVERVIEW_PAGE_SIZE = 10;
 
 export function OverviewPage() {
@@ -52,11 +43,12 @@ export function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Range state
-  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
-  const [customFrom, setCustomFrom] = useState<string>('');
-  const [customTo, setCustomTo] = useState<string>('');
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  // Use global time range context
+  const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
+
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+  };
 
   // Pagination state
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -72,24 +64,16 @@ export function OverviewPage() {
     setLoading(true);
     setError(null);
 
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
-      // For 'all', pass a very large days value to get all sessions
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
-      if (option?.value) {
-        // Map preset values to days
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -141,17 +125,7 @@ export function OverviewPage() {
     fetchData();
   };
 
-  const handleRangeChange = (value: RangeValue) => {
-    setSelectedRange(value);
-    setPagination(p => ({ ...p, page: 1 })); // Reset to page 1 on range change
-    if (value !== 'custom') {
-      setShowCustomPicker(false);
-      setCustomFrom('');
-      setCustomTo('');
-    } else {
-      setShowCustomPicker(true);
-    }
-  };
+
 
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,15 +166,6 @@ export function OverviewPage() {
     return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
   };
 
-  const getRangeLabel = (range: RangeValue): string => {
-    if (range === 'custom') {
-      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
-      return 'Benutzerdefiniert';
-    }
-    const option = RANGE_OPTIONS.find(o => o.value === range);
-    return option?.label || range;
-  };
-
   if (loading) {
     return (
       <div className="page-container">
@@ -226,56 +191,6 @@ export function OverviewPage() {
             Produktiver Einstieg · <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
           </p>
         </div>
-        <div className="overview-page__range-selector">
-          <label htmlFor="range-select" className="sr-only">Zeitraum</label>
-          <select
-            id="range-select"
-            value={selectedRange}
-            onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-            className="overview-page__range-select"
-          >
-            {RANGE_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-            <option value="custom">Benutzerdefiniert…</option>
-          </select>
-
-          {showCustomPicker && (
-            <form onSubmit={handleCustomRangeSubmit} className="overview-page__custom-range">
-              <div className="overview-page__date-inputs">
-                <div className="overview-page__date-input-group">
-                  <label htmlFor="custom-from" className="overview-page__date-label">Von</label>
-                  <input
-                    id="custom-from"
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="overview-page__date-input"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                <div className="overview-page__date-input-group">
-                  <label htmlFor="custom-to" className="overview-page__date-label">Bis</label>
-                  <input
-                    id="custom-to"
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="overview-page__date-input"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              </div>
-              <div className="overview-page__custom-actions">
-                <button type="submit" className="overview-page__apply-btn">Anwenden</button>
-                <button type="button" onClick={() => handleRangeChange('30d')} className="overview-page__cancel-btn">
-                  <X size={16} aria-hidden="true" />
-                  Abbrechen
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
       </header>
 
       {/* KPI Cards - Real Data from Summary API */}
@@ -286,46 +201,47 @@ export function OverviewPage() {
             <KpiCard
               label="Gesamt Sessions"
               value={summary.total_sessions}
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>}
+              icon={(props) => <Calendar {...props} />}
+              iconColor="var(--color-primary)"
               subtitle="Alle Ladevorgänge"
             />
             <KpiCard
               label="Gesamt Energie"
               value={formatNumber(summary.total_energy_kwh)}
               unit="kWh"
+              icon={(props) => <Zap {...props} />}
               iconColor="var(--color-home)"
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>}
               subtitle="Gesamt geladen"
             />
             <KpiCard
               label="Gesamtkosten"
               value={summary.total_cost_eur.toFixed(2)}
               unit="€"
+              icon={(props) => <Euro {...props} />}
               iconColor="#f59e0b"
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
               subtitle="Gesamtkosten"
             />
             <KpiCard
               label="Ø Kosten/kWh"
               value={formatCostPerKWh(summary.avg_cost_per_kwh)}
+              icon={(props) => <Activity {...props} />}
               iconColor="var(--color-primary)"
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>}
               subtitle="Durchschnittspreis"
             />
             <KpiCard
               label="Home Energie"
               value={formatNumber(summary.home_energy_kwh)}
               unit="kWh"
+              icon={(props) => <Zap {...props} />}
               iconColor="var(--color-home)"
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
               subtitle="Zuhause geladen"
             />
             <KpiCard
               label="External Energie"
               value={formatNumber(summary.external_energy_kwh)}
               unit="kWh"
+              icon={(props) => <MapPin {...props} />}
               iconColor="var(--color-external)"
-              icon={() => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
               subtitle="Extern geladen"
             />
           </div>
@@ -465,15 +381,16 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
       {
         label: 'Energie pro Session',
         data: energies,
-        borderColor: 'var(--color-primary)',
-        backgroundColor: 'var(--color-primary-light)',
+        borderColor: '#0d9488',
+        backgroundColor: 'rgba(13, 148, 136, 0.15)',
         fill: true,
-        tension: 0.3,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: 'var(--color-primary)',
-        pointBorderColor: 'var(--color-bg-card)',
-        pointBorderWidth: 2,
+        tension: 0.25,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#0d9488',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        borderWidth: 2,
       },
     ],
   }), [sorted, energies]);

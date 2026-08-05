@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
@@ -14,16 +15,6 @@ const SOURCE_TYPE_OPTIONS = [
   { value: 'external', label: 'Extern (TeslaMate)' },
   { value: 'import', label: 'Import' },
 ] as const;
-
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '365d', label: '365 Tage' },
-  { value: 'all', label: 'Alles' },
-] as const;
-
-type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
 
 export function SessionsPage() {
   const navigate = useNavigate();
@@ -44,32 +35,27 @@ export function SessionsPage() {
   const [sourceType, setSourceType] = useState<'all' | 'home' | 'external' | 'import'>('all');
   const [sortDesc, setSortDesc] = useState(true);
   
-  // Range state (like Overview/Statistics)
-  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
-  const [customFrom, setCustomFrom] = useState<string>('');
-  const [customTo, setCustomTo] = useState<string>('');
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  // Use global time range context
+  const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
+
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+  };
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     setError(null);
     
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
-      if (option?.value) {
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -132,18 +118,6 @@ export function SessionsPage() {
     }
   };
 
-  const handleRangeChange = (value: RangeValue) => {
-    setSelectedRange(value);
-    setPagination(p => ({ ...p, page: 1 }));
-    if (value !== 'custom') {
-      setShowCustomPicker(false);
-      setCustomFrom('');
-      setCustomTo('');
-    } else {
-      setShowCustomPicker(true);
-    }
-  };
-
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customFrom && customTo) {
@@ -172,14 +146,7 @@ export function SessionsPage() {
     });
   };
 
-  const getRangeLabel = (range: RangeValue): string => {
-    if (range === 'custom') {
-      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
-      return 'Benutzerdefiniert';
-    }
-    const option = RANGE_OPTIONS.find(o => o.value === range);
-    return option?.label || range;
-  };
+  
 
   return (
     <div className="page-container">
@@ -190,56 +157,6 @@ export function SessionsPage() {
             <p className="sessions-page__subtitle">
               Alle Ladevorgänge durchsuchen, filtern und sortieren · <span className="sessions-page__status">{getRangeLabel(selectedRange)}</span>
             </p>
-          </div>
-          <div className="sessions-page__range-selector">
-            <label htmlFor="range-select" className="sr-only">Zeitraum</label>
-            <select
-              id="range-select"
-              value={selectedRange}
-              onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-              className="sessions-page__range-select"
-            >
-              {RANGE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-              <option value="custom">Benutzerdefiniert…</option>
-            </select>
-
-            {showCustomPicker && (
-              <form onSubmit={handleCustomRangeSubmit} className="sessions-page__custom-range">
-                <div className="sessions-page__date-inputs">
-                  <div className="sessions-page__date-input-group">
-                    <label htmlFor="custom-from" className="sessions-page__date-label">Von</label>
-                    <input
-                      id="custom-from"
-                      type="date"
-                      value={customFrom}
-                      onChange={(e) => setCustomFrom(e.target.value)}
-                      className="sessions-page__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                  <div className="sessions-page__date-input-group">
-                    <label htmlFor="custom-to" className="sessions-page__date-label">Bis</label>
-                    <input
-                      id="custom-to"
-                      type="date"
-                      value={customTo}
-                      onChange={(e) => setCustomTo(e.target.value)}
-                      className="sessions-page__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                </div>
-                <div className="sessions-page__custom-actions">
-                  <button type="submit" className="sessions-page__apply-btn">Anwenden</button>
-                  <button type="button" onClick={() => handleRangeChange('30d')} className="sessions-page__cancel-btn">
-                    <X size={16} aria-hidden="true" />
-                    Abbrechen
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         </header>
 

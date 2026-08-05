@@ -16,6 +16,7 @@ import {
   BarChart,
   BarChart3,
 } from 'lucide-react';
+import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import {
   LoadingState,
   ErrorState,
@@ -57,52 +58,31 @@ ChartJS.register(
   ArcElement
 );
 
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '365d', label: '365 Tage' },
-  { value: 'all', label: 'Alles' },
-  { value: 'custom', label: 'Benutzerdefiniert…' },
-] as const;
-
-type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
-
 export function StatisticsPage() {
   const [data, setData] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
-  const [customFrom, setCustomFrom] = useState<string>('');
-  const [customTo, setCustomTo] = useState<string>('');
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
+
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+  };
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
 
   const fetchStatistics = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find((o) => o.value === selectedRange);
-      if (option?.value) {
-        const daysMap: Record<string, number> = {
-          '7d': 7,
-          '30d': 30,
-          '90d': 90,
-          '365d': 365,
-        };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -129,31 +109,11 @@ export function StatisticsPage() {
     fetchStatistics();
   }, [fetchStatistics]);
 
-  const handleRangeChange = (value: RangeValue) => {
-    setSelectedRange(value);
-    if (value !== 'custom') {
-      setShowCustomPicker(false);
-      setCustomFrom('');
-      setCustomTo('');
-    } else {
-      setShowCustomPicker(true);
-    }
-  };
-
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customFrom && customTo) {
       fetchStatistics();
     }
-  };
-
-  const getRangeLabel = (range: RangeValue): string => {
-    if (range === 'custom') {
-      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
-      return 'Benutzerdefiniert';
-    }
-    const option = RANGE_OPTIONS.find((o) => o.value === range);
-    return option?.label || range;
   };
 
   const formatNumber = (num: number): string => {
@@ -458,68 +418,6 @@ export function StatisticsPage() {
                 {getRangeLabel(selectedRange)}
               </span>
             </p>
-          </div>
-          <div className="statistics-page__range-selector">
-            <label htmlFor="range-select" className="sr-only">
-              Zeitraum
-            </label>
-            <select
-              id="range-select"
-              value={selectedRange}
-              onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-              className="statistics-page__range-select"
-            >
-              {RANGE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {showCustomPicker && (
-              <form onSubmit={handleCustomRangeSubmit} className="statistics-page__custom-range">
-                <div className="statistics-page__date-inputs">
-                  <div className="statistics-page__date-input-group">
-                    <label htmlFor="custom-from" className="statistics-page__date-label">
-                      Von
-                    </label>
-                    <input
-                      id="custom-from"
-                      type="date"
-                      value={customFrom}
-                      onChange={(e) => setCustomFrom(e.target.value)}
-                      className="statistics-page__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                  <div className="statistics-page__date-input-group">
-                    <label htmlFor="custom-to" className="statistics-page__date-label">
-                      Bis
-                    </label>
-                    <input
-                      id="custom-to"
-                      type="date"
-                      value={customTo}
-                      onChange={(e) => setCustomTo(e.target.value)}
-                      className="statistics-page__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                </div>
-                <div className="statistics-page__custom-actions">
-                  <button type="submit" className="statistics-page__apply-btn">
-                    Anwenden
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRangeChange('30d')}
-                    className="statistics-page__cancel-btn"
-                  >
-                    Abbrechen
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         </header>
 

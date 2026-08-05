@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, Wifi, AlertCircle, CheckCircle, Loader2, Shield, Eye, EyeOff, RefreshCw, Link, MinusCircle, PlusCircle, ArrowRight, HelpCircle, Table, List, ChevronRight, ChevronDown, Database, Server, Globe, Wifi as WifiIcon, AlertTriangle, X } from 'lucide-react';
+import { useTimeRange, type RangeValue, RANGE_OPTIONS } from '../app/TimeRangeContext';
 import { api } from '../lib/apiClient';
 import type { 
   MatchingDryRunResponse, 
@@ -36,42 +37,27 @@ const MatchingPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'summary' | 'raw' | 'live'>('live');
   const [dataSource, setDataSource] = useState<'database' | 'live'>('live');
   
-  // Range state (like Overview/Statistics/Sessions)
-  const [selectedRange, setSelectedRange] = useState<RangeValue>('30d');
-  const [customFrom, setCustomFrom] = useState<string>('');
-  const [customTo, setCustomTo] = useState<string>('');
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  // Use global time range context
+  const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
 
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '365d', label: '365 Tage' },
-  { value: 'all', label: 'Alles' },
-] as const;
-
-type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
+  const handleRangeChange = (value: RangeValue) => {
+    setSelectedRange(value);
+  };
 
   const fetchDryRun = useCallback(async () => {
     setLoading(true);
     setError(null);
     
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
-      if (option?.value) {
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -90,22 +76,16 @@ type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
     setLiveLoading(true);
     setError(null);
     
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
-      if (option?.value) {
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -134,22 +114,16 @@ type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
   const fetchRawData = useCallback(async () => {
     setRawLoading(true);
     
-    // Determine API parameters based on selected range
-    let days: number | undefined;
-    let from_date: string | undefined;
-    let to_date: string | undefined;
+    // Determine API parameters based on selected range (from global context)
+    let days: number | undefined = getDaysFromRange(selectedRange);
+    let from_date: string | undefined = getFromDate();
+    let to_date: string | undefined = getToDate();
 
     if (selectedRange === 'custom') {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
       days = 36500; // ~100 years
-    } else {
-      const option = RANGE_OPTIONS.find(o => o.value === selectedRange);
-      if (option?.value) {
-        const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
-        days = daysMap[option.value];
-      }
     }
 
     try {
@@ -248,17 +222,6 @@ type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
     }
   };
 
-  const handleRangeChange = (value: RangeValue) => {
-    setSelectedRange(value);
-    if (value !== 'custom') {
-      setShowCustomPicker(false);
-      setCustomFrom('');
-      setCustomTo('');
-    } else {
-      setShowCustomPicker(true);
-    }
-  };
-
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customFrom && customTo) {
@@ -272,14 +235,7 @@ type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
     }
   };
 
-  const getRangeLabel = (range: RangeValue): string => {
-    if (range === 'custom') {
-      if (customFrom && customTo) return `${customFrom} – ${customTo}`;
-      return 'Benutzerdefiniert';
-    }
-    const option = RANGE_OPTIONS.find(o => o.value === range);
-    return option?.label || range;
-  };
+  
 
   const closeModal = () => {
     setSelectedTmCharge(null);
@@ -359,56 +315,6 @@ type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
           <p className="matching-page__subtitle">
             EVCC ↔ TeslaMateAPI Zuordnung — Dry-Run mit manueller Korrektur · <span className="matching-page__status">{getRangeLabel(selectedRange)}</span>
           </p>
-        </div>
-        <div className="matching-page__range-selector">
-          <label htmlFor="range-select" className="sr-only">Zeitraum</label>
-          <select
-            id="range-select"
-            value={selectedRange}
-            onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-            className="matching-page__range-select"
-          >
-            {RANGE_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-            <option value="custom">Benutzerdefiniert…</option>
-          </select>
-
-          {showCustomPicker && (
-            <form onSubmit={handleCustomRangeSubmit} className="matching-page__custom-range">
-              <div className="matching-page__date-inputs">
-                <div className="matching-page__date-input-group">
-                  <label htmlFor="custom-from" className="matching-page__date-label">Von</label>
-                  <input
-                    id="custom-from"
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="matching-page__date-input"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                <div className="matching-page__date-input-group">
-                  <label htmlFor="custom-to" className="matching-page__date-label">Bis</label>
-                  <input
-                    id="custom-to"
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="matching-page__date-input"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              </div>
-              <div className="matching-page__custom-actions">
-                <button type="submit" className="matching-page__apply-btn">Anwenden</button>
-                <button type="button" onClick={() => handleRangeChange('30d')} className="matching-page__cancel-btn">
-                  <X size={16} aria-hidden="true" />
-                  Abbrechen
-                </button>
-              </div>
-            </form>
-          )}
         </div>
       </header>
 
