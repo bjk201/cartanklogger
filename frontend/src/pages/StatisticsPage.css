@@ -455,6 +455,49 @@
   border: 1px solid var(--color-border);
 }
 
+/* Chart Header with Toggle */
+.statistics-page__chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.statistics-page__chart-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+}
+
+.statistics-page__chart-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.statistics-page__chart-toggle-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.statistics-page__chart-toggle-btn.active {
+  background: var(--color-primary);
+  color: white;
+}
+
 @media (max-width: 768px) {
   .statistics-page__chart-container {
     max-width: 100%;

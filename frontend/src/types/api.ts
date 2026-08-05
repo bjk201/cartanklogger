@@ -141,6 +141,12 @@ export interface StatisticsKPIs {
   daily_dates: string[];
   daily_km: number[];
   daily_kwh: number[];
+
+  // Daily charged energy data for chart
+  daily_charged_dates: string[];
+  daily_home_kwh: number[];
+  daily_external_kwh: number[];
+  daily_total_kwh: number[];
 }
 
 export interface StatisticsResponse {

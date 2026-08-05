@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Minus, BarChart } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Minus, BarChart, BarChart3 } from 'lucide-react';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
 import { api, type StatisticsResponse, type StatisticsKPIs, type SourceBreakdown } from '../lib/apiClient';
 import './StatisticsPage.css';
@@ -23,6 +23,7 @@ export function StatisticsPage() {
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
   const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [chartType, setChartType] = useState<'line' | 'bar'>('line');
 
   const fetchStatistics = useCallback(async () => {
     setLoading(true);
@@ -378,12 +379,48 @@ export function StatisticsPage() {
         {/* Daily Drives Chart */}
         {(kpis.daily_dates && kpis.daily_dates.length > 0) && (
           <section className="statistics-page__section" aria-labelledby="daily-drives-heading">
-            <h2 id="daily-drives-heading" className="statistics-page__section-title">Tägliche Fahrten (TeslaMate)</h2>
+            <div className="statistics-page__chart-header">
+              <h2 id="daily-drives-heading" className="statistics-page__section-title">Tägliche Fahrten (TeslaMate)</h2>
+              <div className="statistics-page__chart-toggle">
+                <button
+                  className={`statistics-page__chart-toggle-btn ${chartType === 'line' ? 'active' : ''}`}
+                  onClick={() => setChartType('line')}
+                  aria-pressed={chartType === 'line'}
+                  title="Liniendiagramm"
+                >
+                  <BarChart3 size={16} />
+                </button>
+                <button
+                  className={`statistics-page__chart-toggle-btn ${chartType === 'bar' ? 'active' : ''}`}
+                  onClick={() => setChartType('bar')}
+                  aria-pressed={chartType === 'bar'}
+                  title="Balkendiagramm"
+                >
+                  <BarChart size={16} />
+                </button>
+              </div>
+            </div>
             <div className="statistics-page__chart-container">
               <DailyDrivesChart 
                 dates={kpis.daily_dates} 
                 km={kpis.daily_km} 
-                kwh={kpis.daily_kwh} 
+                kwh={kpis.daily_kwh}
+                type={chartType}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* Daily Charged Energy Chart */}
+        {(kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0) && (
+          <section className="statistics-page__section" aria-labelledby="daily-charged-heading">
+            <h2 id="daily-charged-heading" className="statistics-page__section-title">Täglich geladene Energie</h2>
+            <div className="statistics-page__chart-container">
+              <DailyChargedChart 
+                dates={kpis.daily_charged_dates} 
+                home_kwh={kpis.daily_home_kwh} 
+                external_kwh={kpis.daily_external_kwh}
+                total_kwh={kpis.daily_total_kwh}
               />
             </div>
           </section>
@@ -560,9 +597,10 @@ interface DailyDrivesChartProps {
   dates: string[];
   km: number[];
   kwh: number[];
+  type: 'line' | 'bar';
 }
 
-function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
+function DailyDrivesChart({ dates, km, kwh, type }: DailyDrivesChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -581,7 +619,7 @@ function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
 
       const width = rect.width;
       const height = rect.height;
-      const padding = { top: 20, right: 60, bottom: 40, left: 60 };
+      const padding = { top: 30, right: 60, bottom: 50, left: 60 };
       const chartWidth = width - padding.left - padding.right;
       const chartHeight = height - padding.top - padding.bottom;
 
@@ -596,8 +634,8 @@ function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
 
       // Draw grid lines and Y-axis labels
       ctx.strokeStyle = '#e0e0e0';
-      ctx.font = '11px system-ui';
-      ctx.fillStyle = '#666';
+      ctx.font = '13px system-ui';
+      ctx.fillStyle = '#444';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
 
@@ -611,16 +649,18 @@ function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
 
         // Left Y-axis (km)
         const kmVal = maxKmScaled * (1 - i / 4);
-        ctx.fillText(kmVal.toFixed(1) + ' km', padding.left - 8, y);
+        ctx.fillText(kmVal.toFixed(1) + ' km', padding.left - 10, y);
 
         // Right Y-axis (kWh)
         const kwhVal = maxKwhScaled * (1 - i / 4);
-        ctx.fillText(kwhVal.toFixed(1) + ' kWh', width - padding.right + 8, y);
+        ctx.fillText(kwhVal.toFixed(1) + ' kWh', width - padding.right + 10, y);
       }
 
       // X-axis labels (dates)
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
+      ctx.font = '12px system-ui';
+      ctx.fillStyle = '#444';
       const step = Math.max(1, Math.floor(dates.length / 10)); // Show max ~10 labels
       dates.forEach((date, i) => {
         if (i % step === 0 || i === dates.length - 1) {
@@ -629,44 +669,67 @@ function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
         }
       });
 
-      // Draw km line (blue)
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      km.forEach((val: number, i: number) => {
-        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-        const y = padding.top + chartHeight * (1 - val / maxKmScaled);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      const barWidth = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.6 : chartWidth * 0.6;
+      const barOffset = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.2 : 0;
 
-      // Draw kWh line (orange)
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      kwh.forEach((val: number, i: number) => {
-        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
-        const y = padding.top + chartHeight * (1 - val / maxKwhScaled);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      if (type === 'bar') {
+        // Draw km bars (blue)
+        ctx.fillStyle = '#3b82f6';
+        km.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2 + barOffset;
+          const barHeight = (val / maxKmScaled) * chartHeight;
+          const y = padding.top + chartHeight - barHeight;
+          ctx.fillRect(x, y, barWidth, barHeight);
+        });
 
-    // Legend
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = '#3b82f6';
-    ctx.fillRect(padding.left, padding.top, 12, 12);
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'left';
-    ctx.fillText('km', padding.left + 18, padding.top + 10);
+        // Draw kWh bars (orange) - offset to the right
+        ctx.fillStyle = '#f59e0b';
+        kwh.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (dates.length - 1)) * i + barWidth / 2 + barOffset;
+          const barHeight = (val / maxKwhScaled) * chartHeight;
+          const y = padding.top + chartHeight - barHeight;
+          ctx.fillRect(x, y, barWidth, barHeight);
+        });
+      } else {
+        // Draw km line (blue)
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        km.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+          const y = padding.top + chartHeight * (1 - val / maxKmScaled);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
 
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(padding.left + 60, padding.top, 12, 12);
-    ctx.fillStyle = '#333';
-    ctx.fillText('kWh', padding.left + 78, padding.top + 10);
+        // Draw kWh line (orange)
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        kwh.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+          const y = padding.top + chartHeight * (1 - val / maxKwhScaled);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
 
-  }, [dates, km, kwh]);
+      // Legend
+      ctx.font = '13px system-ui';
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(padding.left, padding.top - 22, 14, 14);
+      ctx.fillStyle = '#333';
+      ctx.textAlign = 'left';
+      ctx.fillText('km', padding.left + 20, padding.top - 10);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(padding.left + 60, padding.top - 22, 14, 14);
+      ctx.fillStyle = '#333';
+      ctx.fillText('kWh', padding.left + 78, padding.top - 10);
+
+    }, [dates, km, kwh, type]);
 
   return (
     <canvas 
@@ -675,7 +738,149 @@ function DailyDrivesChart({ dates, km, kwh }: DailyDrivesChartProps) {
       width={800} 
       height={300}
       role="img"
-      aria-label={`Tägliche Fahrten: ${dates.length} Tage, km und kWh`}
+      aria-label={`Tägliche Fahrten: ${dates.length} Tage, km und kWh (${type === 'line' ? 'Linien' : 'Balken'})`}
+    />
+  );
+}
+
+// Daily Charged Energy Chart Component
+interface DailyChargedChartProps {
+  dates: string[];
+  home_kwh: number[];
+  external_kwh: number[];
+  total_kwh: number[];
+}
+
+function DailyChargedChart({ dates, home_kwh, external_kwh, total_kwh }: DailyChargedChartProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size for high DPI
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const width = rect.width;
+    const height = rect.height;
+    const padding = { top: 30, right: 60, bottom: 50, left: 60 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Find max values for scaling
+    const maxTotal = Math.max(...total_kwh, 0);
+    const maxTotalScaled = maxTotal > 0 ? maxTotal * 1.1 : 10;
+
+    // Draw grid lines and Y-axis labels
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.font = '13px system-ui';
+    ctx.fillStyle = '#444';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    // Grid lines (5 horizontal lines)
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + (chartHeight / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+
+      // Y-axis (kWh)
+      const kwhVal = maxTotalScaled * (1 - i / 4);
+      ctx.fillText(kwhVal.toFixed(1) + ' kWh', padding.left - 10, y);
+    }
+
+    // X-axis labels (dates)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '12px system-ui';
+    ctx.fillStyle = '#444';
+    const step = Math.max(1, Math.floor(dates.length / 10));
+    dates.forEach((date, i) => {
+      if (i % step === 0 || i === dates.length - 1) {
+        const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+        ctx.fillText(date.slice(5), x, height - padding.bottom + 8);
+      }
+    });
+
+    const barWidth = dates.length > 1 ? (chartWidth / (dates.length - 1)) * 0.7 : chartWidth * 0.7;
+
+    // Draw stacked bars: Home (bottom) + External (top)
+    // Home bars (green)
+    ctx.fillStyle = '#22c55e';
+    home_kwh.forEach((val, i) => {
+      const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2;
+      const barHeight = (val / maxTotalScaled) * chartHeight;
+      const y = padding.top + chartHeight - barHeight;
+      ctx.fillRect(x, y, barWidth, barHeight);
+    });
+
+    // External bars (blue) stacked on top
+    ctx.fillStyle = '#3b82f6';
+    external_kwh.forEach((val, i) => {
+      const x = padding.left + (chartWidth / (dates.length - 1)) * i - barWidth / 2;
+      const barHeight = (val / maxTotalScaled) * chartHeight;
+      const homeHeight = (home_kwh[i] / maxTotalScaled) * chartHeight;
+      const y = padding.top + chartHeight - homeHeight - barHeight;
+      ctx.fillRect(x, y, barWidth, barHeight);
+    });
+
+    // Total line (orange) on top
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    total_kwh.forEach((val, i) => {
+      const x = padding.left + (chartWidth / (dates.length - 1)) * i;
+      const y = padding.top + chartHeight * (1 - val / maxTotalScaled);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Legend
+    ctx.font = '13px system-ui';
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(padding.left, padding.top - 22, 14, 14);
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'left';
+    ctx.fillText('Home', padding.left + 20, padding.top - 10);
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(padding.left + 70, padding.top - 22, 14, 14);
+    ctx.fillStyle = '#333';
+    ctx.fillText('Extern', padding.left + 90, padding.top - 10);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.moveTo(padding.left + 140, padding.top - 15);
+    ctx.lineTo(padding.left + 160, padding.top - 15);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#333';
+    ctx.fillText('Gesamt', padding.left + 170, padding.top - 10);
+
+  }, [dates, home_kwh, external_kwh, total_kwh]);
+
+  return (
+    <canvas 
+      ref={canvasRef} 
+      className="statistics-page__chart-canvas"
+      width={800} 
+      height={300}
+      role="img"
+      aria-label={`Täglich geladene Energie: ${dates.length} Tage, Home/Extern/Gesamt kWh`}
     />
   );
 }

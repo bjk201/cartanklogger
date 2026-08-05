@@ -282,6 +282,54 @@ async def get_statistics(
         stats['kpis']['daily_km'] = []
         stats['kpis']['daily_kwh'] = []
     
+    # Add daily charged energy data for chart (home, external, total kWh/day from TM charges)
+    if configured["teslamateapi"]:
+        try:
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            config = db.query(DataSourceConfig).first()
+            tm_client = await create_teslamateapi_client_from_config(config)
+            if tm_client:
+                tm_charges = await tm_client.get_charges()
+                # Filter by date range if provided
+                if range_days or from_date or to_date:
+                    tm_charges = tm_client._filter_tm_by_date_range(tm_charges, range_days, from_date, to_date)
+                
+                # Group by date
+                from collections import defaultdict
+                daily_charged = defaultdict(lambda: {"home": 0.0, "external": 0.0, "total": 0.0})
+                for charge in tm_charges:
+                    if charge.start_date and charge.charge_energy_added:
+                        date_key = charge.start_date.strftime("%Y-%m-%d")
+                        # Determine if home or external based on location
+                        location = (charge.location or "").lower()
+                        is_home = "zuhause" in location or "home" in location or "garage" in location
+                        if is_home:
+                            daily_charged[date_key]["home"] += charge.charge_energy_added
+                        else:
+                            daily_charged[date_key]["external"] += charge.charge_energy_added
+                        daily_charged[date_key]["total"] += charge.charge_energy_added
+                
+                # Convert to sorted list for frontend chart
+                sorted_charged_dates = sorted(daily_charged.keys())
+                daily_home_kwh = [round(daily_charged[d]["home"], 2) for d in sorted_charged_dates]
+                daily_external_kwh = [round(daily_charged[d]["external"], 2) for d in sorted_charged_dates]
+                daily_total_kwh = [round(daily_charged[d]["total"], 2) for d in sorted_charged_dates]
+                
+                stats['kpis']['daily_charged_dates'] = sorted_charged_dates
+                stats['kpis']['daily_home_kwh'] = daily_home_kwh
+                stats['kpis']['daily_external_kwh'] = daily_external_kwh
+                stats['kpis']['daily_total_kwh'] = daily_total_kwh
+        except Exception:
+            stats['kpis']['daily_charged_dates'] = []
+            stats['kpis']['daily_home_kwh'] = []
+            stats['kpis']['daily_external_kwh'] = []
+            stats['kpis']['daily_total_kwh'] = []
+    else:
+        stats['kpis']['daily_charged_dates'] = []
+        stats['kpis']['daily_home_kwh'] = []
+        stats['kpis']['daily_external_kwh'] = []
+        stats['kpis']['daily_total_kwh'] = []
+    
     if configured["teslamateapi"]:
         trip_stats = repo.get_trip_analysis(range_days=range_days, from_date=from_date, to_date=to_date)
         stats['kpis'].update(trip_stats)

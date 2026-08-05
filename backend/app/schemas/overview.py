@@ -144,6 +144,12 @@ class StatisticsKPIs(BaseModel):
     daily_km: Optional[List[float]] = None
     daily_kwh: Optional[List[float]] = None
 
+    # NEW: Daily charged energy data for chart
+    daily_charged_dates: Optional[List[str]] = None
+    daily_home_kwh: Optional[List[float]] = None
+    daily_external_kwh: Optional[List[float]] = None
+    daily_total_kwh: Optional[List[float]] = None
+
 
 class StatisticsResponse(BaseModel):
     """Response contract for GET /api/statistics"""
