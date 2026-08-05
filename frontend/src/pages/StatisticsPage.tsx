@@ -748,104 +748,99 @@ export function StatisticsPage() {
           </div>
         </section>
 
-        {/* Daily Drives Chart */}
-        {kpis.daily_dates && kpis.daily_dates.length > 0 && (
-          <section className="statistics-page__section" aria-labelledby="daily-drives-heading">
-            <div className="statistics-page__chart-header">
-              <h2 id="daily-drives-heading" className="statistics-page__section-title">
-                Tägliche Fahrten (TeslaMate)
-              </h2>
-              <div className="statistics-page__chart-toggle">
-                <button
-                  className={`statistics-page__chart-toggle-btn ${
-                    chartType === 'line' ? 'active' : ''
-                  }`}
-                  onClick={() => setChartType('line')}
-                  aria-pressed={chartType === 'line'}
-                  title="Liniendiagramm"
-                >
-                  <BarChart3 size={16} />
-                </button>
-                <button
-                  className={`statistics-page__chart-toggle-btn ${
-                    chartType === 'bar' ? 'active' : ''
-                  }`}
-                  onClick={() => setChartType('bar')}
-                  aria-pressed={chartType === 'bar'}
-                  title="Balkendiagramm"
-                >
-                  <BarChart size={16} />
-                </button>
-              </div>
-            </div>
-            <div className="statistics-page__chart-container">
-              {dailyDrivesChartData && (
-                <div className="statistics-page__chart-wrapper">
-                  {chartType === 'line' ? (
-                    <Line
-                      data={dailyDrivesChartData}
-                      options={dailyDrivesChartOptions as any}
-                      aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Linien)`}
-                    />
-                  ) : (
-                    <Bar
-                      data={{
-                        ...dailyDrivesChartData,
-                        datasets: dailyDrivesChartData.datasets.map((ds) => ({
-                          ...ds,
-                          type: 'bar' as const,
-                          fill: true,
-                          backgroundColor: ds.backgroundColor,
-                          borderColor: ds.borderColor,
-                          borderWidth: 1,
-                        })),
-                      }}
-                      options={{
-                        ...dailyDrivesChartOptions,
-                        scales: {
-                          ...dailyDrivesChartOptions.scales,
-                          x: {
-                            ...dailyDrivesChartOptions.scales.x,
-                            stacked: false,
-                          },
-                          y: {
-                            ...dailyDrivesChartOptions.scales.y,
-                            stacked: false,
-                          },
-                          y1: {
-                            ...dailyDrivesChartOptions.scales.y1,
-                            stacked: false,
-                          },
-                        },
-                      } as any}
-                      aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Balken)`}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Daily Charged Energy Chart */}
-        {kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0 && (
-          <section className="statistics-page__section" aria-labelledby="daily-charged-heading">
-            <h2 id="daily-charged-heading" className="statistics-page__section-title">
-              Täglich geladene Energie
+        {/* Daily Charts Grid - Side by Side */}
+        {(kpis.daily_dates && kpis.daily_dates.length > 0) || (kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0) ? (
+          <section className="statistics-page__section" aria-labelledby="daily-charts-heading">
+            <h2 id="daily-charts-heading" className="statistics-page__section-title">
+              Tagesauswertungen
             </h2>
-            <div className="statistics-page__chart-container">
-              {dailyChargedChartData && (
-                <div className="statistics-page__chart-wrapper">
-                  <Bar
-                    data={dailyChargedChartData as any}
-                    options={dailyChargedChartOptions as any}
-                    aria-label={`Täglich geladene Energie: ${kpis.daily_charged_dates.length} Tage, Home/Extern/Gesamt kWh`}
-                  />
+            <div className="statistics-page__charts-grid">
+              {/* Daily Drives Chart */}
+              {kpis.daily_dates && kpis.daily_dates.length > 0 && (
+                <div className="statistics-page__chart-card">
+                  <div className="statistics-page__chart-header">
+                    <h3 className="statistics-page__chart-subtitle">Tägliche Fahrten (TeslaMate)</h3>
+                    <div className="statistics-page__chart-toggle">
+                      <button
+                        className={`statistics-page__chart-toggle-btn ${chartType === 'line' ? 'active' : ''}`}
+                        onClick={() => setChartType('line')}
+                        aria-pressed={chartType === 'line'}
+                        title="Liniendiagramm"
+                      >
+                        <BarChart3 size={16} />
+                      </button>
+                      <button
+                        className={`statistics-page__chart-toggle-btn ${chartType === 'bar' ? 'active' : ''}`}
+                        onClick={() => setChartType('bar')}
+                        aria-pressed={chartType === 'bar'}
+                        title="Balkendiagramm"
+                      >
+                        <BarChart size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="statistics-page__chart-container">
+                    {dailyDrivesChartData && (
+                      <div className="statistics-page__chart-wrapper">
+                        {chartType === 'line' ? (
+                          <Line
+                            data={dailyDrivesChartData}
+                            options={dailyDrivesChartOptions as any}
+                            aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Linien)`}
+                          />
+                        ) : (
+                          <Bar
+                            data={{
+                              ...dailyDrivesChartData,
+                              datasets: dailyDrivesChartData.datasets.map((ds) => ({
+                                ...ds,
+                                type: 'bar' as const,
+                                fill: true,
+                                backgroundColor: ds.backgroundColor,
+                                borderColor: ds.borderColor,
+                                borderWidth: 1,
+                              })),
+                            }}
+                            options={{
+                              ...dailyDrivesChartOptions,
+                              scales: {
+                                ...dailyDrivesChartOptions.scales,
+                                x: { ...dailyDrivesChartOptions.scales.x, stacked: false },
+                                y: { ...dailyDrivesChartOptions.scales.y, stacked: false },
+                                y1: { ...dailyDrivesChartOptions.scales.y1, stacked: false },
+                              },
+                            } as any}
+                            aria-label={`Tägliche Fahrten: ${kpis.daily_dates.length} Tage, km und kWh (Balken)`}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Daily Charged Energy Chart */}
+              {kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0 && (
+                <div className="statistics-page__chart-card">
+                  <div className="statistics-page__chart-header">
+                    <h3 className="statistics-page__chart-subtitle">Täglich geladene Energie</h3>
+                  </div>
+                  <div className="statistics-page__chart-container">
+                    {dailyChargedChartData && (
+                      <div className="statistics-page__chart-wrapper">
+                        <Bar
+                          data={dailyChargedChartData as any}
+                          options={dailyChargedChartOptions as any}
+                          aria-label={`Täglich geladene Energie: ${kpis.daily_charged_dates.length} Tage, Home/Extern/Gesamt kWh`}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </section>
-        )}
+        ) : null}
 
         {/* Energy Distribution */}
         <section className="statistics-page__section" aria-labelledby="energy-dist-heading">
