@@ -80,8 +80,9 @@ class SyncService:
                         existing.cost_per_kwh_source = "api" if live_session.price_per_kwh else "derived"
                         existing.odometer_km = live_session.odometer
                         existing.note = f"EVCC Loadpoint: {live_session.loadpoint}"
-                        existing.solar_percentage = None  # Would need additional API call
-                        existing.pv_kwh = None
+                        # PV/Solar data from EVCC API
+                        existing.solar_percentage = live_session.solar_percentage
+                        existing.pv_kwh = live_session.pv_kwh
                         existing.updated_at = datetime.now(timezone.utc)
                     else:
                         # Create new
@@ -96,8 +97,8 @@ class SyncService:
                             note=f"EVCC Loadpoint: {live_session.loadpoint}",
                             cost_per_kwh=live_session.price_per_kwh,
                             cost_per_kwh_source="api" if live_session.price_per_kwh else "derived",
-                            solar_percentage=None,
-                            pv_kwh=None,
+                            solar_percentage=live_session.solar_percentage,
+                            pv_kwh=live_session.pv_kwh,
                             charge_type=None,
                             legacy_source="evcc",
                             legacy_table="live_api",

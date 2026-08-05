@@ -28,6 +28,9 @@ class EVCCLiveSession:
     soc_end: Optional[float]
     loadpoint: str
     odometer: Optional[float]
+    # PV/Solar data (if available from EVCC API)
+    solar_percentage: Optional[float] = None
+    pv_kwh: Optional[float] = None
 
 
 class EVCCClient:
@@ -80,7 +83,10 @@ class EVCCClient:
                         soc_start=item.get("socStart"),
                         soc_end=item.get("socEnd"),
                         loadpoint=item.get("loadpoint", ""),
-                        odometer=item.get("odometer")
+                        odometer=item.get("odometer"),
+                        # PV/Solar data - EVCC API may provide these
+                        solar_percentage=item.get("solarPercentage") or item.get("solar_percentage"),
+                        pv_kwh=item.get("pvEnergy") or item.get("pv_energy") or item.get("pvKwh")
                     )
                     sessions.append(session)
 
