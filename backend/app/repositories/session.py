@@ -249,6 +249,83 @@ class SessionRepository:
         """Count total sessions."""
         return self.db.query(SessionModel).count()
 
+    def get_trip_analysis(self, range_days: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
+        """Get trip analysis statistics for external sessions in the given time range."""
+        query = self.db.query(SessionModel)
+        
+        # Apply time range filter
+        if from_date and to_date:
+            from_str = from_date
+            to_str = to_date + ' 23:59:59'
+            query = query.filter(
+                func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str,
+                func.date(func.replace(SessionModel.date, 'T', ' ')) <= to_str
+            )
+        elif from_date and not to_date:
+            from_str = from_date
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= from_str)
+        elif range_days is not None:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=range_days)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            query = query.filter(func.date(func.replace(SessionModel.date, 'T', ' ')) >= cutoff_str)
+        
+        # Get external sessions only
+        external_query = query.filter(SessionModel.source_type == "external")
+        external_sessions = external_query.order_by(SessionModel.date).all()
+        
+        if not external_sessions:
+            return {
+                "trip_count": 0,
+                "trip_total_energy_kwh": 0.0,
+                "trip_total_cost_eur": 0.0,
+                "trip_avg_distance_km": None
+            }
+        
+        # Group external sessions into trips (sessions within 24h of each other = same trip)
+        trips = []
+        current_trip = [external_sessions[0]]
+        
+        for i in range(1, len(external_sessions)):
+            prev = external_sessions[i-1]
+            curr = external_sessions[i]
+            
+            # Parse dates - handle both datetime objects and string formats
+            prev_date = prev.date
+            curr_date = curr.date
+            
+            if isinstance(prev_date, str):
+                # Handle string format 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DD HH:MM:SS'
+                prev_date_str = prev_date.replace('T', ' ')
+                prev_date = datetime.strptime(prev_date_str[:19], "%Y-%m-%d %H:%M:%S")
+            if isinstance(curr_date, str):
+                curr_date_str = curr_date.replace('T', ' ')
+                curr_date = datetime.strptime(curr_date_str[:19], "%Y-%m-%d %H:%M:%S")
+            
+            # If within 24 hours, same trip
+            if (curr_date - prev_date).total_seconds() <= 24 * 3600:
+                current_trip.append(curr)
+            else:
+                trips.append(current_trip)
+                current_trip = [curr]
+        
+        trips.append(current_trip)  # Add last trip
+        
+        # Calculate trip statistics
+        trip_count = len(trips)
+        total_energy = sum(sum(s.energy_kwh or 0 for s in trip) for trip in trips)
+        total_cost = sum(sum(s.cost_eur or 0 for s in trip) for trip in trips)
+        
+        # Average distance (from sessions that have it)
+        distances = [s.distance_km for trip in trips for s in trip if s.distance_km is not None]
+        avg_distance = round(sum(distances) / len(distances), 1) if distances else None
+        
+        return {
+            "trip_count": trip_count,
+            "trip_total_energy_kwh": round(total_energy, 2),
+            "trip_total_cost_eur": round(total_cost, 2),
+            "trip_avg_distance_km": avg_distance
+        }
+
     def insert_seed_data(self) -> int:
         """Insert seed data for MVP testing. Returns count of inserted rows."""
         # Check if already seeded

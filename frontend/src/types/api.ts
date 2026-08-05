@@ -112,6 +112,26 @@ export interface StatisticsKPIs {
   max_cost_session: number | null;
   max_energy_session_id: number | null;
   max_cost_session_id: number | null;
+
+  // DC/AC breakdown for external sessions
+  external_dc_sessions: number | null;
+  external_ac_sessions: number | null;
+  external_dc_energy_kwh: number | null;
+  external_ac_energy_kwh: number | null;
+  external_dc_cost_eur: number | null;
+  external_ac_cost_eur: number | null;
+
+  // Charging losses (EVCC vs TM matched)
+  charging_losses_kwh: number | null;
+  charging_losses_pct: number | null;
+  evcc_energy_matched_kwh: number | null;
+  tm_energy_matched_kwh: number | null;
+
+  // Trip analysis
+  trip_count: number | null;
+  trip_total_energy_kwh: number | null;
+  trip_total_cost_eur: number | null;
+  trip_avg_distance_km: number | null;
 }
 
 export interface StatisticsResponse {

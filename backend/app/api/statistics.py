@@ -4,6 +4,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.repositories.session import SessionRepository
+from app.services.matching import run_matching_dry_run
 from app.schemas.overview import StatisticsResponse, ErrorDetail
 
 
@@ -72,8 +73,41 @@ def get_statistics(
         range_days = 30
         range_label = "30d"
     
-    # Get statistics
+    # Get base statistics
     stats = repo.get_statistics(range_days=range_days, from_date=from_date, to_date=to_date)
+    
+    # Calculate charging losses from live matching
+    try:
+        matching_result = run_matching_dry_run(days=range_days, from_date=from_date, to_date=to_date)
+        if matching_result.get('ok') and matching_result.get('summary'):
+            summary = matching_result['summary']
+            total_evcc_energy = summary.get('total_evcc_energy', 0)
+            total_tm_energy = summary.get('total_tm_energy', 0)
+            if total_evcc_energy > 0:
+                charging_losses_kwh = round(total_tm_energy - total_evcc_energy, 2)
+                charging_losses_pct = round((charging_losses_kwh / total_evcc_energy) * 100, 1)
+            else:
+                charging_losses_kwh = None
+                charging_losses_pct = None
+            
+            stats['kpis']['charging_losses_kwh'] = charging_losses_kwh
+            stats['kpis']['charging_losses_pct'] = charging_losses_pct
+            stats['kpis']['evcc_energy_matched_kwh'] = round(total_evcc_energy, 2)
+            stats['kpis']['tm_energy_matched_kwh'] = round(total_tm_energy, 2)
+        else:
+            stats['kpis']['charging_losses_kwh'] = None
+            stats['kpis']['charging_losses_pct'] = None
+            stats['kpis']['evcc_energy_matched_kwh'] = None
+            stats['kpis']['tm_energy_matched_kwh'] = None
+    except Exception:
+        stats['kpis']['charging_losses_kwh'] = None
+        stats['kpis']['charging_losses_pct'] = None
+        stats['kpis']['evcc_energy_matched_kwh'] = None
+        stats['kpis']['tm_energy_matched_kwh'] = None
+    
+    # Trip analysis - find trips (external sessions grouped by proximity)
+    trip_stats = repo.get_trip_analysis(range_days=range_days, from_date=from_date, to_date=to_date)
+    stats['kpis'].update(trip_stats)
     
     return StatisticsResponse(
         ok=True,

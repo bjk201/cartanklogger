@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Zap, Hash, ChevronLeft, ChevronRight, BarChart2, Activity, ArrowUpRight, ArrowDownRight, MapPin, Route, Minus } from 'lucide-react';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
 import { api, type StatisticsResponse, type StatisticsKPIs, type SourceBreakdown } from '../lib/apiClient';
 import './StatisticsPage.css';
@@ -256,6 +256,86 @@ export function StatisticsPage() {
               <div className="kpi-card__content">
                 <span className="kpi-card__label">External Sessions</span>
                 <span className="kpi-card__value">{kpis.external_sessions}</span>
+              </div>
+            </article>
+
+            {/* NEU: Ladeverlust-Kachel */}
+            <article className="kpi-card">
+              <div className="kpi-card__icon kpi-card__icon--loss" aria-hidden="true">
+                <Activity size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Ladeverlust</span>
+                <span className="kpi-card__value">
+                  {kpis.charging_losses_kwh !== null && kpis.charging_losses_pct !== null ? (
+                    <>
+                      <span className="kpi-card__value-main">{formatKWh(Math.abs(kpis.charging_losses_kwh))} kWh</span>
+                      <span className="kpi-card__value-sub">
+                        {kpis.charging_losses_kwh >= 0 ? <ArrowUpRight size={12} className="kpi-card__loss-positive" /> : <ArrowDownRight size={12} className="kpi-card__loss-negative" />}
+                        {Math.abs(kpis.charging_losses_pct).toFixed(1)}%
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+              </div>
+            </article>
+
+            {/* NEU: DC/AC Aggregation */}
+            <article className="kpi-card">
+              <div className="kpi-card__icon kpi-card__icon--dcac" aria-hidden="true">
+                <Zap size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">DC / AC (External)</span>
+                <span className="kpi-card__value">
+                  {kpis.external_dc_sessions !== null && kpis.external_ac_sessions !== null ? (
+                    <>
+                      <span className="kpi-card__value-main">
+                        DC: {kpis.external_dc_sessions} · AC: {kpis.external_ac_sessions}
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        {kpis.external_dc_energy_kwh !== null && kpis.external_ac_energy_kwh !== null && (
+                          <>
+                            DC: {formatKWh(kpis.external_dc_energy_kwh)} kWh · AC: {formatKWh(kpis.external_ac_energy_kwh)} kWh
+                          </>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+              </div>
+            </article>
+
+            {/* NEU: Trip-Auswertung */}
+            <article className="kpi-card">
+              <div className="kpi-card__icon kpi-card__icon--trip" aria-hidden="true">
+                <Route size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Urlaubstrips</span>
+                <span className="kpi-card__value">
+                  {kpis.trip_count !== null && kpis.trip_count > 0 ? (
+                    <>
+                      <span className="kpi-card__value-main">{kpis.trip_count} Trip(s)</span>
+                      <span className="kpi-card__value-sub">
+                        {kpis.trip_total_energy_kwh !== null && kpis.trip_total_cost_eur !== null && (
+                          <>
+                            {formatKWh(kpis.trip_total_energy_kwh)} kWh · {formatEur(kpis.trip_total_cost_eur)}
+                            {kpis.trip_avg_distance_km !== null && (
+                              <> · Ø {kpis.trip_avg_distance_km.toFixed(0)} km</>
+                            )}
+                          </>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    'Keine Trips'
+                  )}
+                </span>
               </div>
             </article>
           </div>

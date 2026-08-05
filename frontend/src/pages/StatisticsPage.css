@@ -132,6 +132,21 @@
   color: var(--color-external);
 }
 
+.kpi-card__icon--loss {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.kpi-card__icon--dcac {
+  background: #e0e7ff;
+  color: #6366f1;
+}
+
+.kpi-card__icon--trip {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
 .kpi-card__content {
   flex: 1;
   min-width: 0;
@@ -152,6 +167,33 @@
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
+}
+
+.kpi-card__value-main {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-card__value-sub {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kpi-card__loss-positive {
+  color: #ef4444;
+}
+
+.kpi-card__loss-negative {
+  color: #16a34a;
 }
 
 /* Session Stats Grid */

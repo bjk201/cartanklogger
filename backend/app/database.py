@@ -27,6 +27,7 @@ Base = declarative_base()
 def init_db() -> None:
     """Initialisiert die Datenbank-Tabellen."""
     from app.models import session as session_model  # noqa: F401
+    from app.models import matching_override  # noqa: F401
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified")
 

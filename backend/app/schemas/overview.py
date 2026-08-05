@@ -106,7 +106,7 @@ class StatisticsKPIs(BaseModel):
     home_sessions: int
     external_sessions: int
     import_sessions: int
-    
+
     # Session-based stats
     avg_energy_per_session: Optional[float] = None
     avg_cost_per_session: Optional[float] = None
@@ -114,7 +114,7 @@ class StatisticsKPIs(BaseModel):
     max_cost_session: Optional[float] = None
     max_energy_session_id: Optional[int] = None
     max_cost_session_id: Optional[int] = None
-    
+
     # DC/AC breakdown for external sessions
     external_dc_sessions: Optional[int] = None
     external_ac_sessions: Optional[int] = None
@@ -122,6 +122,18 @@ class StatisticsKPIs(BaseModel):
     external_ac_energy_kwh: Optional[float] = None
     external_dc_cost_eur: Optional[float] = None
     external_ac_cost_eur: Optional[float] = None
+
+    # NEW: Charging losses (EVCC vs TM matched)
+    charging_losses_kwh: Optional[float] = None
+    charging_losses_pct: Optional[float] = None
+    evcc_energy_matched_kwh: Optional[float] = None
+    tm_energy_matched_kwh: Optional[float] = None
+
+    # NEW: Trip analysis
+    trip_count: Optional[int] = None
+    trip_total_energy_kwh: Optional[float] = None
+    trip_total_cost_eur: Optional[float] = None
+    trip_avg_distance_km: Optional[float] = None
 
 
 class StatisticsResponse(BaseModel):
