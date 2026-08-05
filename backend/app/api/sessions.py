@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 
 from app.database import get_db
 from app.repositories.session import SessionRepository
@@ -11,9 +11,16 @@ from app.schemas.overview import (
     ErrorDetail,
     PaginationInfo
 )
+from app.models.datasource import DataSourceConfig
 
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
+
+
+def _is_live_mode(db: Session) -> bool:
+    """Check if both EVCC and TeslaMateAPI are configured (live mode)."""
+    config = db.query(DataSourceConfig).first()
+    return bool(config and config.evcc_host and config.teslamateapi_base_url)
 
 
 @router.get(
@@ -34,6 +41,23 @@ def get_sessions(
     to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ) -> PaginatedSessionsResponse:
+    # If not in live mode (no EVCC/TM config), return empty results
+    if not _is_live_mode(db):
+        return PaginatedSessionsResponse(
+            ok=True,
+            data=[],
+            meta=MetaInfo(count=0, limit=page_size),
+            pagination=PaginationInfo(
+                page=page,
+                page_size=page_size,
+                total=0,
+                total_pages=0,
+                has_next=False,
+                has_prev=False,
+            ),
+            errors=[]
+        )
+
     repo = SessionRepository(db)
 
     # Default to 30 days if no range specified (same as overview)

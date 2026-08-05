@@ -6,9 +6,16 @@ from app.database import get_db
 from app.repositories.session import SessionRepository
 from app.services.matching import run_matching_dry_run
 from app.schemas.overview import StatisticsResponse, ErrorDetail
+from app.models.datasource import DataSourceConfig
 
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
+
+
+def _is_live_mode(db: Session) -> bool:
+    """Check if both EVCC and TeslaMateAPI are configured (live mode)."""
+    config = db.query(DataSourceConfig).first()
+    return bool(config and config.evcc_host and config.teslamateapi_base_url)
 
 
 @router.get(
@@ -24,6 +31,46 @@ def get_statistics(
     legacy_range: Optional[str] = Query(None, alias="range", description="Legacy range parameter: 7d, 30d, 90d, 365d, all (deprecated, use days/from_date/to_date)"),
     db: Session = Depends(get_db)
 ) -> StatisticsResponse:
+    # If not in live mode (no EVCC/TM config), return empty results
+    if not _is_live_mode(db):
+        return StatisticsResponse(
+            ok=True,
+            kpis={
+                "total_energy_kwh": 0.0,
+                "total_cost_eur": 0.0,
+                "avg_cost_per_kwh": None,
+                "total_sessions": 0,
+                "home_sessions": 0,
+                "external_sessions": 0,
+                "import_sessions": 0,
+                "avg_energy_per_session": None,
+                "avg_cost_per_session": None,
+                "max_energy_session": None,
+                "max_cost_session": None,
+                "max_energy_session_id": None,
+                "max_cost_session_id": None,
+                "external_dc_sessions": 0,
+                "external_ac_sessions": 0,
+                "external_dc_energy_kwh": 0.0,
+                "external_ac_energy_kwh": 0.0,
+                "external_dc_cost_eur": 0.0,
+                "external_ac_cost_eur": 0.0,
+                "charging_losses_kwh": None,
+                "charging_losses_pct": None,
+                "evcc_energy_matched_kwh": None,
+                "tm_energy_matched_kwh": None,
+                "trip_count": 0,
+                "trip_total_energy_kwh": 0.0,
+                "trip_total_cost_eur": 0.0,
+                "trip_avg_distance_km": None,
+            },
+            energy_by_source={"home": 0.0, "external": 0.0, "import": 0.0, "total": 0.0},
+            cost_by_source={"home": 0.0, "external": 0.0, "import": 0.0, "total": 0.0},
+            sessions_by_source={"home": 0, "external": 0, "import": 0, "total": 0},
+            range_days=days or 0,
+            range_label="Keine Konfiguration",
+            errors=[]
+        )
     repo = SessionRepository(db)
 
     # Parse range parameter - support both new (days/from_date/to_date) and legacy (range=) formats

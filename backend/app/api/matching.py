@@ -1,6 +1,6 @@
 """
 Matching API Endpoints
-======================
+=====================
 
 Dry-run endpoints for EVCC ↔ TeslaMateAPI matching.
 - /dry-run: Legacy DB-based matching (kept for reference)
@@ -10,6 +10,7 @@ Dry-run endpoints for EVCC ↔ TeslaMateAPI matching.
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
 from app.services.matching import run_matching_dry_run
 from app.services.live_matching import run_live_matching_dry_run
@@ -32,8 +33,36 @@ async def matching_dry_run(
     Uses imported database data (may be stale).
     
     For production use /dry-run/live instead.
+    Returns empty result if EVCC/TM not configured.
     """
+    from app.models.datasource import DataSourceConfig
+    
+    # If not in live mode (no EVCC/TM config), return empty results
+    config = db.query(DataSourceConfig).first()
+    if not config or not config.evcc_host or not config.teslamateapi_base_url:
+        from app.services.matching import MatchingSummary
+        return {
+            'ok': True,
+            'matches': [],
+            'summary': {
+                'total_evcc_sessions_checked': 0,
+                'total_matched': 0,
+                'total_unmatched': 0,
+                'total_evcc_energy': 0.0,
+                'total_tm_energy': 0.0,
+                'total_delta_kwh': 0.0,
+                'quality_distribution': {'exact': 0, 'plausible': 0, 'weak': 0, 'unmatched': 0},
+                'total_tm_charges': 0,
+                'accepted_candidates': 0,
+                'rejected_wrong_location': 0
+            },
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'data_source': 'database',
+            'message': 'EVCC und/oder TeslaMateAPI nicht konfiguriert - Keine Demo-Daten'
+        }
+    
     from app.database import SessionLocal
+    from app.services.matching import run_matching_dry_run
     db_local = SessionLocal()
     try:
         result = run_matching_dry_run(limit, days, from_date, to_date)

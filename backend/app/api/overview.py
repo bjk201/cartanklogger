@@ -7,9 +7,16 @@ from sqlalchemy import func
 from app.database import get_db
 from app.repositories.session import SessionRepository
 from app.schemas.overview import OverviewResponse, SessionRead, MetaInfo, ErrorDetail, OverviewSummaryResponse
+from app.models.datasource import DataSourceConfig
 
 
 router = APIRouter(prefix="/overview", tags=["Overview"])
+
+
+def _is_live_mode(db: Session) -> bool:
+    """Check if both EVCC and TeslaMateAPI are configured (live mode)."""
+    config = db.query(DataSourceConfig).first()
+    return bool(config and config.evcc_host and config.teslamateapi_base_url)
 
 
 @router.get(
@@ -27,6 +34,15 @@ def get_recent_sessions(
     limit: int = Query(100, ge=1, le=10000, description="Maximum number of sessions to return"),
     db: Session = Depends(get_db)
 ) -> OverviewResponse:
+    # If not in live mode (no EVCC/TM config), return empty results
+    if not _is_live_mode(db):
+        return OverviewResponse(
+            ok=True,
+            data=[],
+            meta=MetaInfo(count=0, limit=limit),
+            errors=[]
+        )
+
     repo = SessionRepository(db)
 
     # Parse from/to dates - keep as strings for TEXT comparison in SQLite
@@ -99,6 +115,25 @@ def get_overview_summary(
     to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ) -> OverviewSummaryResponse:
+    # If not in live mode (no EVCC/TM config), return empty results
+    if not _is_live_mode(db):
+        return OverviewSummaryResponse(
+            ok=True,
+            total_sessions=0,
+            total_energy_kwh=0.0,
+            total_cost_eur=0.0,
+            avg_cost_per_kwh=None,
+            home_sessions=0,
+            external_sessions=0,
+            import_sessions=0,
+            home_energy_kwh=0.0,
+            external_energy_kwh=0.0,
+            home_cost_eur=0.0,
+            external_cost_eur=0.0,
+            home_share_pct=0.0,
+            errors=[]
+        )
+
     repo = SessionRepository(db)
 
     # Parse from/to dates - keep as strings for TEXT comparison in SQLite
