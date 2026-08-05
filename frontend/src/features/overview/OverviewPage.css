@@ -244,10 +244,22 @@
   width: 100%;
 }
 
-.trend-chart__svg {
+.trend-chart__wrapper {
   width: 100%;
-  max-width: 800px;
-  height: auto;
+  height: 200px;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .trend-chart__wrapper {
+    height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .trend-chart__wrapper {
+    height: 160px;
+  }
 }
 
 .trend-chart__empty {

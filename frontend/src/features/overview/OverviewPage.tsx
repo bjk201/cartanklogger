@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { KpiCard } from '../../components/KpiCard';
@@ -6,7 +6,31 @@ import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
 import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse, type PaginationInfo } from '../../lib/apiClient';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
 import './OverviewPage.css';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const RANGE_OPTIONS = [
   { value: '7d', label: '7 Tage' },
@@ -421,9 +445,13 @@ export function OverviewPage() {
   );
 }
 
-// Simple inline trend chart using SVG
+// Energy Trend Chart using react-chartjs-2
 function TrendChart({ sessions }: { sessions: Session[] }) {
-  if (sessions.length < 2) {
+  // Sort by date ascending for chart
+  const sorted = useMemo(() => [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [sessions]);
+  const energies = useMemo(() => sorted.map(s => s.energy_kwh || 0), [sorted]);
+
+  if (sorted.length < 2) {
     return (
       <div className="trend-chart__empty">
         <p>Mindestens 2 Sessions nötig für Trendanzeige</p>
@@ -431,101 +459,95 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
     );
   }
 
-  // Sort by date ascending for chart
-  const sorted = [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const energies = sorted.map(s => s.energy_kwh || 0);
-  const maxEnergy = Math.max(...energies, 1);
-  const minEnergy = Math.min(...energies);
-  const range = maxEnergy - minEnergy || 1;
+  const chartData = useMemo(() => ({
+    labels: sorted.map(s => new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })),
+    datasets: [
+      {
+        label: 'Energie pro Session',
+        data: energies,
+        borderColor: 'var(--color-primary)',
+        backgroundColor: 'var(--color-primary-light)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: 'var(--color-primary)',
+        pointBorderColor: 'var(--color-bg-card)',
+        pointBorderWidth: 2,
+      },
+    ],
+  }), [sorted, energies]);
 
-  const width = 760;
-  const height = 200;
-  const padding = { top: 20, right: 20, bottom: 40, left: 50 };
-  const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
-
-  const points = energies.map((energy, i) => {
-    const x = padding.left + (i / (energies.length - 1)) * innerWidth;
-    const y = padding.top + innerHeight - ((energy - minEnergy) / range) * innerHeight;
-    return `${x},${y}`;
-  }).join(' ');
-
-  const yTicks = [minEnergy, (minEnergy + maxEnergy) / 2, maxEnergy];
+  const chartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: 12,
+        titleFont: { size: 13, family: 'system-ui' },
+        bodyFont: { size: 12, family: 'system-ui' },
+        callbacks: {
+          label: (context: any) => {
+            const value = context.parsed.y;
+            return `Energie: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: 'var(--color-text-muted)',
+          maxTicksLimit: 10,
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+          display: true,
+          text: 'kWh',
+          font: { size: 12, family: 'system-ui', weight: '500' as const },
+          color: 'var(--color-text-muted)',
+        },
+        grid: {
+          color: 'var(--color-border)',
+        },
+        ticks: {
+          font: { size: 11, family: 'system-ui' },
+          color: 'var(--color-text-muted)',
+        },
+        min: 0,
+      },
+    },
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+  }), []);
 
   return (
     <div className="trend-chart">
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="trend-chart__svg" role="img" aria-label="Energie-Trend der letzten Sessions">
-        <defs>
-          <linearGradient id="trend-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Y-axis */}
-        <g className="trend-chart__axis">
-          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + innerHeight} stroke="var(--color-border)" strokeWidth="1" />
-          {yTicks.map((tick, i) => {
-            const y = padding.top + innerHeight - ((tick - minEnergy) / range) * innerHeight;
-            return (
-              <g key={i}>
-                <line x1={padding.left - 6} y1={y} x2={padding.left} y2={y} stroke="var(--color-border)" strokeWidth="1" />
-                <text x={padding.left - 10} y={y + 4} fontSize="11" fill="var(--color-text-muted)" textAnchor="end" dominantBaseline="middle">{tick.toFixed(1)}</text>
-              </g>
-            );
-          })}
-        </g>
-
-        {/* X-axis labels */}
-        <g className="trend-chart__x-axis">
-          {sorted.map((_, i) => {
-            const x = padding.left + (i / (sorted.length - 1)) * innerWidth;
-            return (
-              <text key={i} x={x} y={height - 10} fontSize="10" fill="var(--color-text-muted)" textAnchor="middle">
-                {new Date(sorted[i].date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-              </text>
-            );
-          })}
-        </g>
-
-        {/* Area */}
-        <path
-          d={`M${points} L${padding.left + innerWidth} ${padding.top + innerHeight} L${padding.left} ${padding.top + innerHeight} Z`}
-          fill="url(#trend-gradient)"
+      <div className="trend-chart__wrapper">
+        <Line
+          data={chartData}
+          options={chartOptions as any}
+          aria-label={`Energie-Trend: ${sorted.length} Sessions, ${Math.min(...energies).toFixed(1)} – ${Math.max(...energies).toFixed(1)} kWh`}
         />
-
-        {/* Line */}
-        <path
-          d={`M${points}`}
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Points */}
-        {sorted.map((session, i) => {
-          const x = padding.left + (i / (sorted.length - 1)) * innerWidth;
-          const y = padding.top + innerHeight - ((energies[i] - minEnergy) / range) * innerHeight;
-          return (
-            <circle
-              key={i}
-              cx={x}
-              cy={y}
-              r={4}
-              fill="var(--color-primary)"
-              stroke="var(--color-bg-card)"
-              strokeWidth="2"
-              className="trend-chart__point"
-            />
-          );
-        })}
-      </svg>
+      </div>
       <div className="trend-chart__legend">
         <span className="trend-chart__unit">kWh</span>
         <span className="trend-chart__range">
-          {minEnergy.toFixed(1)} – {maxEnergy.toFixed(1)} kWh
+          {Math.min(...energies).toFixed(1)} – {Math.max(...energies).toFixed(1)} kWh
         </span>
       </div>
     </div>
