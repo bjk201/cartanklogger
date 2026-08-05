@@ -294,17 +294,15 @@ class SessionRepository:
             prev = external_sessions[i-1]
             curr = external_sessions[i]
             
-            # Parse dates - handle both datetime objects and string formats
+            # Parse dates - date is already a datetime object from DB
             prev_date = prev.date
             curr_date = curr.date
             
+            # Handle if date is string (legacy data)
             if isinstance(prev_date, str):
-                # Handle string format 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DD HH:MM:SS'
-                prev_date_str = prev_date.replace('T', ' ')
-                prev_date = datetime.strptime(prev_date_str[:19], "%Y-%m-%d %H:%M:%S")
+                prev_date = datetime.fromisoformat(prev_date.replace('T', ' '))
             if isinstance(curr_date, str):
-                curr_date_str = curr_date.replace('T', ' ')
-                curr_date = datetime.strptime(curr_date_str[:19], "%Y-%m-%d %H:%M:%S")
+                curr_date = datetime.fromisoformat(curr_date.replace('T', ' '))
             
             # If within 24 hours, same trip
             if (curr_date - prev_date).total_seconds() <= 24 * 3600:
