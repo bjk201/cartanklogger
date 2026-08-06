@@ -103,12 +103,14 @@
 
 .kpi-card--double-width {
   grid-column: span 2;
-  min-height: 200px;
+  max-height: 320px;
+  overflow: hidden;
 }
 
 .kpi-card--double-width .overview-page__split-chart {
   flex: 1;
   min-height: 0;
+  height: 100%;
 }
 
 @media (max-width: 1024px) {
