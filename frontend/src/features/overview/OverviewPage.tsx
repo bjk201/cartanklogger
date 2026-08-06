@@ -287,6 +287,16 @@ export function OverviewPage() {
                         <span className="overview-page__split-sub">Extern geladen</span>
                       </div>
                     </div>
+                    <div className="overview-page__split-kpi">
+                      <span className="overview-page__split-kpi-label">GESAMT KM</span>
+                      <span className="overview-page__split-kpi-value">{summary.total_distance_km != null ? formatNumber(summary.total_distance_km) : '—'} km</span>
+                      <span className="overview-page__split-kpi-sub">Im Zeitraum gefahren</span>
+                    </div>
+                    <div className="overview-page__split-kpi">
+                      <span className="overview-page__split-kpi-label">Ø KM/TAG</span>
+                      <span className="overview-page__split-kpi-value">{summary.avg_distance_per_day_km != null ? formatNumber(summary.avg_distance_per_day_km) : '—'} km</span>
+                      <span className="overview-page__split-kpi-sub">Durchschnitt</span>
+                    </div>
                   </div>
                 </div>
               </div>
