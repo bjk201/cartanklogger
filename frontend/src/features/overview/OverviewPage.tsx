@@ -250,28 +250,31 @@ export function OverviewPage() {
                   </div>
                   <div className="overview-page__split-center">
                     {/* Pie Chart */}
-                    <Pie
-                      data={{
-                        labels: ['Zuhause', 'Extern'],
-                        datasets: [{
-                          data: [summary.home_energy_kwh, summary.external_energy_kwh],
-                          backgroundColor: ['#0d9488', '#2563eb'],
-                          borderWidth: 0,
-                        }],
-                      }}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                          legend: { display: false },
-                          tooltip: {
-                            callbacks: {
-                              label: (ctx: any) => `${ctx.label}: ${ctx.parsed.toFixed(1)} kWh`,
+                    <div className="pie-chart-wrapper">
+                      <Pie
+                        data={{
+                          labels: ['Zuhause', 'Extern'],
+                          datasets: [{
+                            data: [summary.home_energy_kwh, summary.external_energy_kwh],
+                            backgroundColor: ['#0d9488', '#2563eb'],
+                            borderWidth: 0,
+                          }],
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          aspectRatio: 1,
+                          plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                              callbacks: {
+                                label: (ctx: any) => `${ctx.label}: ${ctx.parsed.toFixed(1)} kWh`,
+                              },
                             },
                           },
-                        },
-                      }}
-                    />
+                        }}
+                      />
+                    </div>
                     <span className="overview-page__pie-total">{formatNumber(summary.total_energy_kwh)} kWh</span>
                   </div>
                   <div className="overview-page__split-right">
