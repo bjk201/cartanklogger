@@ -347,3 +347,86 @@
     width: 100%;
   }
 }
+
+/* Split Chart Layout for double-width KPI card */
+.overview-page__split-chart {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
+  min-height: 160px;
+}
+
+.overview-page__split-left,
+.overview-page__split-right {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 40%;
+}
+
+.overview-page__split-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.overview-page__split-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.overview-page__split-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.overview-page__split-icon--home {
+  background: var(--color-home);
+  color: white;
+}
+
+.overview-page__split-icon--external {
+  background: var(--color-external);
+  color: white;
+}
+
+.overview-page__split-icon--supercharger {
+  background: #f59e0b;
+  color: white;
+}
+
+.overview-page__split-data {
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-page__split-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.overview-page__split-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.overview-page__pie-total {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem;
+  text-align: center;
+}
