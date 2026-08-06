@@ -247,15 +247,6 @@ export function OverviewPage() {
                         <span className="overview-page__split-sub">{summary.home_share_pct.toFixed(1)}% · {formatCostPerKWh(summary.avg_cost_per_kwh)}/kWh</span>
                       </div>
                     </div>
-                    <div className="overview-page__split-item">
-                      <div className="overview-page__split-icon overview-page__split-icon--external" aria-hidden="true">
-                        <Bolt size={20} />
-                      </div>
-                      <div className="overview-page__split-data">
-                        <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
-                        <span className="overview-page__split-sub">{summary.external_sessions} Sessions</span>
-                      </div>
-                    </div>
                   </div>
                   <div className="overview-page__split-center">
                     {/* Pie Chart */}
@@ -290,7 +281,7 @@ export function OverviewPage() {
                       </div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
-                        <span className="overview-page__split-sub">{summary.external_sessions} Extern-Sessions</span>
+                        <span className="overview-page__split-sub">Extern geladen</span>
                       </div>
                     </div>
                   </div>
