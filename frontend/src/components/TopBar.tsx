@@ -64,7 +64,6 @@ export function TopBar({ onMenuClick }: TopBarProps) {
               {RANGE_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-              <option value="custom">Benutzerdefiniert…</option>
             </select>
 
             {showCustomPicker && (

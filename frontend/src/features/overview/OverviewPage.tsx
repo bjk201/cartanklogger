@@ -18,7 +18,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { Line, Pie } from 'react-chartjs-2';
 import './OverviewPage.css';
 
 // Register Chart.js components
@@ -198,21 +198,16 @@ export function OverviewPage() {
         <section className="overview-page__section" aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
           <div className="overview-page__kpi-grid">
+            {/* 1. Gesamt kWh */}
             <KpiCard
-              label="Gesamt Sessions"
-              value={summary.total_sessions}
-              icon={(props) => <Calendar {...props} />}
-              iconColor="var(--color-primary)"
-              subtitle="Alle Ladevorgänge"
-            />
-            <KpiCard
-              label="Gesamt Energie"
+              label="Gesamt kWh"
               value={formatNumber(summary.total_energy_kwh)}
               unit="kWh"
               icon={(props) => <Zap {...props} />}
               iconColor="var(--color-home)"
               subtitle="Gesamt geladen"
             />
+            {/* 2. Gesamtkosten */}
             <KpiCard
               label="Gesamtkosten"
               value={summary.total_cost_eur.toFixed(2)}
@@ -221,6 +216,7 @@ export function OverviewPage() {
               iconColor="#f59e0b"
               subtitle="Gesamtkosten"
             />
+            {/* 3. Durchschnittskosten/kWh */}
             <KpiCard
               label="Ø Kosten/kWh"
               value={formatCostPerKWh(summary.avg_cost_per_kwh)}
@@ -228,32 +224,104 @@ export function OverviewPage() {
               iconColor="var(--color-primary)"
               subtitle="Durchschnittspreis"
             />
+            {/* 4. Anzahl Sessions */}
             <KpiCard
-              label="Home Energie"
-              value={formatNumber(summary.home_energy_kwh)}
-              unit="kWh"
-              icon={(props) => <Zap {...props} />}
-              iconColor="var(--color-home)"
-              subtitle="Zuhause geladen"
+              label="Anzahl Sessions"
+              value={summary.total_sessions}
+              icon={(props) => <Calendar {...props} />}
+              iconColor="var(--color-primary)"
+              subtitle="Alle Ladevorgänge"
+            />
+            {/* 5. Haus + Extern Split + Pie Chart (double width) */}
+            <article className="kpi-card kpi-card--double-width">
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Ladevorgänge: Zuhause & Extern</span>
+                <div className="overview-page__split-chart">
+                  <div className="overview-page__split-left">
+                    <div className="overview-page__split-item">
+                      <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true">
+                        <Zap size={20} />
+                      </div>
+                      <div className="overview-page__split-data">
+                        <span className="overview-page__split-value">{formatNumber(summary.home_energy_kwh)} kWh</span>
+                        <span className="overview-page__split-sub">{summary.home_share_pct.toFixed(1)}% · {formatCostPerKWh(summary.avg_cost_per_kwh)}/kWh</span>
+                      </div>
+                    </div>
+                    <div className="overview-page__split-item">
+                      <div className="overview-page__split-icon overview-page__split-icon--external" aria-hidden="true">
+                        <MapPin size={20} />
+                      </div>
+                      <div className="overview-page__split-data">
+                        <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
+                        <span className="overview-page__split-sub">{summary.external_sessions} Sessions</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="overview-page__split-center">
+                    {/* Pie Chart */}
+                    <Pie
+                      data={{
+                        labels: ['Zuhause', 'Extern'],
+                        datasets: [{
+                          data: [summary.home_energy_kwh, summary.external_energy_kwh],
+                          backgroundColor: ['var(--color-home)', 'var(--color-external)'],
+                          borderWidth: 0,
+                        }],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                          legend: { display: false },
+                          tooltip: {
+                            callbacks: {
+                              label: (ctx: any) => `${ctx.label}: ${ctx.parsed.toFixed(1)} kWh`,
+                            },
+                          },
+                        },
+                      }}
+                    />
+                    <span className="overview-page__pie-total">{formatNumber(summary.total_energy_kwh)} kWh</span>
+                  </div>
+                  <div className="overview-page__split-right">
+                    <div className="overview-page__split-item">
+                      <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true">
+                        <MapPin size={20} />
+                      </div>
+                      <div className="overview-page__split-data">
+                        <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
+                        <span className="overview-page__split-sub">{summary.external_sessions} Extern-Sessions</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      )}
+
+      {/* Driving Distance KPI */}
+      {summary && (
+        <section className="overview-page__section" aria-labelledby="distance-heading">
+          <h2 id="distance-heading" className="overview-page__section-title">Gefahrene km</h2>
+          <div className="overview-page__kpi-grid">
+            <KpiCard
+              label="Gesamt km"
+              value={summary.total_distance_km !== null && summary.total_distance_km !== undefined ? formatNumber(summary.total_distance_km) : '—'}
+              unit="km"
+              icon={(props) => <Activity {...props} />}
+              iconColor="var(--color-primary)"
+              subtitle="Im Zeitraum gefahren"
             />
             <KpiCard
-              label="External Energie"
-              value={formatNumber(summary.external_energy_kwh)}
-              unit="kWh"
-              icon={(props) => <MapPin {...props} />}
-              iconColor="var(--color-external)"
-              subtitle="Extern geladen"
+              label="Ø km/Tag"
+              value={summary.avg_distance_per_day_km !== null && summary.avg_distance_per_day_km !== undefined ? formatNumber(summary.avg_distance_per_day_km) : '—'}
+              unit="km"
+              icon={(props) => <Activity {...props} />}
+              iconColor="var(--color-primary)"
+              subtitle={summary.days_with_data !== null && summary.days_with_data !== undefined ? `${summary.days_with_data} Tage mit Daten` : '—'}
             />
-            {/* PV-Anteil Kachel */}
-            {summary.pv_share_pct !== null && summary.pv_share_pct !== undefined && (
-              <KpiCard
-                label="PV-Anteil"
-                value={`${summary.pv_share_pct.toFixed(1)}%`}
-                icon={(props) => <Sun {...props} />}
-                iconColor="var(--color-pv)"
-                subtitle={`${summary.pv_kwh !== null ? formatNumber(summary.pv_kwh) : '—'} kWh PV von ${summary.total_charged_kwh !== null ? formatNumber(summary.total_charged_kwh) : '—'} kWh geladen`}
-              />
-            )}
           </div>
         </section>
       )}

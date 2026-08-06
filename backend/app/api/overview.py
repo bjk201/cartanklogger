@@ -211,6 +211,16 @@ def get_overview_summary(
     avg_cost_per_kwh = round(total_cost / total_energy, 4) if total_energy > 0 else None
     home_share = round((home_energy / total_energy) * 100, 1) if total_energy > 0 else 0
 
+    # Calculate driving distance from sessions
+    total_distance = sum(s.distance_km or 0 for s in sessions)
+    # Count days with at least one session that has distance data
+    days_with_distance = set()
+    for s in sessions:
+        if s.distance_km and s.distance_km > 0 and s.date:
+            days_with_distance.add(s.date[:10])  # YYYY-MM-DD
+    days_count = len(days_with_distance) if days_with_distance else 0
+    avg_distance_per_day = round(total_distance / days_count, 1) if days_count > 0 and total_distance > 0 else None
+
     # Calculate PV share: PV kWh from EVCC home sessions / (home kWh + external kWh) * 100
     total_charged = home_energy + external_energy
     if total_charged > 0 and home_energy > 0:
@@ -239,5 +249,8 @@ def get_overview_summary(
         pv_share_pct=pv_share_pct,
         pv_kwh=pv_kwh,
         total_charged_kwh=total_charged_kwh,
+        total_distance_km=total_distance if total_distance > 0 else None,
+        avg_distance_per_day_km=avg_distance_per_day,
+        days_with_data=days_count if days_count > 0 else None,
         errors=[]
     )

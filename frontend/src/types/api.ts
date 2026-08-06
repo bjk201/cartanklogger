@@ -187,6 +187,11 @@ export interface OverviewSummaryResponse {
   pv_kwh: number | null;
   total_charged_kwh: number | null;
 
+  // Driving distance data
+  total_distance_km: number | null;
+  avg_distance_per_day_km: number | null;
+  days_with_data: number | null;
+
   errors: ErrorDetail[];
 }
 

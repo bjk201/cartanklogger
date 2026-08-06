@@ -189,4 +189,9 @@ class OverviewSummaryResponse(BaseModel):
     pv_kwh: Optional[float] = None
     total_charged_kwh: Optional[float] = None
 
+    # NEW: Driving distance data
+    total_distance_km: Optional[float] = None
+    avg_distance_per_day_km: Optional[float] = None
+    days_with_data: Optional[int] = None
+
     errors: List[ErrorDetail] = []
