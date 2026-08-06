@@ -212,7 +212,11 @@ async def get_statistics(
         stats['kpis']['tm_energy_matched_kwh'] = None
     
     # Calculate external charging losses from TM API (charge_energy_used - charge_energy_added)
-    # This is independent of EVCC - only needs TM configured
+    # This is the energy lost between TM's battery and the EV battery during external charging.
+    # Only counts external (non-home) TM charges.
+    # charge_energy_used = energy drawn from TM battery (wallbox side)
+    # charge_energy_added = energy actually added to EV battery
+    # Difference = charging loss (heat, cable, wallbox overhead)
     if configured["teslamateapi"]:
         try:
             from app.services.teslamateapi_client import create_teslamateapi_client_from_config
@@ -224,8 +228,17 @@ async def get_statistics(
                 if range_days or from_date or to_date:
                     tm_charges = tm_client._filter_tm_by_date_range(tm_charges, range_days, from_date, to_date)
                 
-                total_external_added = sum(c.charge_energy_added for c in tm_charges if c.charge_energy_added)
-                total_external_used = sum(c.charge_energy_used for c in tm_charges if c.charge_energy_used)
+                # Only count external (non-home) charges for loss calculation
+                home_keywords = {"zuhause", "garage", "home", "haus"}
+                external_charges = [
+                    c for c in tm_charges
+                    if c.charge_energy_added and c.charge_energy_used
+                    and c.address
+                    and c.address.strip().lower() not in home_keywords
+                ]
+                
+                total_external_added = sum(c.charge_energy_added for c in external_charges)
+                total_external_used = sum(c.charge_energy_used for c in external_charges)
                 
                 if total_external_added > 0:
                     external_losses_kwh = round(total_external_used - total_external_added, 2)
@@ -338,7 +351,22 @@ async def get_statistics(
         stats['kpis']['trip_total_energy_kwh'] = 0.0
         stats['kpis']['trip_total_cost_eur'] = 0.0
         stats['kpis']['trip_avg_distance_km'] = None
-    
+
+    # Calculate PV share of all charging sessions
+    # Formula: PV_kWh from EVCC Home-Sessions / (EVCC Home-kWh + externe TM-kWh) * 100
+    # Uses charge_energy_added from TM (not energy_kwh which may differ)
+    total_pv_kwh = stats["energy_by_source"].get("home", 0.0)  # EVCC home sessions include PV data
+    total_external_kwh = stats["energy_by_source"].get("external", 0.0)
+    total_charged = total_pv_kwh + total_external_kwh
+    if total_charged > 0 and total_pv_kwh > 0:
+        stats['kpis']['pv_share_pct'] = round((total_pv_kwh / total_charged) * 100, 1)
+        stats['kpis']['pv_kwh'] = round(total_pv_kwh, 2)
+        stats['kpis']['total_charged_kwh'] = round(total_charged, 2)
+    else:
+        stats['kpis']['pv_share_pct'] = None
+        stats['kpis']['pv_kwh'] = None
+        stats['kpis']['total_charged_kwh'] = None
+
     return StatisticsResponse(
         ok=True,
         kpis=stats["kpis"],

@@ -19,6 +19,7 @@ import {
   Battery,
   Gauge,
   TrendingUp as TrendingUpIcon,
+  Sun,
 } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import {
@@ -160,10 +161,10 @@ export function StatisticsPage() {
 
   // Chart data for Daily Drives (km and kWh)
   const dailyDrivesChartData = useMemo(() => {
-    if (!data?.kpis?.daily_dates || data.kpis.daily_dates.length === 0) return null;
+    if (!data?.kpis?.daily_dates || data?.kpis?.daily_dates.length === 0) return null;
 
     return {
-      labels: data.kpis.daily_dates.map((d) => d.slice(5)), // MM-DD format
+      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
       datasets: [
         {
           label: 'km',
@@ -217,7 +218,10 @@ export function StatisticsPage() {
           label: (context: any) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            return `${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} ${label === 'km' ? 'km' : 'kWh'}`;
+            const idx = context.dataIndex;
+            const dateStr = data?.kpis?.daily_dates?.[idx] || '';
+            const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(dateStr).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            return `${formattedDate} — ${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} ${label === 'km' ? 'km' : 'kWh'}`;
           },
         },
       },
@@ -276,11 +280,11 @@ export function StatisticsPage() {
 
   // Chart data for Daily Charged Energy (stacked bars + line)
   const dailyChargedChartData = useMemo(() => {
-    if (!data?.kpis?.daily_charged_dates || data.kpis.daily_charged_dates.length === 0)
+    if (!data?.kpis?.daily_charged_dates || data?.kpis?.daily_charged_dates.length === 0)
       return null;
 
     return {
-      labels: data.kpis.daily_charged_dates.map((d) => d.slice(5)), // MM-DD format
+      labels: data?.kpis?.daily_charged_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
       datasets: [
         {
           type: 'bar',
@@ -352,7 +356,10 @@ export function StatisticsPage() {
           label: (context: any) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            return `${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh`;
+            const idx = context.dataIndex;
+            const dateStr = data?.kpis?.daily_charged_dates?.[idx] || '';
+            const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(dateStr).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            return `${formattedDate} — ${label}: ${value.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh`;
           },
         },
       },
@@ -392,7 +399,7 @@ export function StatisticsPage() {
 
   // Cumulative kilometers chart data
   const cumulativeKmChartData = useMemo(() => {
-    if (!data?.kpis?.daily_dates || data.kpis.daily_dates.length === 0) return null;
+    if (!data?.kpis?.daily_dates || data?.kpis?.daily_dates.length === 0) return null;
 
     // Calculate cumulative km from daily_km
     const dailyKm = data.kpis.daily_km || [];
@@ -404,7 +411,7 @@ export function StatisticsPage() {
     }
 
     return {
-      labels: data.kpis.daily_dates.map((d) => d.slice(5)), // MM-DD format
+      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
       datasets: [
         {
           label: 'Kumulierte km',
@@ -439,7 +446,10 @@ export function StatisticsPage() {
         callbacks: {
           label: (context: any) => {
             const value = context.parsed.y;
-            return `Kumuliert: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`;
+            const idx = context.dataIndex;
+            const dateStr = data?.kpis?.daily_dates?.[idx] || '';
+            const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(dateStr).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            return `${formattedDate} — Kumuliert: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`;
           },
         },
       },
@@ -586,13 +596,13 @@ export function StatisticsPage() {
               </div>
             </article>
 
-            {/* NEU: Ladeverlust-Kachel */}
+            {/* Ladeverlust-Kachel (Home: EVCC wallbox energy vs TM charge_energy_added) */}
             <article className="kpi-card">
               <div className="kpi-card__icon kpi-card__icon--loss" aria-hidden="true">
                 <Activity size={24} />
               </div>
               <div className="kpi-card__content">
-                <span className="kpi-card__label">Ladeverlust</span>
+                <span className="kpi-card__label">Ladeverlust (Home)</span>
                 <span className="kpi-card__value">
                   {kpis.charging_losses_kwh !== null &&
                   kpis.charging_losses_pct !== null ? (
@@ -616,7 +626,9 @@ export function StatisticsPage() {
                       </span>
                     </>
                   ) : (
-                    '—'
+                    <span className="kpi-card__empty-state">
+                      Keine belastbaren EVCC↔TM-Home-Matches im Zeitraum
+                    </span>
                   )}
                 </span>
               </div>
@@ -680,6 +692,38 @@ export function StatisticsPage() {
                     </>
                   ) : (
                     '—'
+                  )}
+                </span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        {/* PV-Anteil Kachel */}
+        <section className="statistics-page__section" aria-labelledby="pv-heading">
+          <h2 id="pv-heading" className="statistics-page__section-title">
+            PV-Anteil
+          </h2>
+          <div className="statistics-page__kpi-grid">
+            <article className="kpi-card">
+              <div className="kpi-card__icon" aria-hidden="true">
+                <Sun size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">PV-Anteil aller Ladevorgänge</span>
+                <span className="kpi-card__value">
+                  {kpis.pv_share_pct !== null && kpis.pv_share_pct !== undefined ? (
+                    <>
+                      <span className="kpi-card__value-main">
+                        {kpis.pv_share_pct.toFixed(1)}%
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        {kpis.pv_kwh !== null ? formatKWh(kpis.pv_kwh) : '—'} kWh PV von{' '}
+                        {kpis.total_charged_kwh !== null ? formatKWh(kpis.total_charged_kwh) : '—'} kWh geladen
+                      </span>
+                    </>
+                  ) : (
+                    <span className="kpi-card__empty-state">Keine PV-Daten im Zeitraum</span>
                   )}
                 </span>
               </div>

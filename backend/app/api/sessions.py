@@ -142,6 +142,10 @@ def get_sessions(
             pv_kwh=s.pv_kwh,
             cost_per_kwh=s.cost_per_kwh,
             cost_per_kwh_source=s.cost_per_kwh_source,
+            # Charge type details from TeslaMate
+            charge_type=s.charge_type,
+            fast_charger_brand=s.fast_charger_brand,
+            max_charge_power_kw=s.max_charge_power_kw,
         ))
     
     return PaginatedSessionsResponse(

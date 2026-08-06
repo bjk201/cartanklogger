@@ -244,6 +244,16 @@ export function OverviewPage() {
               iconColor="var(--color-external)"
               subtitle="Extern geladen"
             />
+            {/* PV-Anteil Kachel */}
+            {summary.pv_share_pct !== null && summary.pv_share_pct !== undefined && (
+              <KpiCard
+                label="PV-Anteil"
+                value={`${summary.pv_share_pct.toFixed(1)}%`}
+                icon={(props) => <Sun {...props} />}
+                iconColor="var(--color-pv)"
+                subtitle={`${summary.pv_kwh !== null ? formatNumber(summary.pv_kwh) : '—'} kWh PV von ${summary.total_charged_kwh !== null ? formatNumber(summary.total_charged_kwh) : '—'} kWh geladen`}
+              />
+            )}
           </div>
         </section>
       )}
@@ -376,7 +386,10 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
   }
 
   const chartData = useMemo(() => ({
-    labels: sorted.map(s => new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })),
+    labels: sorted.map(s => {
+      const d = new Date(s.date);
+      return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }), // DD.MM format
     datasets: [
       {
         label: 'Energie pro Session',
@@ -410,7 +423,10 @@ function TrendChart({ sessions }: { sessions: Session[] }) {
         callbacks: {
           label: (context: any) => {
             const value = context.parsed.y;
-            return `Energie: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`;
+            const idx = context.dataIndex;
+            const session = sorted[idx];
+            const dateStr = session ? new Date(session.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(session.date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            return `${dateStr} — Energie: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`;
           },
         },
       },

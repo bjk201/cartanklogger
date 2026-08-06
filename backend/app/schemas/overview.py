@@ -150,6 +150,11 @@ class StatisticsKPIs(BaseModel):
     daily_external_kwh: Optional[List[float]] = None
     daily_total_kwh: Optional[List[float]] = None
 
+    # NEW: PV share of all charging sessions
+    pv_share_pct: Optional[float] = None
+    pv_kwh: Optional[float] = None
+    total_charged_kwh: Optional[float] = None
+
 
 class StatisticsResponse(BaseModel):
     """Response contract for GET /api/statistics"""
@@ -178,4 +183,10 @@ class OverviewSummaryResponse(BaseModel):
     home_cost_eur: float
     external_cost_eur: float
     home_share_pct: float
+
+    # NEW: PV share of all charging sessions
+    pv_share_pct: Optional[float] = None
+    pv_kwh: Optional[float] = None
+    total_charged_kwh: Optional[float] = None
+
     errors: List[ErrorDetail] = []

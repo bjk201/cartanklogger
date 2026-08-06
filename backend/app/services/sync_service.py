@@ -166,12 +166,10 @@ class SyncService:
                     ).first()
                     
                     # Map charge_type string to enum
+                    # TM API does not provide charge_details (no fast_charger_info).
+                    # Without these details, no reliable DC/AC classification is possible.
                     charge_type_enum = ChargeType.UNKNOWN
-                    if live_charge.charge_type == "DC":
-                        charge_type_enum = ChargeType.DC
-                    elif live_charge.charge_type == "AC":
-                        charge_type_enum = ChargeType.AC
-                    
+
                     if existing:
                         # Update existing
                         existing.location = live_charge.location
@@ -184,6 +182,10 @@ class SyncService:
                         existing.charge_type = charge_type_enum
                         existing.fast_charger_brand = live_charge.fast_charger_brand
                         existing.max_charge_power_kw = live_charge.max_charge_power_kw
+                        # NEW: Store TM detail fields for loss calculation
+                        existing.charge_energy_added = live_charge.charge_energy_added
+                        existing.charge_energy_used = live_charge.charge_energy_used
+                        existing.duration_min = live_charge.duration_min
                         existing.updated_at = datetime.now(timezone.utc)
                     else:
                         # Create new
@@ -200,6 +202,10 @@ class SyncService:
                             charge_type=charge_type_enum,
                             fast_charger_brand=live_charge.fast_charger_brand,
                             max_charge_power_kw=live_charge.max_charge_power_kw,
+                            # NEW: Store TM detail fields for loss calculation
+                            charge_energy_added=live_charge.charge_energy_added,
+                            charge_energy_used=live_charge.charge_energy_used,
+                            duration_min=live_charge.duration_min,
                             legacy_source="teslamate",
                             legacy_table="live_api",
                             legacy_id=live_charge.id,

@@ -157,6 +157,9 @@ def get_overview_summary(
             home_cost_eur=0.0,
             external_cost_eur=0.0,
             home_share_pct=0.0,
+            pv_share_pct=None,
+            pv_kwh=None,
+            total_charged_kwh=None,
             errors=[]
         )
 
@@ -208,6 +211,17 @@ def get_overview_summary(
     avg_cost_per_kwh = round(total_cost / total_energy, 4) if total_energy > 0 else None
     home_share = round((home_energy / total_energy) * 100, 1) if total_energy > 0 else 0
 
+    # Calculate PV share: PV kWh from EVCC home sessions / (home kWh + external kWh) * 100
+    total_charged = home_energy + external_energy
+    if total_charged > 0 and home_energy > 0:
+        pv_share_pct = round((home_energy / total_charged) * 100, 1)
+        pv_kwh = round(home_energy, 2)
+        total_charged_kwh = round(total_charged, 2)
+    else:
+        pv_share_pct = None
+        pv_kwh = None
+        total_charged_kwh = None
+
     return OverviewSummaryResponse(
         ok=True,
         total_sessions=total_sessions,
@@ -222,5 +236,8 @@ def get_overview_summary(
         home_cost_eur=round(home_cost, 2),
         external_cost_eur=round(external_cost, 2),
         home_share_pct=home_share,
+        pv_share_pct=pv_share_pct,
+        pv_kwh=pv_kwh,
+        total_charged_kwh=total_charged_kwh,
         errors=[]
     )

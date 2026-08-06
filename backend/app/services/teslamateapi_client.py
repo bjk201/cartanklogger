@@ -150,30 +150,14 @@ class TeslaMateAPIClient:
                         start_date = self._parse_datetime(item.get("start_date"))
                         end_date = self._parse_datetime(item.get("end_date"))
 
-                        # Determine charge type from fast_charger_info
+                        # Determine charge type from available TM data.
+                        # TM API /cars/{car_id}/charges does NOT provide
+                        # charge_details (no fast_charger_info, no charger_power).
+                        # Without these details, no reliable DC/AC classification
+                        # is possible — classify as unknown per requirement.
                         charge_type = "unknown"
                         fast_charger_brand = None
                         max_charge_power_kw = None
-                        
-                        # Check charge_details for fast_charger_info and max power
-                        charge_details = item.get("charge_details", [])
-                        if charge_details:
-                            first_detail = charge_details[0]
-                            fc_info = first_detail.get("fast_charger_info", {})
-                            if fc_info.get("fast_charger_present"):
-                                charge_type = "DC"
-                                fast_charger_brand = fc_info.get("fast_charger_brand")
-                            else:
-                                charge_type = "AC"
-                            
-                            # Calculate max charge power from charge_details
-                            max_power = 0
-                            for detail in charge_details:
-                                charger_power = detail.get("charger_details", {}).get("charger_power")
-                                if charger_power and charger_power > max_power:
-                                    max_power = charger_power
-                            if max_power > 0:
-                                max_charge_power_kw = max_power
 
                         charge = TeslaMateAPICharge(
                             id=item.get("charge_id", 0),

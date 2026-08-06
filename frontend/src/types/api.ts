@@ -147,6 +147,12 @@ export interface StatisticsKPIs {
   daily_home_kwh: number[];
   daily_external_kwh: number[];
   daily_total_kwh: number[];
+
+  // PV share of all charging sessions
+  // Formula: PV_kWh from EVCC Home-Sessions / (EVCC Home-kWh + externe TM-kWh) * 100
+  pv_share_pct: number | null;
+  pv_kwh: number | null;
+  total_charged_kwh: number | null;
 }
 
 export interface StatisticsResponse {
@@ -175,6 +181,12 @@ export interface OverviewSummaryResponse {
   home_cost_eur: number;
   external_cost_eur: number;
   home_share_pct: number;
+
+  // PV share of all charging sessions
+  pv_share_pct: number | null;
+  pv_kwh: number | null;
+  total_charged_kwh: number | null;
+
   errors: ErrorDetail[];
 }
 
