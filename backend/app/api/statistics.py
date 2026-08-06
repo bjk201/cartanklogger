@@ -233,8 +233,8 @@ async def get_statistics(
                 external_charges = [
                     c for c in tm_charges
                     if c.charge_energy_added and c.charge_energy_used
-                    and c.address
-                    and c.address.strip().lower() not in home_keywords
+                    and c.location
+                    and c.location.strip().lower() not in home_keywords
                 ]
                 
                 total_external_added = sum(c.charge_energy_added for c in external_charges)
