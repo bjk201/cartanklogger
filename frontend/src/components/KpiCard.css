@@ -101,6 +101,22 @@
   margin-top: 0.25rem;
 }
 
+.kpi-card--double-width {
+  grid-column: span 2;
+}
+
+@media (max-width: 1024px) {
+  .kpi-card--double-width {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-card--double-width {
+    grid-column: span 1;
+  }
+}
+
 @media (max-width: 480px) {
   .kpi-card {
     padding: 1rem;

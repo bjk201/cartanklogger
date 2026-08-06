@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, X, Zap, Euro, MapPin, Sun, Activity, List } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X, Zap, Euro, MapPin, Sun, Activity, List, House, Bolt } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
@@ -240,7 +240,7 @@ export function OverviewPage() {
                   <div className="overview-page__split-left">
                     <div className="overview-page__split-item">
                       <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true">
-                        <Zap size={20} />
+                        <House size={20} />
                       </div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{formatNumber(summary.home_energy_kwh)} kWh</span>
@@ -249,7 +249,7 @@ export function OverviewPage() {
                     </div>
                     <div className="overview-page__split-item">
                       <div className="overview-page__split-icon overview-page__split-icon--external" aria-hidden="true">
-                        <MapPin size={20} />
+                        <Bolt size={20} />
                       </div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
@@ -264,7 +264,7 @@ export function OverviewPage() {
                         labels: ['Zuhause', 'Extern'],
                         datasets: [{
                           data: [summary.home_energy_kwh, summary.external_energy_kwh],
-                          backgroundColor: ['var(--color-home)', 'var(--color-external)'],
+                          backgroundColor: ['#0d9488', '#2563eb'],
                           borderWidth: 0,
                         }],
                       }}
@@ -286,7 +286,7 @@ export function OverviewPage() {
                   <div className="overview-page__split-right">
                     <div className="overview-page__split-item">
                       <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true">
-                        <MapPin size={20} />
+                        <Bolt size={20} />
                       </div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
