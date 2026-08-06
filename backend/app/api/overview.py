@@ -132,7 +132,7 @@ def get_recent_sessions(
     summary="Get overview summary KPIs",
     description="Returns aggregated KPIs for the overview page for the given time range."
 )
-def get_overview_summary(
+async def get_overview_summary(
     days: Optional[int] = Query(None, description="Number of days to look back (e.g., 7, 30, 90, 365)"),
     from_date: Optional[str] = Query(None, description="Start date in ISO format (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date in ISO format (YYYY-MM-DD)"),
@@ -211,13 +211,28 @@ def get_overview_summary(
     avg_cost_per_kwh = round(total_cost / total_energy, 4) if total_energy > 0 else None
     home_share = round((home_energy / total_energy) * 100, 1) if total_energy > 0 else 0
 
-    # Calculate driving distance from sessions
-    total_distance = sum(s.distance_km or 0 for s in sessions)
-    # Count days with at least one session that has distance data
+    # Calculate driving distance from TM drives (EVCC has no trip data).
+    # TM drives provide odometer_distance (km driven per drive). Sessions
+    # themselves never carry distance_km, so we aggregate from drives instead.
+    total_distance = 0.0
     days_with_distance = set()
-    for s in sessions:
-        if s.distance_km and s.distance_km > 0 and s.date:
-            days_with_distance.add(s.date[:10])  # YYYY-MM-DD
+    if "external" in allowed_sources:
+        try:
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            tm_config = db.query(DataSourceConfig).first()
+            tm_client = await create_teslamateapi_client_from_config(tm_config)
+            if tm_client:
+                tm_drives = await tm_client.get_drives()
+                if days or from_dt or to_dt:
+                    tm_drives = tm_client._filter_tm_by_date_range(tm_drives, days, from_dt, to_dt)
+                for drive in tm_drives:
+                    if drive.odometer_distance:
+                        total_distance += drive.odometer_distance
+                        if drive.start_date:
+                            days_with_distance.add(drive.start_date.strftime("%Y-%m-%d"))
+        except Exception:
+            total_distance = 0.0
+            days_with_distance = set()
     days_count = len(days_with_distance) if days_with_distance else 0
     avg_distance_per_day = round(total_distance / days_count, 1) if days_count > 0 and total_distance > 0 else None
 
