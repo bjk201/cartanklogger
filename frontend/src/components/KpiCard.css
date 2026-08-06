@@ -7,7 +7,7 @@
   transition: all var(--transition-normal);
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
 }
 
 .kpi-card:hover {
@@ -110,7 +110,6 @@
 .kpi-card--double-width .overview-page__split-chart {
   flex: 1;
   min-height: 0;
-  height: 100%;
 }
 
 @media (max-width: 1024px) {
