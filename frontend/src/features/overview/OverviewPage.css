@@ -358,6 +358,7 @@
   gap: 1rem;
   flex: 1;
   min-height: 0;
+  height: 100%;
 }
 
 .overview-page__split-left {
@@ -375,6 +376,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .overview-page__split-right {
