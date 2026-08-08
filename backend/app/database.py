@@ -29,6 +29,8 @@ def init_db() -> None:
     from app.models import session as session_model  # noqa: F401
     from app.models import matching_override  # noqa: F401
     from app.models import datasource  # noqa: F401
+    from app.models import vehicle  # noqa: F401
+    from app.models import extra_costs  # noqa: F401
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified")
 

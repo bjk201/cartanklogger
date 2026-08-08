@@ -103,12 +103,12 @@ async def matching_live_status(db: Session = Depends(get_db)):
     
     config = db.query(DataSourceConfig).first()
     
-    if not config or not config.evcc_host or not config.teslamateapi_base_url:
+    if not config or not config.evcc_base_url or not config.teslamateapi_base_url:
         return {
             'ok': True,
             'live_available': False,
             'reason': 'EVCC und/oder TeslaMateAPI nicht in Einstellungen konfiguriert',
-            'evcc_configured': bool(config and config.evcc_host),
+            'evcc_configured': bool(config and config.evcc_base_url),
             'teslamateapi_configured': bool(config and config.teslamateapi_base_url)
         }
     
@@ -120,7 +120,7 @@ async def matching_live_status(db: Session = Depends(get_db)):
             'ok': True,
             'live_available': False,
             'reason': 'Clients konnten nicht erstellt werden',
-            'evcc_configured': bool(config.evcc_host),
+            'evcc_configured': bool(config.evcc_base_url),
             'teslamateapi_configured': bool(config.teslamateapi_base_url)
         }
     

@@ -1,31 +1,84 @@
-// Session interface update - ensure source_type is properly typed
+// === Core API Types (mapped to Backend models) ===
+
 export interface Session {
-  id: string;
-  session_id: string;
-  car_id: number;
-  car_name: string;
-  car_vin?: string;
+  id: number;
   source_type: "home" | "external" | "import";
-  start_time: string;
-  end_time?: string;
-  energy_charged_kwh?: number;
-  cost_eur?: number;
-  energy_used_kwh?: number;
-  energy_returned_kwh?: number;
+  source_id: string;
+  date: string;
   location?: string;
-  provider?: string;
-  note?: string;
-  external_session_id?: string;
-  created_at: string;
-  updated_at: string;
-  // New fields for frontend enhanced display (from backend model)
-  date?: string;
   energy_kwh?: number;
+  cost_eur?: number;
+  odometer_km?: number;
+  distance_km?: number;
+  note?: string;
   solar_percentage?: number;
   pv_kwh?: number;
-  odometer_km?: number;
   cost_per_kwh?: number;
+  cost_per_kwh_source?: "api" | "derived";
+  charge_type?: "DC" | "AC" | "unknown";
+  fast_charger_brand?: string;
+  max_charge_power_kw?: number;
 }
+
+export interface ErrorDetail {
+  code: string;
+  message: string;
+}
+
+export interface MetaInfo {
+  count: number;
+  limit: number;
+}
+
+export interface OverviewResponse {
+  ok: boolean;
+  data: Session[];
+  meta: MetaInfo;
+  errors: ErrorDetail[];
+}
+
+export interface OverviewSummaryResponse {
+  ok: boolean;
+  total_sessions: number;
+  total_energy_kwh: number;
+  total_cost_eur: number;
+  avg_cost_per_kwh?: number;
+  home_sessions: number;
+  external_sessions: number;
+  import_sessions: number;
+  home_energy_kwh: number;
+  external_energy_kwh: number;
+  home_cost_eur: number;
+  external_cost_eur: number;
+  home_share_pct: number;
+  pv_share_pct?: number;
+  pv_kwh?: number;
+  total_charged_kwh?: number;
+  total_distance_km?: number;
+  avg_distance_per_day_km?: number;
+  days_with_data?: number;
+  errors: ErrorDetail[];
+}
+
+export interface PaginatedSessionsResponse {
+  ok: boolean;
+  sessions: Session[];
+  total: number;
+  page: number;
+  page_size: number;
+  errors: ErrorDetail[];
+}
+
+export interface PaginationInfo {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+// === Statistics Types ===
 
 export interface StatisticsKPIs {
   total_sessions: number;
@@ -55,33 +108,10 @@ export interface StatisticsResponse {
   errors?: { code: string; message: string }[];
 }
 
-export interface OverviewResponse {
-  ok: boolean;
-  recent_sessions: Session[];
-  total_sessions: number;
-  total_energy_charged_kwh: number;
-  total_cost_eur: number;
-  start_date: string;
-  end_date: string;
-  errors?: { code: string; message: string }[];
-}
+// === Health & Status Types ===
 
-
-export interface OverviewSummaryResponse {
+export interface HealthResponse {
   ok: boolean;
-  summary: OverviewResponse;
-  errors?: { code: string; message: string }[];
-  total_sessions?: number;
-  total_energy_kwh?: number;
-  total_cost_eur?: number;
-  total_energy_used_kwh?: number;
-  avg_cost_per_kwh?: number;
-  total_distance_km?: number;
-  avg_distance_per_day_km?: number;
-  home_energy_kwh?: number;
-  home_share_pct?: number;
-  external_energy_kwh?: number;
-  days_with_data?: number;
 }
 
 export interface DataSourceStatusSource {
@@ -95,28 +125,6 @@ export interface DataSourceStatusSource {
   };
   configured?: boolean;
   reachable?: boolean;
-}
-
-export interface HealthResponse {
-  ok: boolean;
-}
-
-export interface PaginatedSessionsResponse {
-  ok: boolean;
-  sessions: Session[];
-  total: number;
-  page: number;
-  page_size: number;
-  errors?: { code: string; message: string }[];
-}
-
-export interface PaginationInfo {
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-  has_next: boolean;
-  has_prev: boolean;
 }
 
 export interface DataSourceStatusResponse {
@@ -154,6 +162,8 @@ export interface ReachabilityStatus {
   last_checked?: string;
 }
 
+// === Data Source Config Types ===
+
 export interface DataSourceConfigRead {
   evcc_base_url: string;
   evcc_api_token: string;
@@ -184,6 +194,8 @@ export interface DataSourceConfigTestResponse {
   source: string;
   status: ReachabilityStatus;
 }
+
+// === Matching Types ===
 
 export interface MatchingDryRunResponse {
   ok: boolean;
@@ -246,8 +258,16 @@ export interface LiveMatchingStatusResponse {
       username?: string;
     };
   }>;
+  live_available?: boolean;
+  reason?: string;
+  evcc_configured?: boolean;
+  teslamateapi_configured?: boolean;
+  evcc_reachable?: boolean;
+  teslamateapi_reachable?: boolean;
   errors?: { code: string; message: string }[];
 }
+
+// === Vehicle Types ===
 
 export interface VehicleInfoResponse {
   ok: boolean;
@@ -274,6 +294,9 @@ export interface VehicleRecordRead {
   tire_position?: string;
   tire_brand?: string;
   tire_season?: string;
+  start_odometer_km?: number;
+  replaced_by?: number;
+  is_active?: boolean;
 }
 
 export interface VehicleRecordsResponse {
@@ -312,4 +335,50 @@ export interface VehicleRecordUpdate {
   tire_position?: string;
   tire_brand?: string;
   tire_season?: string;
+}
+
+// === Extra Costs Types ===
+
+export type ExtraCostCategory = "VERSICHERUNG" | "ZUBEHOER" | "STEUER" | "SONSTIGES" | "REIFENKAUF";
+
+export interface ExtraCostRead {
+  id: number;
+  date: string;
+  title: string;
+  category: ExtraCostCategory;
+  cost_eur: number;
+  note?: string;
+  linked_tire_id?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExtraCostCreate {
+  date: string;
+  title: string;
+  category: ExtraCostCategory;
+  cost_eur: number;
+  note?: string;
+  linked_tire_id?: number;
+}
+
+export interface ExtraCostUpdate {
+  date?: string;
+  title?: string;
+  category?: ExtraCostCategory;
+  cost_eur?: number;
+  note?: string;
+  linked_tire_id?: number;
+}
+
+export interface ExtraCostListResponse {
+  ok: boolean;
+  data: ExtraCostRead[];
+  errors?: { code: string; message: string }[];
+}
+
+export interface ExtraCostSingleResponse {
+  ok: boolean;
+  data?: ExtraCostRead;
+  errors?: { code: string; message: string }[];
 }

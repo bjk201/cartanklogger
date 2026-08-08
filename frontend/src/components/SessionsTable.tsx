@@ -57,8 +57,8 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
           {sessions.map((session) => (
             <tr key={session.id} className="sessions-table__row">
               <td className="sessions-table__date">
-                <time dateTime={session.date}>
-                  {formatDate(session.date)}
+                <time dateTime={session.date || ''}>
+                  {formatDate(session.date || '')}
                 </time>
               </td>
               <td>
@@ -70,22 +70,22 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
                 {session.location || '—'}
               </td>
               <td className="text-end sessions-table__energy">
-                {session.energy_kwh !== null ? session.energy_kwh.toFixed(1) : '—'}
+                {session.energy_kwh !== null && session.energy_kwh !== undefined ? session.energy_kwh.toFixed(1) : '—'}
               </td>
               <td className="text-end sessions-table__pv-pct">
-                {session.solar_percentage !== null ? `${session.solar_percentage.toFixed(1)} %` : '—'}
+                {session.solar_percentage !== null && session.solar_percentage !== undefined ? `${session.solar_percentage.toFixed(1)} %` : '—'}
               </td>
               <td className="text-end sessions-table__pv-kwh">
-                {session.pv_kwh !== null ? session.pv_kwh.toFixed(2) : '—'}
+                {session.pv_kwh !== null && session.pv_kwh !== undefined ? session.pv_kwh.toFixed(2) : '—'}
               </td>
               <td className="text-end sessions-table__cost">
-                {session.cost_eur !== null ? `${session.cost_eur.toFixed(2)} €` : '—'}
+                {session.cost_eur !== null && session.cost_eur !== undefined ? `${session.cost_eur.toFixed(2)} €` : '—'}
               </td>
               <td className="text-end sessions-table__cost-per-kwh">
-                {session.cost_per_kwh !== null ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}
+                {session.cost_per_kwh !== null && session.cost_per_kwh !== undefined ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}
               </td>
               <td className="text-end sessions-table__odometer">
-                {session.odometer_km !== null ? session.odometer_km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}
+                {session.odometer_km !== null && session.odometer_km !== undefined ? session.odometer_km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}
               </td>
               <td className="sessions-table__note">
                 {session.note ? (

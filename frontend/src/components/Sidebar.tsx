@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, GitMerge, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, GitMerge, Car, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../app/ThemeContext';
 import './Sidebar.css';
 
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/extra-costs', label: 'Extra-Kosten', icon: FileText },
   { path: '/import-review', label: 'Import/Review', icon: ExternalLink },
   { path: '/settings', label: 'Einstellungen', icon: Settings },
+  { path: '/vehicle', label: 'Fahrzeug', icon: Car },  // <-- Added vehicle navigation
 ];
 
 interface SidebarProps {

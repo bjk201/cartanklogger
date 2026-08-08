@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
-import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse, type PaginationInfo } from '../../lib/apiClient';
+import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse, type MetaInfo, type ErrorDetail } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -51,7 +51,7 @@ export function OverviewPage() {
   };
 
   // Pagination state
-  const [pagination, setPagination] = useState<PaginationInfo>({
+  const [pagination, setPagination] = useState({
     page: 1,
     page_size: OVERVIEW_PAGE_SIZE,
     total: 0,
@@ -64,7 +64,7 @@ export function OverviewPage() {
     setLoading(true);
     setError(null);
 
-    // Determine API parameters based on selected range (from global context)
+    // Determine API parameters based on selected range
     let days: number | undefined = getDaysFromRange(selectedRange);
     let from_date: string | undefined = getFromDate();
     let to_date: string | undefined = getToDate();
@@ -73,12 +73,12 @@ export function OverviewPage() {
       if (customFrom) from_date = customFrom;
       if (customTo) to_date = customTo;
     } else if (selectedRange === 'all') {
-      days = 36500; // ~100 years
+      days = 36500;
     }
 
     try {
       const [recentResponse, summaryResponse, statusResponse] = await Promise.all([
-        api.getRecentSessions(OVERVIEW_PAGE_SIZE * pagination.page, days, from_date, to_date), // We'll implement pagination manually by fetching more
+        api.getRecentSessions(OVERVIEW_PAGE_SIZE * pagination.page, days, from_date, to_date),
         api.getOverviewSummary(days, from_date, to_date),
         api.getDataSourceStatus(),
       ]);
@@ -87,10 +87,9 @@ export function OverviewPage() {
         throw new Error('API returned error status');
       }
 
-      // For pagination, we need total count - get it from summary or fetch separately
-      // For now, use the full dataset for pagination calculation
-      const allSessions = recentResponse.data;
-      const totalSessions = summaryResponse.total_sessions;
+      // Backend returns {data: SessionRead[], meta: {count, limit}, errors}
+      const allSessions = recentResponse.data || [];
+      const totalSessions = summaryResponse.total_sessions || allSessions.length;
       const totalPages = Math.ceil(totalSessions / OVERVIEW_PAGE_SIZE);
 
       // Slice for current page
@@ -125,8 +124,6 @@ export function OverviewPage() {
     fetchData();
   };
 
-
-
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customFrom && customTo) {
@@ -141,6 +138,22 @@ export function OverviewPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <LoadingState message="Overview wird geladen…" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container">
+        <ErrorState message={error} onRetry={handleRetry} />
+      </div>
+    );
+  }
 
   // Helper functions for data source status display
   const getStatusClass = (status: { configured: boolean; reachable: boolean } | undefined): string => {
@@ -161,26 +174,10 @@ export function OverviewPage() {
     return num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
   };
 
-  const formatCostPerKWh = (num: number | null): string => {
+  const formatCostPerKWh = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '—';
     return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
   };
-
-  if (loading) {
-    return (
-      <div className="page-container">
-        <LoadingState message="Overview wird geladen…" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="page-container">
-        <ErrorState message={error} onRetry={handleRetry} />
-      </div>
-    );
-  }
 
   return (
     <div className="page-container">
@@ -201,7 +198,7 @@ export function OverviewPage() {
             {/* 1. Gesamt kWh */}
             <KpiCard
               label="Gesamt kWh"
-              value={formatNumber(summary.total_energy_kwh)}
+              value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'}
               unit="kWh"
               icon={(props) => <Zap {...props} />}
               iconColor="var(--color-home)"
@@ -210,7 +207,7 @@ export function OverviewPage() {
             {/* 2. Gesamtkosten */}
             <KpiCard
               label="Gesamtkosten"
-              value={summary.total_cost_eur.toFixed(2)}
+              value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'}
               unit="€"
               icon={(props) => <Euro {...props} />}
               iconColor="#f59e0b"
@@ -227,7 +224,7 @@ export function OverviewPage() {
             {/* 4. Anzahl Sessions */}
             <KpiCard
               label="Anzahl Sessions"
-              value={summary.total_sessions}
+              value={summary.total_sessions ? summary.total_sessions.toString() : '—'}
               icon={(props) => <Calendar {...props} />}
               iconColor="var(--color-primary)"
               subtitle="Alle Ladevorgänge"
@@ -243,8 +240,10 @@ export function OverviewPage() {
                         <House size={20} />
                       </div>
                       <div className="overview-page__split-data">
-                        <span className="overview-page__split-value">{formatNumber(summary.home_energy_kwh)} kWh</span>
-                        <span className="overview-page__split-sub">{summary.home_share_pct.toFixed(1)}% · {formatCostPerKWh(summary.avg_cost_per_kwh)}/kWh</span>
+                        <span className="overview-page__split-value">{summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh</span>
+                        <span className="overview-page__split-sub">
+                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {formatCostPerKWh(summary.avg_cost_per_kwh)}/kWh
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -255,7 +254,7 @@ export function OverviewPage() {
                         data={{
                           labels: ['Zuhause', 'Extern'],
                           datasets: [{
-                            data: [summary.home_energy_kwh, summary.external_energy_kwh],
+                            data: [summary.home_energy_kwh || 0, summary.external_energy_kwh || 0],
                             backgroundColor: ['#0d9488', '#2563eb'],
                             borderWidth: 0,
                           }],
@@ -275,7 +274,7 @@ export function OverviewPage() {
                         }}
                       />
                     </div>
-                    <span className="overview-page__pie-total">{formatNumber(summary.total_energy_kwh)} kWh</span>
+                    <span className="overview-page__pie-total">{summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} kWh</span>
                   </div>
                   <div className="overview-page__split-right">
                     <div className="overview-page__split-item">
@@ -283,7 +282,7 @@ export function OverviewPage() {
                         <Bolt size={20} />
                       </div>
                       <div className="overview-page__split-data">
-                        <span className="overview-page__split-value">{formatNumber(summary.external_energy_kwh)} kWh</span>
+                        <span className="overview-page__split-value">{summary.external_energy_kwh ? formatNumber(summary.external_energy_kwh) : '—'} kWh</span>
                         <span className="overview-page__split-sub">Extern geladen</span>
                       </div>
                     </div>
@@ -398,10 +397,10 @@ export function OverviewPage() {
         <div className="overview-page__trend">
           <TrendChart sessions={sessions} />
         </div>
-      </section>
+        </section>
 
-      {/* Data Source Status - honest about demo/live mode with reachability */}
-      <section className="overview-page__section overview-page__section--subtle" aria-labelledby="data-source-heading">
+        {/* Data Source Status */}
+        <section className="overview-page__section overview-page__section--subtle" aria-labelledby="data-source-heading">
         <h2 id="data-source-heading" className="overview-page__section-title">
           Datenquellen-Status
           {dataSourceStatus && (
@@ -411,8 +410,8 @@ export function OverviewPage() {
           )}
         </h2>
         <div className="overview-page__import-status">
-          <div className="import-status__item">
-            <span className="import-status__label">Modus</span>
+        <div className="import-status__item">
+          <span className="import-status__label">Modus</span>
             <span className="import-status__value import-status__value--ok">
               Live
             </span>
@@ -443,118 +442,71 @@ export function OverviewPage() {
   );
 }
 
-// Energy Trend Chart using react-chartjs-2
 function TrendChart({ sessions }: { sessions: Session[] }) {
-  // Sort by date ascending for chart
-  const sorted = useMemo(() => [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [sessions]);
-  const energies = useMemo(() => sorted.map(s => s.energy_kwh || 0), [sorted]);
-
-  if (sorted.length < 2) {
-    return (
-      <div className="trend-chart__empty">
-        <p>Mindestens 2 Sessions nötig für Trendanzeige</p>
-      </div>
+  // Chart data preparation
+  const chartData = useMemo(() => {
+    const sorted = [...sessions].sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
     );
+    return {
+      labels: sorted.map(s => {
+        try {
+          return new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+        } catch { return ''; }
+      }),
+      values: sorted.map(s => s.energy_kwh || 0),
+    };
+  }, [sessions]);
+
+  if (chartData.labels.length === 0) {
+    return <div className="overview-page__empty-trend">Keine Daten für Trend verfügbar</div>;
   }
 
-  const chartData = useMemo(() => ({
-    labels: sorted.map(s => {
-      const d = new Date(s.date);
-      return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }), // DD.MM format
-    datasets: [
-      {
-        label: 'Energie pro Session',
-        data: energies,
-        borderColor: '#0d9488',
-        backgroundColor: 'rgba(13, 148, 136, 0.15)',
-        fill: true,
-        tension: 0.25,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: '#0d9488',
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 1.5,
-        borderWidth: 2,
-      },
-    ],
-  }), [sorted, energies]);
-
-  const chartOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        titleFont: { size: 13, family: 'system-ui' },
-        bodyFont: { size: 12, family: 'system-ui' },
-        callbacks: {
-          label: (context: any) => {
-            const value = context.parsed.y;
-            const idx = context.dataIndex;
-            const session = sorted[idx];
-            const dateStr = session ? new Date(session.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(session.date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-            return `${dateStr} — Energie: ${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          font: { size: 11, family: 'system-ui' },
-          color: 'var(--color-text-muted)',
-          maxTicksLimit: 10,
-        },
-      },
-      y: {
-        type: 'linear' as const,
-        display: true,
-        position: 'left' as const,
-        title: {
-          display: true,
-          text: 'kWh',
-          font: { size: 12, family: 'system-ui', weight: '500' as const },
-          color: 'var(--color-text-muted)',
-        },
-        grid: {
-          color: 'var(--color-border)',
-        },
-        ticks: {
-          font: { size: 11, family: 'system-ui' },
-          color: 'var(--color-text-muted)',
-        },
-        min: 0,
-      },
-    },
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
-    },
-  }), []);
-
   return (
-    <div className="trend-chart">
-      <div className="trend-chart__wrapper">
-        <Line
-          data={chartData}
-          options={chartOptions as any}
-          aria-label={`Energie-Trend: ${sorted.length} Sessions, ${Math.min(...energies).toFixed(1)} – ${Math.max(...energies).toFixed(1)} kWh`}
-        />
-      </div>
-      <div className="trend-chart__legend">
-        <span className="trend-chart__unit">kWh</span>
-        <span className="trend-chart__range">
-          {Math.min(...energies).toFixed(1)} – {Math.max(...energies).toFixed(1)} kWh
-        </span>
-      </div>
+    <div className="overview-page__chart-container">
+      <Line
+        data={{
+          labels: chartData.labels,
+          datasets: [{
+            label: 'Energie (kWh)',
+            data: chartData.values,
+            fill: true,
+            borderColor: '#0d9488',
+            backgroundColor: 'rgba(13, 148, 136, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#0d9488',
+            tension: 0.3,
+          }],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx: any) => `${ctx.parsed.y.toFixed(1)} kWh`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              display: true,
+              grid: { display: false },
+              ticks: { maxRotation: 45, font: { size: 10 } },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.06)' },
+              ticks: {
+                font: { size: 10 },
+                callback: (val: any) => `${val} kWh`,
+              },
+            },
+          },
+        }}
+      />
     </div>
   );
 }

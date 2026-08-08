@@ -8,7 +8,7 @@ import httpx
 
 from app.config import settings
 from app.database import init_db, engine, get_db
-from app.api import overview, sessions, statistics, datasource, matching, matching_override, matching_raw
+from app.api import overview, sessions, statistics, datasource, matching, matching_override, matching_raw, vehicle, extra_costs
 from app.models.datasource import DataSourceConfig
 from sqlalchemy.orm import Session
 
@@ -243,6 +243,8 @@ app.include_router(datasource.router, prefix=settings.API_PREFIX)
 app.include_router(matching.router, prefix=settings.API_PREFIX)
 app.include_router(matching_override.router, prefix=settings.API_PREFIX)
 app.include_router(matching_raw.router, prefix=settings.API_PREFIX)
+app.include_router(vehicle.router, prefix=settings.API_PREFIX)
+app.include_router(extra_costs.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health", tags=["Health"])

@@ -10,8 +10,8 @@ export function SessionMobileCard({ session }: SessionMobileCardProps) {
   return (
     <article className="session-card">
       <header className="session-card__header">
-        <time className="session-card__date" dateTime={session.date}>
-          {formatDate(session.date)}
+        <time className="session-card__date" dateTime={session.date || ''}>
+          {formatDate(session.date || '')}
         </time>
         <span className={`source-badge source-badge--${session.source_type}`}>
           {formatSourceType(session.source_type)}
@@ -25,10 +25,10 @@ export function SessionMobileCard({ session }: SessionMobileCardProps) {
         <div className="session-card__row">
           <span className="session-card__label">Energie</span>
           <span className="session-card__value session-card__value--energy">
-            {session.energy_kwh !== null ? `${session.energy_kwh.toFixed(1)} kWh` : '—'}
+            {session.energy_kwh !== null && session.energy_kwh !== undefined ? `${session.energy_kwh.toFixed(1)} kWh` : '—'}
           </span>
         </div>
-        {session.solar_percentage !== null && session.pv_kwh !== null && (
+        {(session.solar_percentage !== null && session.solar_percentage !== undefined) && (session.pv_kwh !== null && session.pv_kwh !== undefined) && (
           <>
             <div className="session-card__row">
               <span className="session-card__label">PV-Anteil</span>
@@ -47,10 +47,10 @@ export function SessionMobileCard({ session }: SessionMobileCardProps) {
         <div className="session-card__row">
           <span className="session-card__label">Kosten</span>
           <span className="session-card__value session-card__value--cost">
-            {session.cost_eur !== null ? `${session.cost_eur.toFixed(2)} €` : '—'}
+            {session.cost_eur !== null && session.cost_eur !== undefined ? `${session.cost_eur.toFixed(2)} €` : '—'}
           </span>
         </div>
-        {session.cost_per_kwh !== null && (
+        {session.cost_per_kwh !== null && session.cost_per_kwh !== undefined && (
           <div className="session-card__row">
             <span className="session-card__label">€/kWh</span>
             <span className="session-card__value session-card__value--cost-per-kwh">
@@ -61,7 +61,7 @@ export function SessionMobileCard({ session }: SessionMobileCardProps) {
         <div className="session-card__row">
           <span className="session-card__label">km-Stand</span>
           <span className="session-card__value">
-            {session.odometer_km !== null ? session.odometer_km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}
+            {session.odometer_km !== null && session.odometer_km !== undefined ? session.odometer_km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}
           </span>
         </div>
         {session.note && (
