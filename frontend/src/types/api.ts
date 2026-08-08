@@ -62,10 +62,16 @@ export interface OverviewSummaryResponse {
 
 export interface PaginatedSessionsResponse {
   ok: boolean;
-  sessions: Session[];
-  total: number;
-  page: number;
-  page_size: number;
+  data: Session[];
+  meta: MetaInfo;
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
   errors: ErrorDetail[];
 }
 

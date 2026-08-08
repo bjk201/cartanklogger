@@ -74,15 +74,15 @@ export function SessionsPage() {
         throw new Error('API returned error status');
       }
       
-      setSessions(response.sessions);
-      const totalPages = Math.ceil(response.total / PAGE_SIZE);
+      setSessions(response.data);
+      const totalPages = Math.ceil(response.pagination.total / PAGE_SIZE);
       setPagination({
-        page: response.page,
-        page_size: response.page_size,
-        total: response.total,
+        page: response.pagination.page,
+        page_size: response.pagination.page_size,
+        total: response.pagination.total,
         total_pages: totalPages,
-        has_next: response.page < totalPages,
-        has_prev: response.page > 1,
+        has_next: response.pagination.page < totalPages,
+        has_prev: response.pagination.page > 1,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
