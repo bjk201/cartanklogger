@@ -269,6 +269,11 @@ export const api = {
       method: 'DELETE',
     });
   },
+
+  // Data Source Sync
+  async syncDataSources(): Promise<{ ok: boolean; result?: any }> {
+    return fetchJson<{ ok: boolean; result?: any }>('/settings/data-sources/sync', { method: 'POST' });
+  },
 };
 
 export { ApiError };

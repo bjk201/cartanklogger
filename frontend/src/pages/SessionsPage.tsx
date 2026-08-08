@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar, X, RefreshCw } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
@@ -34,6 +34,10 @@ export function SessionsPage() {
   const [search, setSearch] = useState('');
   const [sourceType, setSourceType] = useState<'all' | 'home' | 'external' | 'import'>('all');
   const [sortDesc, setSortDesc] = useState(true);
+  
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   
   // Use global time range context
   const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
@@ -127,6 +131,27 @@ export function SessionsPage() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await api.syncDataSources();
+      if (result.ok) {
+        setSyncMessage('Sync erfolgreich!');
+      } else {
+        setSyncMessage('Sync teilweise fehlgeschlagen');
+      }
+      // Nach Sync neu laden
+      await fetchSessions();
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err) {
+      setSyncMessage('Sync-Fehler: ' + (err instanceof Error ? err.message : 'Unbekannt'));
+      setTimeout(() => setSyncMessage(null), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const formatSourceType = (type: string): string => {
     switch (type) {
       case 'home': return 'Zuhause';
@@ -202,8 +227,25 @@ export function SessionsPage() {
               <span>Datum</span>
               {sortDesc ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
+
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="sessions-page__sync-btn"
+              title="Jetzt synchronisieren (EVCC + TeslaMate)"
+            >
+              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
+              {syncing ? 'Sync...' : 'Sync'}
+            </button>
           </div>
         </div>
+
+        {/* Sync Message */}
+        {syncMessage && (
+          <div className={`sessions-page__sync-msg ${syncMessage.includes('Fehler') ? 'error' : 'success'}`}>
+            {syncMessage}
+          </div>
+        )}
 
         {/* Content */}
         {loading ? (
