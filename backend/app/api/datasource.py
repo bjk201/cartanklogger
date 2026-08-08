@@ -11,11 +11,8 @@ from app.schemas.datasource import (
     DataSourceConfigTestRequest,
     DataSourceConfigTestResponse,
     ReachabilityStatus,
-    EVCCConfig,
-    TeslaMateAPIConfig,
+    ReachabilityLevel,
 )
-from app.config import settings as app_settings
-from app.services.sync_service import run_full_sync
 
 
 router = APIRouter(prefix="/settings/data-sources", tags=["Data Sources"])
@@ -36,7 +33,7 @@ def get_or_create_config(db: Session) -> DataSourceConfig:
 def get_data_source_config(db: Session = Depends(get_db)):
     """Get current data source configuration."""
     config = get_or_create_config(db)
-    
+
     return DataSourceConfigRead(
         evcc_base_url=config.evcc_base_url or "",
         evcc_api_token=config.evcc_api_token or "",
@@ -52,22 +49,24 @@ def get_data_source_config(db: Session = Depends(get_db)):
 def save_data_source_config(payload: DataSourceConfigWrite, db: Session = Depends(get_db)):
     """Save data source configuration."""
     config = get_or_create_config(db)
-    
+
     # Update EVCC fields
-    config.evcc_base_url = payload.base_url.strip() if payload.base_url else ""
-    if payload.api_token is not None:
-        config.evcc_api_token = payload.api_token.strip()
-    
+    if payload.evcc_base_url is not None:
+        config.evcc_base_url = payload.evcc_base_url.strip()
+    if payload.evcc_api_token is not None:
+        config.evcc_api_token = payload.evcc_api_token.strip() or ""
+
     # Update TeslaMateAPI fields
-    config.teslamateapi_base_url = payload.base_url.strip() if payload.base_url else ""
-    if payload.token is not None:
-        config.teslamateapi_token = payload.token.strip()
-    
+    if payload.teslamateapi_base_url is not None:
+        config.teslamateapi_base_url = payload.teslamateapi_base_url.strip()
+    if payload.teslamateapi_token is not None:
+        config.teslamateapi_token = payload.teslamateapi_token.strip() or ""
+
     config.updated_by = "admin"
-    
+
     db.commit()
     db.refresh(config)
-    
+
     return DataSourceConfigRead(
         evcc_base_url=config.evcc_base_url or "",
         evcc_api_token=config.evcc_api_token or "",
@@ -83,18 +82,18 @@ async def _check_evcc_reachable(base_url: str, api_token: str) -> ReachabilitySt
     """Check EVCC reachability."""
     if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, error="Nicht konfiguriert")
-    
+
     headers = {}
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{base_url}/api/state", headers=headers)
+            response = await client.get(f"{base_url.rstrip('/')}/api/state", headers=headers)
             if response.status_code == 200:
-                return ReachabilityStatus(configured=True, reachable=True, status_code=response.status_code)
+                return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.REACHABLE, status_code=response.status_code)
             else:
-                return ReachabilityStatus(configured=True, reachable=False, status_code=response.status_code, error=f"HTTP {response.status_code}")
+                return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, status_code=response.status_code, error=f"HTTP {response.status_code}")
     except httpx.TimeoutException:
         return ReachabilityStatus(configured=True, reachable=False, error="Timeout")
     except httpx.ConnectError:
@@ -105,27 +104,25 @@ async def _check_evcc_reachable(base_url: str, api_token: str) -> ReachabilitySt
 
 async def _check_teslamateapi_reachable(base_url: str, token: str) -> ReachabilityStatus:
     """Check TeslaMateAPI reachability - verifies both base URL and cars endpoint."""
-    from app.schemas.datasource import ReachabilityLevel
     if not base_url:
         return ReachabilityStatus(configured=False, reachable=False, level=ReachabilityLevel.UNREACHABLE, error="Nicht konfiguriert")
-    
+
     # Ensure trailing slash for TeslaMateAPI
-    if not base_url.endswith("/"):
-        base_url = base_url + "/"
-    
+    base_url_clean = base_url.rstrip("/") + "/"
+
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             # Check base URL
-            response = await client.get(base_url, headers=headers)
+            response = await client.get(base_url_clean, headers=headers)
             if response.status_code != 200:
                 return ReachabilityStatus(configured=True, reachable=False, level=ReachabilityLevel.UNREACHABLE, status_code=response.status_code, error=f"Base URL HTTP {response.status_code}")
-            
+
             # Also verify the cars endpoint exists (correct endpoint for this API)
-            response = await client.get(f"{base_url}cars", headers=headers)
+            response = await client.get(f"{base_url_clean}cars", headers=headers)
             if response.status_code == 200:
                 return ReachabilityStatus(configured=True, reachable=True, level=ReachabilityLevel.REACHABLE, status_code=response.status_code)
             else:
@@ -142,26 +139,51 @@ async def _check_teslamateapi_reachable(base_url: str, token: str) -> Reachabili
 async def test_data_source_connection(payload: DataSourceConfigTestRequest):
     """Test connection to a data source (EVCC or TeslaMateAPI)."""
     if payload.source == "evcc":
+        if not payload.evcc_base_url:
+            return DataSourceConfigTestResponse(
+                ok=False,
+                source="evcc",
+                status=ReachabilityStatus(
+                    configured=False,
+                    reachable=False,
+                    level=ReachabilityLevel.UNREACHABLE,
+                    error="EVCC Base URL ist erforderlich"
+                )
+            )
+
         status_result = await _check_evcc_reachable(
-            base_url=payload.base_url or "",
-            api_token=payload.api_token or "",
+            base_url=payload.evcc_base_url,
+            api_token=payload.evcc_api_token or "",
         )
         return DataSourceConfigTestResponse(ok=True, source="evcc", status=status_result)
-    
+
     elif payload.source == "teslamateapi":
+        if not payload.teslamateapi_base_url:
+            return DataSourceConfigTestResponse(
+                ok=False,
+                source="teslamateapi",
+                status=ReachabilityStatus(
+                    configured=False,
+                    reachable=False,
+                    level=ReachabilityLevel.UNREACHABLE,
+                    error="TeslaMateAPI Base URL ist erforderlich"
+                )
+            )
+
         status_result = await _check_teslamateapi_reachable(
-            base_url=payload.base_url or "",
-            token=payload.token or "",
+            base_url=payload.teslamateapi_base_url,
+            token=payload.teslamateapi_token or "",
         )
         return DataSourceConfigTestResponse(ok=True, source="teslamateapi", status=status_result)
-    
+
     else:
-        raise HTTPException(status_code=400, detail="Unbekannte Quelle: 'evcc' oder 'teslamateapi'")
+        raise HTTPException(status_code=400, detail="Unbekannte Quelle: 'evcc' oder 'teslamateapi' erforderlich")
 
 
 @router.post("/sync", response_model=dict)
 async def sync_data_sources(db: Session = Depends(get_db)):
     """Trigger full sync of all configured data sources (EVCC + TM)."""
+    from app.services.sync_service import run_full_sync
     result = await run_full_sync(db)
     return {
         "ok": True,

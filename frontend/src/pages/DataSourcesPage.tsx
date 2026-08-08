@@ -19,19 +19,15 @@ export function DataSourcesPage() {
     teslamateapi?: DataSourceConfigTestResponse 
   }>({ evcc: undefined, teslamateapi: undefined });
 
-  // Form state
+  // Form state - base URL fields only
   const [form, setForm] = useState({
-    host: '',
-    port: 7070,
-    password: '',
-    api_token: '',
-    use_tls: false,
-    base_url: '',
-    token: '',
+    evcc_base_url: '',
+    evcc_api_token: '',
+    teslamate_base_url: '',
+    teslamate_token: '',
   });
 
   // Password visibility
-  const [showEVCCPassword, setShowEVCCPassword] = useState(false);
   const [showEVCCAPIToken, setShowEVCCAPIToken] = useState(false);
   const [showTMToken, setShowTMToken] = useState(false);
 
@@ -41,22 +37,18 @@ export function DataSourcesPage() {
     try {
       const [configResponse, statusResponse] = await Promise.all([
         api.getDataSourceConfig(),
-        api.getDataSourceStatus().catch(() => null) // Optional, don't fail if status endpoint has issues
+        api.getDataSourceStatus().catch(() => null)
       ]);
 
       setConfig(configResponse);
-      // Populate form with current config (passwords/tokens not returned by API)
       setForm({
-        host: configResponse.evcc_host,
-        port: configResponse.evcc_port,
-        password: '',
-        api_token: '',
-        use_tls: configResponse.evcc_use_tls,
-        base_url: configResponse.teslamateapi_base_url,
-        token: '',
+        evcc_base_url: configResponse.evcc_base_url || '',
+        evcc_api_token: '',  // Never load token from backend (security)
+        teslamate_base_url: configResponse.teslamateapi_base_url || '',
+        teslamate_token: '',
       });
 
-      // Initialize test results from status endpoint (shows last known reachability)
+      // Initialize test results from status endpoint
       if (statusResponse) {
         setTestResults({
           evcc: {
@@ -99,20 +91,23 @@ export function DataSourcesPage() {
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleInputChange = (field: string, value: string | number | boolean) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const response = await api.saveDataSourceConfig(form);
+      const savePayload: DataSourceConfigWrite = {
+        evcc_base_url: form.evcc_base_url.trim(),
+        evcc_api_token: form.evcc_api_token || null,
+        teslamateapi_base_url: form.teslamate_base_url.trim(),
+        teslamateapi_token: form.teslamate_token || null,
+      };
+      
+      const response = await api.saveDataSourceConfig(savePayload);
 
       setSuccess('Konfiguration gespeichert');
-      // Refetch to get updated computed fields
+      // Refetch to get updated fields
       await fetchConfig();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -130,11 +125,8 @@ export function DataSourcesPage() {
     try {
       const testRequest: DataSourceConfigTestRequest = {
         source: 'evcc',
-        host: form.host,
-        port: form.port,
-        password: form.password || undefined,
-        api_token: form.api_token || undefined,
-        use_tls: form.use_tls,
+        evcc_base_url: form.evcc_base_url.trim(),
+        evcc_api_token: form.evcc_api_token || undefined,
       };
       const response = await api.testDataSourceConnection(testRequest);
       setTestResults(prev => ({ ...prev, evcc: response }));
@@ -153,8 +145,8 @@ export function DataSourcesPage() {
     try {
       const testRequest: DataSourceConfigTestRequest = {
         source: 'teslamateapi',
-        base_url: form.base_url,
-        token: form.token || undefined,
+        teslamateapi_base_url: form.teslamate_base_url.trim(),
+        teslamateapi_token: form.teslamate_token || undefined,
       };
       const response = await api.testDataSourceConnection(testRequest);
       setTestResults(prev => ({ ...prev, teslamateapi: response }));
@@ -183,20 +175,19 @@ export function DataSourcesPage() {
     }
   };
 
-  const PasswordInput = ({ value, onChange, show, toggleShow, placeholder, label, type = 'password' }: {
+  const PasswordInput = ({ value, onChange, show, toggleShow, placeholder, label }: {
     value: string;
     onChange: (v: string) => void;
     show: boolean;
     toggleShow: () => void;
     placeholder: string;
     label: string;
-    type?: 'password' | 'text';
   }) => (
     <div className="form-group">
       <label>{label}</label>
       <div className="password-input-wrapper">
         <input
-          type={show ? 'text' : type}
+          type={show ? 'text' : 'password'}
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
@@ -234,8 +225,8 @@ export function DataSourcesPage() {
         <h1 className="page-title">Datenquellen</h1>
         <p className="page-subtitle">
           EVCC & TeslaMateAPI Konfiguration
-          <span className="mode-badge mode-badge--live">
-            LIVE
+          <span className={`mode-badge ${isLive ? 'mode-badge--live' : 'mode-badge--demo'}`}>
+            {isLive ? 'LIVE' : 'DEMO'}
           </span>
         </p>
       </div>
@@ -248,8 +239,8 @@ export function DataSourcesPage() {
         <div className="status-grid">
           <div className="status-card">
             <div className="status-card__label">Modus</div>
-            <div className="status-card__value status-live">
-              Live
+            <div className={`status-card__value ${isLive ? 'status-live' : 'status-warn'}`}>
+              {isLive ? 'Live' : 'Demo'}
             </div>
           </div>
           <div className="status-card">
@@ -288,48 +279,24 @@ export function DataSourcesPage() {
         </h2>
         <div className="settings-form">
           <div className="form-row">
-            <div className="form-group">
-              <label>Host <span className="required">*</span></label>
+            <div className="form-group form-group--full">
+              <label>EVCC Base URL <span className="required">*</span></label>
               <input
                 type="text"
-                value={form.host}
-                onChange={e => handleInputChange('host', e.target.value)}
-                placeholder="z.B. evcc.local oder 192.168.1.100"
+                value={form.evcc_base_url}
+                onChange={e => setForm(prev => ({ ...prev, evcc_base_url: e.target.value }))}
+                placeholder="http://192.168.1.15:7070"
                 required
               />
             </div>
-            <div className="form-group">
-              <label>Port</label>
-              <input
-                type="number"
-                value={form.port}
-                onChange={e => handleInputChange('port', parseInt(e.target.value) || 7070)}
-                min={1}
-                max={65535}
-              />
-            </div>
           </div>
 
           <div className="form-row">
             <div className="form-group form-group--full">
-              <label>Passwort (optional)</label>
+              <label>API Token (optional)</label>
               <PasswordInput
-                value={form.password}
-                onChange={v => handleInputChange('password', v)}
-                show={showEVCCPassword}
-                toggleShow={() => setShowEVCCPassword(!showEVCCPassword)}
-                placeholder="EVCC Admin-Passwort"
-                label=""
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group form-group--full">
-              <label>API Token (optional, alternativ zu Passwort)</label>
-              <PasswordInput
-                value={form.api_token}
-                onChange={v => handleInputChange('api_token', v)}
+                value={form.evcc_api_token || ''}
+                onChange={v => setForm(prev => ({ ...prev, evcc_api_token: v }))}
                 show={showEVCCAPIToken}
                 toggleShow={() => setShowEVCCAPIToken(!showEVCCAPIToken)}
                 placeholder="EVCC API Token"
@@ -338,24 +305,11 @@ export function DataSourcesPage() {
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group form-group--checkbox">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={form.use_tls}
-                  onChange={e => handleInputChange('use_tls', e.target.checked)}
-                />
-                <span>HTTPS (TLS) verwenden</span>
-              </label>
-            </div>
-          </div>
-
           <div className="form-actions">
             <button
               className="btn btn--primary"
               onClick={handleTestEVCC}
-              disabled={testingEVCC || !form.host}
+              disabled={testingEVCC || !form.evcc_base_url.trim()}
             >
               {testingEVCC ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />}
               {testingEVCC ? 'Teste...' : 'Verbindung testen'}
@@ -372,12 +326,12 @@ export function DataSourcesPage() {
         <div className="settings-form">
           <div className="form-row">
             <div className="form-group form-group--full">
-              <label>Base URL <span className="required">*</span></label>
+              <label>TeslaMateAPI Base URL <span className="required">*</span></label>
               <input
                 type="text"
-                value={form.base_url}
-                onChange={e => handleInputChange('base_url', e.target.value)}
-                placeholder="z.B. http://192.168.1.21:8080/api/v1"
+                value={form.teslamate_base_url}
+                onChange={e => setForm(prev => ({ ...prev, teslamate_base_url: e.target.value }))}
+                placeholder="http://192.168.1.21:8080/api/v1/"
                 required
               />
             </div>
@@ -387,8 +341,8 @@ export function DataSourcesPage() {
             <div className="form-group form-group--full">
               <label>Bearer Token (optional)</label>
               <PasswordInput
-                value={form.token}
-                onChange={v => handleInputChange('token', v)}
+                value={form.teslamate_token || ''}
+                onChange={v => setForm(prev => ({ ...prev, teslamate_token: v }))}
                 show={showTMToken}
                 toggleShow={() => setShowTMToken(!showTMToken)}
                 placeholder="TeslaMateAPI Bearer Token"
@@ -401,7 +355,7 @@ export function DataSourcesPage() {
             <button
               className="btn btn--primary"
               onClick={handleTestTM}
-              disabled={testingTM || !form.base_url}
+              disabled={testingTM || !form.teslamate_base_url.trim()}
             >
               {testingTM ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />}
               {testingTM ? 'Teste...' : 'Verbindung testen'}

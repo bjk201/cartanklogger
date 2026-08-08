@@ -1,76 +1,113 @@
+// Session interface update - ensure source_type is properly typed
 export interface Session {
-  id: number;
-  source_type: 'home' | 'external' | 'import';
-  source_id: string;
-  date: string;
-  location: string | null;
-  energy_kwh: number | null;
-  cost_eur: number | null;
-  odometer_km: number | null;
-  distance_km: number | null;
-  note: string | null;
-  // PV / Solar data (from EVCC home_sessions)
-  solar_percentage: number | null;
-  pv_kwh: number | null;
-  // Cost per kWh
-  // EVCC: directly from pricePerKWh API field (source='api')
-  // TeslaMate: derived from cost / charge_energy_added (source='derived')
-  cost_per_kwh: number | null;
-  cost_per_kwh_source: 'api' | 'derived' | null;
+  id: string;
+  session_id: string;
+  car_id: number;
+  car_name: string;
+  car_vin?: string;
+  source_type: "home" | "external" | "import";
+  start_time: string;
+  end_time?: string;
+  energy_charged_kwh?: number;
+  cost_eur?: number;
+  energy_used_kwh?: number;
+  energy_returned_kwh?: number;
+  location?: string;
+  provider?: string;
+  note?: string;
+  external_session_id?: string;
+  created_at: string;
+  updated_at: string;
+  // New fields for frontend enhanced display (from backend model)
+  date?: string;
+  energy_kwh?: number;
+  solar_percentage?: number;
+  pv_kwh?: number;
+  odometer_km?: number;
+  cost_per_kwh?: number;
 }
 
-export interface MetaInfo {
-  count: number;
-  limit: number;
+export interface StatisticsKPIs {
+  total_sessions: number;
+  total_energy_charged_kwh: number;
+  total_cost_eur: number;
+  total_energy_used_kwh: number;
+  total_energy_returned_kwh: number;
 }
 
-export interface ErrorDetail {
-  code: string;
-  message: string;
-  field?: string;
+export interface SourceBreakdown {
+  home?: number;
+  external?: number;
+  import_?: number;
+  total?: number;
+}
+
+export interface StatisticsResponse {
+  ok: boolean;
+  kpis?: StatisticsKPIs;
+  energy_by_source?: SourceBreakdown;
+  cost_by_source?: SourceBreakdown;
+  sessions_by_source?: SourceBreakdown;
+  range_label?: string;
+  evcc?: StatisticsKPIs;
+  teslamate?: StatisticsKPIs;
+  source_breakdown?: SourceBreakdown;
+  errors?: { code: string; message: string }[];
 }
 
 export interface OverviewResponse {
   ok: boolean;
-  data: Session[];
-  meta: MetaInfo;
-  errors: ErrorDetail[];
+  recent_sessions: Session[];
+  total_sessions: number;
+  total_energy_charged_kwh: number;
+  total_cost_eur: number;
+  start_date: string;
+  end_date: string;
+  errors?: { code: string; message: string }[];
+}
+
+
+export interface OverviewSummaryResponse {
+  ok: boolean;
+  summary: OverviewResponse;
+  errors?: { code: string; message: string }[];
+  total_sessions?: number;
+  total_energy_kwh?: number;
+  total_cost_eur?: number;
+  total_energy_used_kwh?: number;
+  avg_cost_per_kwh?: number;
+  total_distance_km?: number;
+  avg_distance_per_day_km?: number;
+  home_energy_kwh?: number;
+  home_share_pct?: number;
+  external_energy_kwh?: number;
+  days_with_data?: number;
+}
+
+export interface DataSourceStatusSource {
+  status: "connected" | "disconnected" | "error";
+  last_sync?: string;
+  last_error?: string;
+  config?: {
+    api_url?: string;
+    token?: string;
+    username?: string;
+  };
+  configured?: boolean;
+  reachable?: boolean;
 }
 
 export interface HealthResponse {
   ok: boolean;
-  service: string;
-  version: string;
-  database: string;
-  data_source: 'demo' | 'live';
-  data_source_description: string;
 }
 
-export interface DataSourceStatusResponse {
+export interface PaginatedSessionsResponse {
   ok: boolean;
-  data_source: 'demo' | 'live';
-  data_source_description: string;
-  message: string;
-  timestamp?: string;
-  evcc: ReachabilityStatus;
-  teslamateapi: ReachabilityStatus;
-}
-
-export interface ReachabilityStatus {
-  configured: boolean;
-  reachable: boolean;
-  level?: 'reachable' | 'data_fetch_error' | 'unreachable';
-  status_code?: number;
-  error?: string;
-  data_error?: string;
-  last_checked?: string;
-}
-
-export interface KPIData {
-  totalSessions: number;
-  totalEnergy: number;
-  totalCost: number;
-  homeShare: number;
+  sessions: Session[];
+  total: number;
+  page: number;
+  page_size: number;
+  errors?: { code: string; message: string }[];
 }
 
 export interface PaginationInfo {
@@ -82,397 +119,197 @@ export interface PaginationInfo {
   has_prev: boolean;
 }
 
-export interface PaginatedSessionsResponse {
+export interface DataSourceStatusResponse {
   ok: boolean;
-  data: Session[];
-  meta: MetaInfo;
-  pagination: PaginationInfo;
-  errors: ErrorDetail[];
+  sources: Record<string, DataSourceStatusSource>;
+  evcc?: {
+    configured: boolean;
+    reachable: boolean;
+    level?: string;
+    status_code?: number;
+    error?: string;
+    data_error?: string;
+  };
+  teslamateapi?: {
+    configured: boolean;
+    reachable: boolean;
+    level?: string;
+    status_code?: number;
+    error?: string;
+    data_error?: string;
+  };
+  data_source?: string;
+  message?: string;
+  timestamp?: string;
+  errors?: { code: string; message: string }[];
 }
 
-// Statistics Types
-export interface SourceBreakdown {
-  home: number;
-  external: number;
-  import: number;
-  total: number;
+export interface ReachabilityStatus {
+  configured: boolean;
+  reachable: boolean;
+  level?: string;
+  status_code?: number;
+  error?: string;
+  data_error?: string;
+  last_checked?: string;
 }
 
-export interface StatisticsKPIs {
-  total_energy_kwh: number;
-  total_cost_eur: number;
-  avg_cost_per_kwh: number | null;
-  total_sessions: number;
-  home_sessions: number;
-  external_sessions: number;
-  import_sessions: number;
-  avg_energy_per_session: number | null;
-  avg_cost_per_session: number | null;
-  max_energy_session: number | null;
-  max_cost_session: number | null;
-  max_energy_session_id: number | null;
-  max_cost_session_id: number | null;
-
-  // DC/AC breakdown for external sessions
-  external_dc_sessions: number | null;
-  external_ac_sessions: number | null;
-  external_dc_energy_kwh: number | null;
-  external_ac_energy_kwh: number | null;
-  external_dc_cost_eur: number | null;
-  external_ac_cost_eur: number | null;
-
-  // Charging losses (EVCC vs TM matched)
-  charging_losses_kwh: number | null;
-  charging_losses_pct: number | null;
-  evcc_energy_matched_kwh: number | null;
-  tm_energy_matched_kwh: number | null;
-
-  // Trip analysis
-  trip_count: number | null;
-  trip_total_energy_kwh: number | null;
-  trip_total_cost_eur: number | null;
-  trip_avg_distance_km: number | null;
-
-  // External charging losses (TM charge_energy_used - charge_energy_added)
-  external_charging_losses_kwh: number | null;
-  external_charging_losses_pct: number | null;
-
-  // Daily drives data for chart
-  daily_dates: string[];
-  daily_km: number[];
-  daily_kwh: number[];
-
-  // Daily charged energy data for chart
-  daily_charged_dates: string[];
-  daily_home_kwh: number[];
-  daily_external_kwh: number[];
-  daily_total_kwh: number[];
-
-  // PV share of all charging sessions
-  // Formula: PV_kWh from EVCC Home-Sessions / (EVCC Home-kWh + externe TM-kWh) * 100
-  pv_share_pct: number | null;
-  pv_kwh: number | null;
-  total_charged_kwh: number | null;
-}
-
-export interface StatisticsResponse {
-  ok: boolean;
-  kpis: StatisticsKPIs;
-  energy_by_source: SourceBreakdown;
-  cost_by_source: SourceBreakdown;
-  sessions_by_source: SourceBreakdown;
-  range_days: number;
-  range_label: string;
-  errors: ErrorDetail[];
-}
-
-// Overview Summary Types
-export interface OverviewSummaryResponse {
-  ok: boolean;
-  total_sessions: number;
-  total_energy_kwh: number;
-  total_cost_eur: number;
-  avg_cost_per_kwh: number | null;
-  home_sessions: number;
-  external_sessions: number;
-  import_sessions: number;
-  home_energy_kwh: number;
-  external_energy_kwh: number;
-  home_cost_eur: number;
-  external_cost_eur: number;
-  home_share_pct: number;
-
-  // PV share of all charging sessions
-  pv_share_pct: number | null;
-  pv_kwh: number | null;
-  total_charged_kwh: number | null;
-
-  // Driving distance data
-  total_distance_km: number | null;
-  avg_distance_per_day_km: number | null;
-  days_with_data: number | null;
-
-  errors: ErrorDetail[];
-}
-
-// Data Sources Settings Types
 export interface DataSourceConfigRead {
-  evcc_host: string;
-  evcc_port: number;
-  evcc_password: string;
+  evcc_base_url: string;
   evcc_api_token: string;
-  evcc_use_tls: boolean;
   teslamateapi_base_url: string;
   teslamateapi_token: string;
   evcc_configured: boolean;
   teslamateapi_configured: boolean;
-  data_source: 'demo' | 'live';
+  data_source: string;
 }
 
 export interface DataSourceConfigWrite {
-  host: string;
-  port: number;
-  password?: string | null;
-  api_token?: string | null;
-  use_tls: boolean;
-  base_url: string;
-  token?: string | null;
+  evcc_base_url: string;
+  evcc_api_token?: string | null;
+  teslamateapi_base_url: string;
+  teslamateapi_token?: string | null;
 }
 
 export interface DataSourceConfigTestRequest {
-  source: 'evcc' | 'teslamateapi';
-  host?: string;
-  port?: number;
-  password?: string;
-  api_token?: string;
-  use_tls?: boolean;
-  base_url?: string;
-  token?: string;
+  source: string;  // "evcc" | "teslamateapi"
+  evcc_base_url?: string;
+  evcc_api_token?: string;
+  teslamateapi_base_url?: string;
+  teslamateapi_token?: string;
 }
 
 export interface DataSourceConfigTestResponse {
   ok: boolean;
-  source: 'evcc' | 'teslamateapi';
+  source: string;
   status: ReachabilityStatus;
-}
-
-// Matching Types
-export interface MatchedCharge {
-  charge_id: number;
-  source_id: string;
-  date: string;
-  energy_kwh: number | null;
-  cost_eur: number | null;
-  location: string | null;
-  location_original: string | null;
-  location_normalized: string | null;
-  accepted_as_candidate: boolean;
-  reject_reason: string | null;
-  overlap_seconds: number;
-  containment: string;
-  match_source: 'auto' | 'manual_override';
-  override_id: number | null;
-  override_reason: string | null;
-  replaced_auto_match: string | null;
-  skipped_due_to_other_override: boolean;
-}
-
-export interface EVCCSessionMatch {
-  evcc_session_id: number;
-  evcc_source_id: string;
-  evcc_start: string;
-  evcc_end: string;
-  evcc_energy_kwh: number | null;
-  evcc_cost_eur: number | null;
-  evcc_cost_per_kwh: number | null;
-  evcc_location: string | null;
-  matched_charge_count: number;
-  matched_charge_ids: number[];
-  matched_charges: MatchedCharge[];
-  matched_charge_energy_kwh_sum: number | null;
-  delta_kwh: number | null;
-  match_quality: 'exact' | 'plausible' | 'weak' | 'unmatched';
-  match_notes: string;
-}
-
-export interface MatchingSummary {
-  total_evcc_sessions_checked: number;
-  total_matched: number;
-  total_unmatched: number;
-  total_evcc_energy: number;
-  total_tm_energy: number;
-  total_delta_kwh: number;
-  quality_distribution: Record<string, number>;
-  total_tm_charges: number;
-  accepted_candidates: number;
-  rejected_wrong_location: number;
 }
 
 export interface MatchingDryRunResponse {
   ok: boolean;
-  matches: EVCCSessionMatch[];
-  summary: MatchingSummary;
-  timestamp: string;
-  error?: string;
+  matches: any[];
+  errors?: { code: string; message: string }[];
 }
 
-// Matching Override Types
 export interface MatchingOverrideCreate {
   teslamate_charge_id: number;
-  evcc_session_id: number | null;
-  override_type: 'manual_assign' | 'manual_unassign' | 'reset_to_auto';
-  reason: string | null;
+  evcc_session_id: string;
+  override_type: "manual_assign" | "manual_skip" | "manual_score_adjust";
+  reason: string;
 }
 
 export interface MatchingOverrideRead {
   id: number;
   teslamate_charge_id: number;
-  evcc_session_id: number | null;
-  override_type: string;
-  reason: string | null;
-  replaced_auto_match: string | null;
+  evcc_session_id: string;
+  override_type: "manual_assign" | "manual_skip" | "manual_score_adjust";
+  reason: string;
+  created_by?: string;
   created_at: string;
-  created_by: string | null;
+  updated_at: string;
 }
 
 export interface MatchingOverrideListResponse {
   ok: boolean;
   overrides: MatchingOverrideRead[];
+  errors?: { code: string; message: string }[];
 }
 
 export interface MatchingOverrideSingleResponse {
   ok: boolean;
-  override: MatchingOverrideRead;
-}
-
-// Matching Raw Data Types
-export interface EVCCRawSession {
-  evcc_session_id: number;
-  source_id: string;
-  created: string | null;
-  finished: string | null;
-  location: string | null;
-  energy_kwh: number | null;
-  cost_eur: number | null;
-  cost_per_kwh: number | null;
-  cost_per_kwh_source: string | null;
-  odometer_km: number | null;
-  distance_km: number | null;
-  note: string | null;
-  solar_percentage: number | null;
-  pv_kwh: number | null;
-  legacy_source: string | null;
-  legacy_table: string | null;
-  legacy_id: number | null;
-  vehicle: string | null;
-  soc_start: number | null;
-  soc_end: number | null;
-}
-
-export interface TMRawCharge {
-  charge_id: number;
-  source_id: string;
-  start_date: string | null;
-  end_date: string | null;
-  location_original: string | null;
-  location_normalized: string | null;
-  energy_kwh: number | null;
-  cost_eur: number | null;
-  cost_per_kwh: number | null;
-  cost_per_kwh_source: string | null;
-  odometer_km: number | null;
-  distance_km: number | null;
-  note: string | null;
-  legacy_source: string | null;
-  legacy_table: string | null;
-  legacy_id: number | null;
-  is_home_location: boolean;
-  override: {
-    override_id: number;
-    evcc_session_id: number | null;
-    override_type: string;
-    reason: string | null;
-    replaced_auto_match: string | null;
-  } | null;
-  provider: string | null;
-  soc_start: number | null;
-  soc_end: number | null;
-  // Charge type details
-  charge_type: 'DC' | 'AC' | 'unknown' | null;
-  fast_charger_brand: string | null;
-  max_charge_power_kw: number | null;
+  data?: MatchingOverrideRead;
+  errors?: { code: string; message: string }[];
 }
 
 export interface MatchingRawDataResponse {
   ok: boolean;
-  evcc_sessions: EVCCRawSession[];
-  teslamate_charges: TMRawCharge[];
-  active_overrides_count: number;
-  total_evcc: number;
-  total_tm: number;
-  home_tm_charges: number;
-  external_tm_charges: number;
-  timestamp: string;
-}
-
-// Live Matching Types
-export interface LiveMatchedCharge {
-  charge_id: number;
-  source_id: string;
-  date: string;
-  energy_kwh: number | null;
-  charge_energy_added: number | null;
-  charge_energy_used: number | null;
-  cost_eur: number | null;
-  location: string | null;
-  location_original: string | null;
-  location_normalized: string | null;
-  accepted_as_candidate: boolean;
-  reject_reason: string | null;
-  overlap_seconds: number;
-  containment: string;
-  match_source: 'auto' | 'manual_override';
-  override_id: number | null;
-  override_reason: string | null;
-  replaced_auto_match: string | null;
-  skipped_due_to_other_override: boolean;
-  // TM charge details
-  charge_type: 'DC' | 'AC' | 'unknown' | null;
-  fast_charger_brand: string | null;
-  max_charge_power_kw: number | null;
-}
-
-export interface LiveEVCCSessionMatch {
-  evcc_session_id: number;
-  evcc_source_id: string;
-  evcc_start: string;
-  evcc_end: string;
-  evcc_energy_kwh: number | null;
-  evcc_cost_eur: number | null;
-  evcc_cost_per_kwh: number | null;
-  evcc_location: string | null;
-  matched_charge_count: number;
-  matched_charge_ids: number[];
-  matched_charges: LiveMatchedCharge[];
-  matched_charge_energy_kwh_sum: number | null;
-  delta_kwh: number | null;
-  match_quality: 'exact' | 'plausible' | 'weak' | 'unmatched';
-  match_notes: string;
-}
-
-export interface LiveMatchingSummary {
-  total_evcc_sessions_checked: number;
-  total_matched: number;
-  total_unmatched: number;
-  total_evcc_energy: number;
-  total_tm_energy: number;
-  total_delta_kwh: number;
-  quality_distribution: Record<string, number>;
-  total_tm_charges: number;
-  accepted_candidates: number;
-  rejected_wrong_location: number;
-  evcc_reachable: boolean;
-  teslamateapi_reachable: boolean;
+  evcc_sessions?: any[];
+  teslamate_charges?: any[];
+  errors?: { code: string; message: string }[];
 }
 
 export interface LiveMatchingDryRunResponse {
   ok: boolean;
-  matches: LiveEVCCSessionMatch[];
-  summary: LiveMatchingSummary;
-  timestamp: string;
-  error?: string;
-  live_mode: boolean;
-  evcc_reachable?: boolean;
-  teslamateapi_reachable?: boolean;
-  config_missing?: boolean;
+  matches?: any[];
+  errors?: { code: string; message: string }[];
 }
 
 export interface LiveMatchingStatusResponse {
   ok: boolean;
-  live_available: boolean;
-  reason: string;
-  evcc_configured: boolean;
-  teslamateapi_configured: boolean;
-  evcc_reachable?: boolean;
-  teslamateapi_reachable?: boolean;
+  sources?: Record<string, {
+    status: "connected" | "disconnected" | "error";
+    last_sync?: string;
+    last_error?: string;
+    config?: {
+      api_url?: string;
+      token?: string;
+      username?: string;
+    };
+  }>;
+  errors?: { code: string; message: string }[];
+}
+
+export interface VehicleInfoResponse {
+  ok: boolean;
+  data?: {
+    car_id?: number;
+    name?: string;
+    vin?: string;
+    model?: string;
+    current_odometer_km?: number;
+    source?: "teslamate" | "none";
+  };
+  errors?: { code: string; message: string }[];
+}
+
+export interface VehicleRecordRead {
+  id: number;
+  record_type: "service" | "tire";
+  date: string;
+  title: string;
+  odometer_km?: number;
+  cost_eur?: number;
+  note?: string;
+  shop?: string;
+  tire_position?: string;
+  tire_brand?: string;
+  tire_season?: string;
+}
+
+export interface VehicleRecordsResponse {
+  ok: boolean;
+  services: VehicleRecordRead[];
+  tires: VehicleRecordRead[];
+  errors?: { code: string; message: string }[];
+}
+
+export interface VehicleSingleResponse {
+  ok: boolean;
+  data?: VehicleRecordRead;
+  errors?: { code: string; message: string }[];
+}
+
+export interface VehicleRecordCreate {
+  record_type: "service" | "tire";
+  date: string;
+  title: string;
+  odometer_km?: number;
+  cost_eur?: number;
+  note?: string;
+  shop?: string;
+  tire_position?: string;
+  tire_brand?: string;
+  tire_season?: string;
+}
+
+export interface VehicleRecordUpdate {
+  date?: string;
+  title?: string;
+  odometer_km?: number;
+  cost_eur?: number;
+  note?: string;
+  shop?: string;
+  tire_position?: string;
+  tire_brand?: string;
+  tire_season?: string;
 }
