@@ -149,6 +149,9 @@ class StatisticsKPIs(BaseModel):
     daily_home_kwh: Optional[List[float]] = None
     daily_external_kwh: Optional[List[float]] = None
     daily_total_kwh: Optional[List[float]] = None
+    # NEW: Daily cost data for price charts
+    daily_cost_dates: Optional[List[str]] = None
+    daily_cost_eur: Optional[List[float]] = None
 
     # NEW: PV share of all charging sessions
     pv_share_pct: Optional[float] = None

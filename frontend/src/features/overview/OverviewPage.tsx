@@ -249,8 +249,8 @@ export function OverviewPage() {
           <div className="overview-page__trends-grid">
             <TrendChartDaily title="Energie pro Session" data={statistics.kpis} />
             <TrendChartDaily title="Verbrauch kWh/100 km" data={statistics.kpis} chartType="consumption" />
-            <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} chartType="noData" />
-            <TrendChartDaily title="Preis pro km" data={statistics.kpis} chartType="noData" />
+            <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} chartType="pricePerKwh" />
+            <TrendChartDaily title="Preis pro km" data={statistics.kpis} chartType="pricePerKm" />
             <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
           </div>
         </section>
@@ -290,7 +290,7 @@ export function OverviewPage() {
 interface TrendChartDailyProps {
   title: string;
   data: StatisticsKPIs;
-  chartType?: 'energy' | 'consumption' | 'cumulativeKm' | 'noData';
+  chartType?: 'energy' | 'consumption' | 'cumulativeKm' | 'noData' | 'pricePerKwh' | 'pricePerKm';
 }
 
 function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyProps) {
@@ -304,6 +304,24 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
       case 'noData': {
         values = [];
         yLabel = '—';
+        break;
+      }
+      case 'pricePerKwh': {
+        // €/kWh pro Tag = daily_cost / daily_kwh
+        const costs = data.daily_cost_eur || [];
+        const kwh = data.daily_kwh || [];
+        values = costs.map((c, i) => (c && kwh[i] && kwh[i] > 0) ? c / kwh[i] : 0);
+        yLabel = '€/kWh';
+        color = '#f59e0b';
+        break;
+      }
+      case 'pricePerKm': {
+        // €/km pro Tag = daily_cost / daily_km
+        const costs = data.daily_cost_eur || [];
+        const km = data.daily_km || [];
+        values = costs.map((c, i) => (c && km[i] && km[i] > 0) ? c / km[i] : 0);
+        yLabel = '€/km';
+        color = '#f59e0b';
         break;
       }
       case 'consumption': {

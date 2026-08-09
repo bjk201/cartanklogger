@@ -99,6 +99,8 @@ export interface StatisticsKPIs {
   daily_home_kwh?: number[];
   daily_external_kwh?: number[];
   daily_total_kwh?: number[];
+  daily_cost_dates?: string[];
+  daily_cost_eur?: number[];
 }
 
 export interface SourceBreakdown {

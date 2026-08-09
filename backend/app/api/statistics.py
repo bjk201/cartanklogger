@@ -294,6 +294,39 @@ async def get_statistics(
         stats['kpis']['daily_dates'] = []
         stats['kpis']['daily_km'] = []
         stats['kpis']['daily_kwh'] = []
+
+    # Add daily cost data from sessions DB
+    try:
+        from sqlalchemy import func
+        from app.models.session import SessionModel
+        # Query daily cost by date (using date() on the session date field)
+        cost_query = db.query(
+            func.date(SessionModel.date).label('day'),
+            func.sum(SessionModel.cost_eur).label('total_cost')
+        ).filter(
+            SessionModel.source_type.in_(['home', 'external'])
+        )
+        # Apply date range
+        if range_days:
+            from datetime import datetime, timezone, timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(days=range_days)
+            cost_query = cost_query.filter(SessionModel.date >= cutoff)
+        if from_date:
+            cost_query = cost_query.filter(func.date(SessionModel.date) >= from_date)
+        if to_date:
+            cost_query = cost_query.filter(func.date(SessionModel.date) <= to_date)
+        
+        cost_query = cost_query.group_by(func.date(SessionModel.date)).order_by(func.date(SessionModel.date))
+        cost_rows = cost_query.all()
+        
+        daily_cost_dates = [str(row.day) for row in cost_rows]
+        daily_cost_eur = [float(row.total_cost) for row in cost_rows]
+        
+        stats['kpis']['daily_cost_dates'] = daily_cost_dates
+        stats['kpis']['daily_cost_eur'] = daily_cost_eur
+    except Exception:
+        stats['kpis']['daily_cost_dates'] = []
+        stats['kpis']['daily_cost_eur'] = []
     
     # Add daily charged energy data for chart (home, external, total kWh/day from TM charges)
     if configured["teslamateapi"]:
