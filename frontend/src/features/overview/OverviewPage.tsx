@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
-import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse } from '../../lib/apiClient';
+import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -46,6 +46,7 @@ export function OverviewPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoResponse | null>(null);
+  const [statistics, setStatistics] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,9 +72,10 @@ export function OverviewPage() {
     }
 
     try {
-      const [sessionsResponse, summaryResponse, vehicleResponse] = await Promise.all([
+      const [sessionsResponse, summaryResponse, statsResponse, vehicleResponse] = await Promise.all([
         api.getRecentSessions(100, days, from_date, to_date),
         api.getOverviewSummary(days, from_date, to_date),
+        api.getStatistics(days, from_date, to_date).catch(() => null),
         api.getVehicleInfo().catch(() => null),
       ]);
 
@@ -83,6 +85,7 @@ export function OverviewPage() {
 
       setSessions(sessionsResponse.data || []);
       setSummary(summaryResponse);
+      setStatistics(statsResponse);
       setVehicleInfo(vehicleResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -228,16 +231,16 @@ export function OverviewPage() {
         </section>
       )}
 
-      {/* TRENDS */}
-      {sessions.length >= 3 && (
+      {/* TRENDS mit Daten aus Statistics API */}
+      {statistics?.kpis?.daily_dates && statistics.kpis.daily_dates.length >= 2 && (
         <section className="overview-page__section" aria-labelledby="trend-heading">
           <h2 id="trend-heading" className="overview-page__section-title">Trends</h2>
           <div className="overview-page__trends-grid">
-            <TrendChart title="Energie pro Session" sessions={sessions} getY={(s) => s.energy_kwh || 0} yLabel="kWh" yFormat={(v) => `${v.toFixed(1)} kWh`} />
-            <TrendChart title="Verbrauch kWh/100 km" sessions={sessions.filter(s => (s.distance_km || 0) > 0)} getY={(s) => (s.energy_kwh || 0) / ((s.distance_km || 1) / 100)} yLabel="kWh/100km" yFormat={(v) => `${v.toFixed(1)} kWh/100km`} />
-            <TrendChart title="Preis pro kWh" sessions={sessions.filter(s => (s.cost_per_kwh || 0) > 0)} getY={(s) => s.cost_per_kwh || 0} yLabel="€/kWh" yFormat={(v) => `${v.toFixed(3)} €/kWh`} />
-            <TrendChart title="Preis pro km" sessions={sessions.filter(s => (s.distance_km || 0) > 0 && (s.cost_eur || 0) > 0)} getY={(s) => (s.cost_eur || 0) / (s.distance_km || 1)} yLabel="€/km" yFormat={(v) => `${v.toFixed(3)} €/km`} />
-            <TrendChart title="Gefahrene km (kumuliert)" sessions={sessions.filter(s => (s.distance_km || 0) > 0)} getY={(s) => s.distance_km || 0} yLabel="km" yFormat={(v) => `${v.toFixed(0)} km`} cumulative />
+            <TrendChartDaily title="Energie pro Session" data={statistics.kpis} />
+            <TrendChartDaily title="Verbrauch kWh/100 km" data={statistics.kpis} chartType="consumption" />
+            <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} />
+            <TrendChartDaily title="Preis pro km" data={statistics.kpis} />
+            <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
           </div>
         </section>
       )}
@@ -263,7 +266,7 @@ export function OverviewPage() {
               </div>
             </div>
             <div className="overview-page__sessions-right">
-              <MonthlyComparison sessions={sessions} />
+              <MonthlyComparison sessions={sessions} statsData={statistics?.kpis} />
             </div>
           </div>
         )}
@@ -272,43 +275,61 @@ export function OverviewPage() {
   );
 }
 
-/* ===== TrendChart ===== */
-interface TrendChartProps {
+/* ===== TrendChartDaily (based on Statistics KPIs daily data) ===== */
+interface TrendChartDailyProps {
   title: string;
-  sessions: Session[];
-  getY: (s: Session) => number;
-  yLabel: string;
-  yFormat: (v: number) => string;
-  cumulative?: boolean;
+  data: StatisticsKPIs;
+  chartType?: 'energy' | 'consumption' | 'cumulativeKm';
 }
 
-function TrendChart({ title, sessions, getY, yLabel, yFormat, cumulative }: TrendChartProps) {
-  const chartData = useMemo(() => {
-    const sorted = [...sessions].sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    const rawValues = sorted.map(s => getY(s));
-    const values = cumulative
-      ? rawValues.reduce<number[]>((acc, v) => {
-          const prev = acc.length > 0 ? acc[acc.length - 1] : 0;
-          acc.push(prev + v);
-          return acc;
-        }, [])
-      : rawValues;
+function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyProps) {
+  const chartConfig = useMemo(() => {
+    const dates = data.daily_dates || [];
+    let values: number[] = [];
+    let yLabel = '';
+    let color = '#0d9488';
+
+    switch (chartType) {
+      case 'consumption': {
+        // kWh/100km = daily_kwh / daily_km * 100
+        const km = data.daily_km || [];
+        const kwh = data.daily_kwh || [];
+        values = dates.map((_, i) => {
+          const kmVal = km[i] || 0;
+          const kwhVal = kwh[i] || 0;
+          return kmVal > 0 ? (kwhVal / kmVal * 100) : 0;
+        });
+        yLabel = 'kWh/100km';
+        break;
+      }
+      case 'cumulativeKm': {
+        const km = data.daily_km || [];
+        let cum = 0;
+        values = km.map(v => { cum += (v || 0); return cum; });
+        yLabel = 'km';
+        color = '#2563eb';
+        break;
+      }
+      default: {
+        values = data.daily_kwh || data.daily_total_kwh || [];
+        yLabel = 'kWh';
+      }
+    }
+
+    const labels = dates.map((d: string) => {
+      try { return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
+      catch { return d; }
+    });
+
     const windowSize = Math.min(7, Math.max(2, Math.floor(values.length / 3)));
     const ma = movingAverage(values, windowSize);
 
-    return {
-      labels: sorted.map(s => {
-        try { return new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
-        catch { return ''; }
-      }),
-      values,
-      ma,
-    };
-  }, [sessions, getY, cumulative]);
+    return { labels, values, ma, yLabel, color };
+  }, [data, chartType]);
 
-  if (chartData.labels.length < 2) {
+  const { labels, values, ma, yLabel, color } = chartConfig;
+
+  if (labels.length < 2 || values.every(v => v === 0)) {
     return <div className="overview-page__trend-card"><h3 className="overview-page__trend-title">{title}</h3><div className="overview-page__empty-trend">Nicht genug Daten</div></div>;
   }
 
@@ -318,23 +339,23 @@ function TrendChart({ title, sessions, getY, yLabel, yFormat, cumulative }: Tren
       <div className="overview-page__trend-chart-container">
         <Line
           data={{
-            labels: chartData.labels,
+            labels,
             datasets: [
               {
                 label: yLabel,
-                data: chartData.values,
-                borderColor: '#0d9488',
-                backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                data: values,
+                borderColor: color,
+                backgroundColor: `${color}1a`,
                 borderWidth: 2,
                 pointRadius: 2,
-                pointBackgroundColor: '#0d9488',
+                pointBackgroundColor: color,
                 tension: 0.3,
                 fill: true,
                 order: 2,
               },
               {
-                label: `MW (${Math.min(7, Math.max(2, Math.floor(chartData.labels.length / 3)))})`,
-                data: chartData.ma,
+                label: `MW (${Math.min(7, Math.max(2, Math.floor(labels.length / 3)))})`,
+                data: ma,
                 borderColor: '#f59e0b',
                 borderWidth: 2,
                 borderDash: [5, 3],
@@ -354,7 +375,7 @@ function TrendChart({ title, sessions, getY, yLabel, yFormat, cumulative }: Tren
             },
             scales: {
               x: { display: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 }, maxTicksLimit: 10 } },
-              y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 9 }, callback: (val: any) => `${val}` } },
+              y: { beginAtZero: chartType !== 'cumulativeKm', grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 9 } } },
             },
           }}
         />
@@ -375,17 +396,36 @@ interface MonthlyRow {
   prev_distance_diff: number | null;
 }
 
-function MonthlyComparison({ sessions }: { sessions: Session[] }) {
+function MonthlyComparison({ sessions, statsData }: { sessions: Session[]; statsData?: StatisticsKPIs | null }) {
   const rows = useMemo<MonthlyRow[]>(() => {
+    // Try to use daily data from statistics for real PV and km values
+    const dailyDates = statsData?.daily_dates || [];
+    const dailyKm = statsData?.daily_km || [];
+    const dailyKwh = statsData?.daily_kwh || [];
+
+    // Aggregate by month from daily data
     const byMonth = new Map<string, { energy: number; pv: number; km: number }>();
-    for (const s of sessions) {
-      if (!s.date) continue;
-      const monthKey = s.date.slice(0, 7);
-      const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
-      entry.energy += s.energy_kwh || 0;
-      entry.pv += s.pv_kwh || 0;
-      entry.km += s.distance_km || 0;
-      byMonth.set(monthKey, entry);
+
+    // Use daily km/kwh from statistics if available
+    if (dailyDates.length > 0 && dailyDates.length === dailyKm.length) {
+      for (let i = 0; i < dailyDates.length; i++) {
+        const monthKey = dailyDates[i].slice(0, 7);
+        const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
+        entry.energy += dailyKwh[i] || 0;
+        entry.km += dailyKm[i] || 0;
+        byMonth.set(monthKey, entry);
+      }
+    } else {
+      // Fallback: aggregate from sessions
+      for (const s of sessions) {
+        if (!s.date) continue;
+        const monthKey = s.date.slice(0, 7);
+        const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
+        entry.energy += s.energy_kwh || 0;
+        entry.pv += s.pv_kwh || 0;
+        entry.km += s.distance_km || 0;
+        byMonth.set(monthKey, entry);
+      }
     }
 
     const sorted = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));

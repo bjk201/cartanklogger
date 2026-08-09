@@ -92,6 +92,13 @@ export interface StatisticsKPIs {
   total_cost_eur: number;
   total_energy_used_kwh: number;
   total_energy_returned_kwh: number;
+  daily_dates?: string[];
+  daily_km?: number[];
+  daily_kwh?: number[];
+  daily_charged_dates?: string[];
+  daily_home_kwh?: number[];
+  daily_external_kwh?: number[];
+  daily_total_kwh?: number[];
 }
 
 export interface SourceBreakdown {
