@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Home, BarChart2, Calendar, FileText, Settings, ExternalLink, GitMerge, Car, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BarChart2, FileText, Settings, ExternalLink, Car, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../app/ThemeContext';
+import { api, type DataSourceStatusResponse } from '../lib/apiClient';
 import './Sidebar.css';
 
 interface NavItem {
@@ -12,14 +13,11 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Overview', icon: Home },
-  { path: '/sessions', label: 'Sessions', icon: FileText },
   { path: '/statistics', label: 'Statistik', icon: BarChart2 },
-  { path: '/matching', label: 'Matching', icon: GitMerge },
-  { path: '/prices', label: 'Preise', icon: Calendar },
-  { path: '/extra-costs', label: 'Extra-Kosten', icon: FileText },
+  { path: '/vehicle', label: 'Fahrzeug', icon: Car },
+  { path: '/sessions', label: 'Sessions', icon: FileText },
   { path: '/import-review', label: 'Import/Review', icon: ExternalLink },
   { path: '/settings', label: 'Einstellungen', icon: Settings },
-  { path: '/vehicle', label: 'Fahrzeug', icon: Car },  // <-- Added vehicle navigation
 ];
 
 interface SidebarProps {
@@ -32,51 +30,32 @@ export function Sidebar({ isMobileOpen, onMobileToggle }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [dataSourceStatus, setDataSourceStatus] = useState<DataSourceStatusResponse | null>(null);
 
   useEffect(() => {
     onMobileToggle(false);
   }, [location.pathname, onMobileToggle]);
+
+  useEffect(() => {
+    api.getDataSourceStatus()
+      .then(setDataSourceStatus)
+      .catch(() => {});
+  }, []);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
-  if (isMobileOpen) {
-    return (
-      <>
-        <div className="sidebar-overlay" onClick={() => onMobileToggle(false)} aria-hidden="true" />
-        <aside className="sidebar sidebar--mobile" role="navigation" aria-label="Hauptnavigation">
-          <div className="sidebar__header">
-            <a href="/" className="sidebar__brand" onClick={(e) => { e.preventDefault(); navigate('/'); onMobileToggle(false); }}>
-              <span className="sidebar__brand-icon" aria-hidden="true">CTL</span>
-              <span className="sidebar__brand-text">CarTankLogger 2.0</span>
-            </a>
-          </div>
-          <nav className="sidebar__nav">
-            <ul className="sidebar__list" role="list">
-              {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
-                <li key={path}>
-                  <NavLink
-                    to={path}
-                    className={({ isActive }) => `sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
-                    onClick={() => onMobileToggle(false)}
-                    aria-current={isActive(path) ? 'page' : undefined}
-                  >
-                    <Icon size={20} aria-hidden="true" />
-                    <span className="sidebar__label">{label}</span>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </aside>
-      </>
-    );
-  }
+  const formatStatusText = (status: { configured: boolean; reachable: boolean } | undefined): { text: string; className: string } => {
+    if (!status) return { text: 'Unbekannt', className: 'sidebar__status--unknown' };
+    if (!status.configured) return { text: 'Nicht konfiguriert', className: 'sidebar__status--warn' };
+    if (status.reachable) return { text: 'Erreichbar', className: 'sidebar__status--ok' };
+    return { text: 'Nicht erreichbar', className: 'sidebar__status--error' };
+  };
 
-  return (
-    <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`} role="navigation" aria-label="Hauptnavigation">
+  const sidebarContent = (
+    <>
       <div className="sidebar__header">
         <a href="/" className="sidebar__brand" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
           <span className="sidebar__brand-icon" aria-hidden="true">CTL</span>
@@ -111,10 +90,48 @@ export function Sidebar({ isMobileOpen, onMobileToggle }: SidebarProps) {
       <div className="sidebar__footer">
         {!collapsed && (
           <div className="sidebar__version">
-            v2.0.0
+            <div className="sidebar__version-info">
+              <span className="sidebar__version-label">Version</span>
+              <span className="sidebar__version-value">v2.0.0</span>
+            </div>
+            <div className="sidebar__version-info">
+              <span className="sidebar__version-label">Modus</span>
+              <span className={`sidebar__status sidebar__status--${dataSourceStatus?.data_source === 'live' ? 'ok' : 'warn'}`}>
+                {dataSourceStatus?.data_source === 'live' ? 'Live' : 'Demo'}
+              </span>
+            </div>
+            <div className="sidebar__source-status">
+              <span className="sidebar__version-label">EVCC</span>
+              <span className={`sidebar__status ${formatStatusText(dataSourceStatus?.evcc).className}`}>
+                {formatStatusText(dataSourceStatus?.evcc).text}
+              </span>
+            </div>
+            <div className="sidebar__source-status">
+              <span className="sidebar__version-label">TeslaMate</span>
+              <span className={`sidebar__status ${formatStatusText(dataSourceStatus?.teslamateapi).className}`}>
+                {formatStatusText(dataSourceStatus?.teslamateapi).text}
+              </span>
+            </div>
           </div>
         )}
       </div>
+    </>
+  );
+
+  if (isMobileOpen) {
+    return (
+      <>
+        <div className="sidebar-overlay" onClick={() => onMobileToggle(false)} aria-hidden="true" />
+        <aside className="sidebar sidebar--mobile" role="navigation" aria-label="Hauptnavigation">
+          {sidebarContent}
+        </aside>
+      </>
+    );
+  }
+
+  return (
+    <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`} role="navigation" aria-label="Hauptnavigation">
+      {sidebarContent}
     </aside>
   );
 }

@@ -7,11 +7,8 @@ import { TopBar } from './components/TopBar';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { StatisticsPage } from './pages/StatisticsPage';
-import { PricesPlaceholderPage } from './pages/PricesPlaceholderPage';
-import ExtraCostsPage from './pages/ExtraCostsPage';
 import { ImportReviewPlaceholderPage } from './pages/ImportReviewPlaceholderPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
-import MatchingPage from './pages/MatchingPage';
 import VehiclePage from './pages/VehiclePage';
 import './styles/global.css';
 import './styles/layout.css';
@@ -32,11 +29,8 @@ function App() {
                   <Route path="/" element={<OverviewPage />} />
                   <Route path="/sessions" element={<SessionsPage />} />
                   <Route path="/statistics" element={<StatisticsPage />} />
-                  <Route path="/prices" element={<PricesPlaceholderPage />} />
-                  <Route path="/extra-costs" element={<ExtraCostsPage />} />
                   <Route path="/import-review" element={<ImportReviewPlaceholderPage />} />
                   <Route path="/settings" element={<DataSourcesPage />} />
-                  <Route path="/matching" element={<MatchingPage />} />
                   <Route path="/vehicle" element={<VehiclePage />} />
                 </Routes>
               </main>

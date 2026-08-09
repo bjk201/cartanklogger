@@ -9,6 +9,290 @@
   min-height: 400px;
 }
 
+/* ── Zustände ──────────────────────────────────────────────── */
+.vehicle-page__loading,
+.vehicle-page__error,
+.vehicle-page__empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.vehicle-page__error { color: #ef4444; }
+
+/* ── Sections (nutzt OverviewPage-CSS-Muster) ──────────────── */
+.vehicle-page .overview-page__section {
+  margin-bottom: 1.5rem;
+}
+
+.vehicle-page .overview-page__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+/* ── Button: Hinzufügen ────────────────────────────────────── */
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.btn-add:hover { background: var(--color-primary-hover); }
+
+/* ── Button: Icon (Edit) ───────────────────────────────────── */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 1rem;
+}
+.btn-icon:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* ── Modal (aus alter VehiclePage übernommen) ──────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-container {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 1.25rem;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.modal-close-btn:hover { background: var(--color-bg-hover); }
+.modal-body { padding: 1.25rem; }
+
+/* ── Formular ──────────────────────────────────────────────── */
+.record-form { display: flex; flex-direction: column; gap: 0.875rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-label { font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.form-label .form-required { color: #ef4444; margin-left: 0.125rem; }
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  font-family: inherit;
+}
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+.form-error { font-size: 0.6875rem; color: #ef4444; }
+.form-submit-error { padding: 0.5rem 0.75rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-md); font-size: 0.75rem; color: #dc2626; }
+.form-hint { font-size: 0.6875rem; color: var(--color-text-muted); font-style: italic; }
+.form-row { display: flex; gap: 0.75rem; }
+.form-row .form-field { flex: 1; }
+.form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 0.5rem; border-top: 1px solid var(--color-border); }
+.btn-primary {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-secondary:hover { background: var(--color-bg-hover); }
+
+/* ── Fahrzeug-Identität (VehicleInfoCard) ──────────────────── */
+.vehicle-info-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.vehicle-info-card h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 1rem;
+}
+.vehicle-info-card.loading,
+.vehicle-info-card.error,
+.vehicle-info-card.empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-muted);
+}
+.vehicle-info-card.error { color: #ef4444; }
+.vehicle-info-grid { display: flex; flex-direction: column; gap: 0.625rem; }
+.vehicle-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.vehicle-info-row:last-child { border-bottom: none; }
+.vehicle-info-row .label { font-size: 0.8125rem; color: var(--color-text-muted); font-weight: 500; }
+.vehicle-info-row .value { font-size: 0.875rem; color: var(--color-text); font-weight: 600; }
+
+/* ── Records Tabellen ──────────────────────────────────────── */
+.vehicle-records-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.table-header {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.service-table-header {
+  grid-template-columns: 100px 1fr 100px 120px 100px 60px;
+}
+.tire-table-header {
+  grid-template-columns: 70px 1fr 90px 120px 100px 80px 60px;
+}
+.table-body { display: flex; flex-direction: column; }
+.table-row {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  align-items: center;
+}
+.table-row:last-child { border-bottom: none; }
+.table-row:hover { background: var(--color-bg-hover); }
+.col-date { white-space: nowrap; }
+.col-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-km, .col-cost, .col-pos, .col-brand, .col-season, .col-status, .col-actions {
+  white-space: nowrap;
+}
+.col-actions { display: flex; gap: 0.375rem; justify-content: flex-end; }
+.col-status { font-size: 0.75rem; }
+
+/* ── Tire Badges ───────────────────────────────────────────── */
+.tire-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+.tire-badge--vl { background: #dbeafe; color: #1d4ed8; }
+.tire-badge--vr { background: #fce7f3; color: #db2777; }
+.tire-badge--hl { background: #d1fae5; color: #047857; }
+.tire-badge--hr { background: #fef3c7; color: #b45309; }
+.tire-season-label {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.tire-season--sommer { background: #fef3c7; color: #b45309; }
+.tire-season--winter { background: #dbeafe; color: #1d4ed8; }
+.tire-season--ganzjahres { background: #d1fae5; color: #047857; }
+.tire-km-driven { font-size: 0.6875rem; color: var(--color-text-muted); }
+.tire-row.tire-active { background: transparent; }
+.tire-row.tire-replaced { opacity: 0.6; }
+.status-active { color: var(--color-home); font-size: 0.75rem; font-weight: 600; }
+.status-replaced { color: var(--color-text-muted); font-size: 0.75rem; }
+.tire-purchase-info {
+  grid-column: 1 / -1;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  padding: 0.25rem 0 0 0;
+  border-top: 1px dashed var(--color-border);
+  margin-top: 0.25rem;
+}
+
 /* Grid layout for the three main sections */
 .vehicle-page-grid {
   display: grid;

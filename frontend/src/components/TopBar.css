@@ -38,7 +38,7 @@
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 991px) {
   .topbar__menu-btn {
     display: flex;
     align-items: center;
@@ -118,6 +118,9 @@
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   transition: all var(--transition-fast);
+  cursor: pointer;
+  background: transparent;
+  border: none;
 }
 
 .topbar__btn:hover {
@@ -128,6 +131,33 @@
 .topbar__btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+.topbar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.topbar__btn--sync-success {
+  color: var(--color-home);
+}
+
+.topbar__sync-spin {
+  animation: syncSpin 1s linear infinite;
+}
+
+@keyframes syncSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.topbar__sync-error {
+  font-size: 0.6875rem;
+  color: #ef4444;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 768px) {

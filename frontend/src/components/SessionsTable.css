@@ -257,3 +257,27 @@
     display: none;
   }
 }
+
+/* ===== Compact Mode (for Overview page) ===== */
+.sessions-table--compact {
+  font-size: 0.8125rem;
+}
+
+.sessions-table--compact th {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+}
+
+.sessions-table--compact td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.sessions-table--compact .source-badge {
+  font-size: 0.625rem;
+  padding: 0.125rem 0.5rem;
+}
+
+.sessions-table--compact .sessions-table__date {
+  font-size: 0.75rem;
+}

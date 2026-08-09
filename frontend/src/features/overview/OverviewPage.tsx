@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, X, Zap, Euro, MapPin, Sun, Activity, List, House, Bolt } from 'lucide-react';
+import { Zap, Euro, Activity, House, Bolt, Gauge, TrendingUp, TrendingDown } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
-import { api, type Session, type OverviewResponse, type OverviewSummaryResponse, type DataSourceStatusResponse, type MetaInfo, type ErrorDetail } from '../../lib/apiClient';
+import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -21,7 +21,6 @@ import {
 import { Line, Pie } from 'react-chartjs-2';
 import './OverviewPage.css';
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -33,38 +32,33 @@ ChartJS.register(
   Filler
 );
 
-const OVERVIEW_PAGE_SIZE = 10;
+function movingAverage(data: number[], windowSize: number): (number | null)[] {
+  return data.map((_, i) => {
+    if (i < windowSize - 1) return null;
+    let sum = 0;
+    for (let j = i - windowSize + 1; j <= i; j++) sum += data[j];
+    return sum / windowSize;
+  });
+}
 
 export function OverviewPage() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
-  const [dataSourceStatus, setDataSourceStatus] = useState<DataSourceStatusResponse | null>(null);
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Use global time range context
-  const { selectedRange, customFrom, customTo, showCustomPicker, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
+
+  const { selectedRange, customFrom, customTo, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
 
   const handleRangeChange = (value: RangeValue) => {
     setSelectedRange(value);
   };
 
-  // Pagination state
-  const [pagination, setPagination] = useState({
-    page: 1,
-    page_size: OVERVIEW_PAGE_SIZE,
-    total: 0,
-    total_pages: 0,
-    has_next: false,
-    has_prev: false,
-  });
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    // Determine API parameters based on selected range
     let days: number | undefined = getDaysFromRange(selectedRange);
     let from_date: string | undefined = getFromDate();
     let to_date: string | undefined = getToDate();
@@ -77,67 +71,46 @@ export function OverviewPage() {
     }
 
     try {
-      const [recentResponse, summaryResponse, statusResponse] = await Promise.all([
-        api.getRecentSessions(OVERVIEW_PAGE_SIZE * pagination.page, days, from_date, to_date),
+      const [sessionsResponse, summaryResponse, vehicleResponse] = await Promise.all([
+        api.getRecentSessions(100, days, from_date, to_date),
         api.getOverviewSummary(days, from_date, to_date),
-        api.getDataSourceStatus(),
+        api.getVehicleInfo().catch(() => null),
       ]);
 
-      if (!recentResponse.ok || !summaryResponse.ok || !statusResponse.ok) {
+      if (!sessionsResponse.ok || !summaryResponse.ok) {
         throw new Error('API returned error status');
       }
 
-      // Backend returns {data: SessionRead[], meta: {count, limit}, errors}
-      const allSessions = recentResponse.data || [];
-      const totalSessions = summaryResponse.total_sessions || allSessions.length;
-      const totalPages = Math.ceil(totalSessions / OVERVIEW_PAGE_SIZE);
-
-      // Slice for current page
-      const startIdx = (pagination.page - 1) * OVERVIEW_PAGE_SIZE;
-      const endIdx = startIdx + OVERVIEW_PAGE_SIZE;
-      const pageSessions = allSessions.slice(startIdx, endIdx);
-
-      setSessions(pageSessions);
+      setSessions(sessionsResponse.data || []);
       setSummary(summaryResponse);
-      setDataSourceStatus(statusResponse);
-      setPagination(p => ({
-        ...p,
-        total: totalSessions,
-        total_pages: totalPages,
-        has_next: pagination.page < totalPages,
-        has_prev: pagination.page > 1,
-      }));
-
+      setVehicleInfo(vehicleResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
       setError(`Fehler beim Laden der Overview: ${message}`);
     } finally {
       setLoading(false);
     }
-  }, [selectedRange, customFrom, customTo, pagination.page]);
+  }, [selectedRange, customFrom, customTo]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleRetry = () => {
-    fetchData();
+  const handleRetry = () => fetchData();
+
+  const formatNumber = (num: number): string =>
+    num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+
+  const formatCostPerKWh = (num: number | null | undefined): string => {
+    if (num === null || num === undefined) return '—';
+    return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
   };
 
-  const handleCustomRangeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customFrom && customTo) {
-      setPagination(p => ({ ...p, page: 1 }));
-      fetchData();
-    }
-  };
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= pagination.total_pages) {
-      setPagination(p => ({ ...p, page: newPage }));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
+  const recentSessions: Session[] = useMemo(() => {
+    return [...sessions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+  }, [sessions]);
 
   if (loading) {
     return (
@@ -155,100 +128,48 @@ export function OverviewPage() {
     );
   }
 
-  // Helper functions for data source status display
-  const getStatusClass = (status: { configured: boolean; reachable: boolean } | undefined): string => {
-    if (!status) return 'import-status__value';
-    if (!status.configured) return 'import-status__value import-status__value--warn';
-    if (status.reachable) return 'import-status__value import-status__value--ok';
-    return 'import-status__value import-status__value--error';
-  };
-
-  const formatSourceStatus = (status: { configured: boolean; reachable: boolean; error?: string } | undefined, sourceName: string): string => {
-    if (!status) return `${sourceName}: Unbekannt`;
-    if (!status.configured) return `${sourceName}: Nicht konfiguriert`;
-    if (status.reachable) return `${sourceName}: Erreichbar`;
-    return `${sourceName}: Nicht erreichbar${status.error ? ` (${status.error})` : ''}`;
-  };
-
-  const formatNumber = (num: number): string => {
-    return num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
-  };
-
-  const formatCostPerKWh = (num: number | null | undefined): string => {
-    if (num === null || num === undefined) return '—';
-    return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
-  };
-
   return (
     <div className="page-container">
       <header className="overview-page__header">
         <div>
           <h1 className="overview-page__title">Overview</h1>
           <p className="overview-page__subtitle">
-            Produktiver Einstieg · <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
+            <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
           </p>
         </div>
       </header>
 
-      {/* KPI Cards - Real Data from Summary API */}
+      {/* KPI CARDS */}
       {summary && (
         <section className="overview-page__section" aria-labelledby="kpi-heading">
-          <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen (gesamt)</h2>
+          <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen</h2>
           <div className="overview-page__kpi-grid">
-            {/* 1. Gesamt kWh */}
-            <KpiCard
-              label="Gesamt kWh"
-              value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'}
-              unit="kWh"
-              icon={(props) => <Zap {...props} />}
-              iconColor="var(--color-home)"
-              subtitle="Gesamt geladen"
-            />
-            {/* 2. Gesamtkosten */}
-            <KpiCard
-              label="Gesamtkosten"
-              value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'}
-              unit="€"
-              icon={(props) => <Euro {...props} />}
-              iconColor="#f59e0b"
-              subtitle="Gesamtkosten"
-            />
-            {/* 3. Durchschnittskosten/kWh */}
-            <KpiCard
-              label="Ø Kosten/kWh"
-              value={formatCostPerKWh(summary.avg_cost_per_kwh)}
-              icon={(props) => <Activity {...props} />}
-              iconColor="var(--color-primary)"
-              subtitle="Durchschnittspreis"
-            />
-            {/* 4. Anzahl Sessions */}
-            <KpiCard
-              label="Anzahl Sessions"
-              value={summary.total_sessions ? summary.total_sessions.toString() : '—'}
-              icon={(props) => <Calendar {...props} />}
-              iconColor="var(--color-primary)"
-              subtitle="Alle Ladevorgänge"
-            />
-            {/* 5. Haus + Extern Split + Pie Chart (double width) */}
+            <KpiCard label="Gesamt kWh" value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} unit="kWh" icon={(p) => <Zap {...p} />} iconColor="var(--color-home)" horizontal />
+            <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
+            <KpiCard label="Ø Kosten/kWh" value={formatCostPerKWh(summary.avg_cost_per_kwh)} icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
+
+            {vehicleInfo?.data?.current_odometer_km != null && (
+              <KpiCard label="Aktueller KM-Stand" value={formatNumber(vehicleInfo.data.current_odometer_km)} unit="km" icon={(p) => <Gauge {...p} />} iconColor="var(--color-primary)" horizontal />
+            )}
+
+            {/* Ladevorgänge double-width card */}
             <article className="kpi-card kpi-card--double-width">
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Ladevorgänge: Zuhause & Extern</span>
                 <div className="overview-page__split-chart">
                   <div className="overview-page__split-left">
                     <div className="overview-page__split-item">
-                      <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true">
-                        <House size={20} />
-                      </div>
+                      <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true"><House size={24} /></div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh</span>
                         <span className="overview-page__split-sub">
-                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {formatCostPerKWh(summary.avg_cost_per_kwh)}/kWh
+                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {summary.home_sessions || 0} Sessions
                         </span>
                       </div>
                     </div>
                   </div>
+
                   <div className="overview-page__split-center">
-                    {/* Pie Chart */}
                     <div className="pie-chart-wrapper">
                       <Pie
                         data={{
@@ -262,7 +183,6 @@ export function OverviewPage() {
                         options={{
                           responsive: true,
                           maintainAspectRatio: false,
-                          aspectRatio: 1,
                           plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -276,25 +196,18 @@ export function OverviewPage() {
                     </div>
                     <span className="overview-page__pie-total">{summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} kWh</span>
                   </div>
+
                   <div className="overview-page__split-right">
-                    <div className="overview-page__split-item">
-                      <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true">
-                        <Bolt size={20} />
-                      </div>
-                      <div className="overview-page__split-data">
+                    <div className="overview-page__split-item overview-page__split-item--right">
+                      <div className="overview-page__split-data overview-page__split-data--right">
                         <span className="overview-page__split-value">{summary.external_energy_kwh ? formatNumber(summary.external_energy_kwh) : '—'} kWh</span>
-                        <span className="overview-page__split-sub">Extern geladen</span>
+                        <span className="overview-page__split-sub">
+                          {summary.home_energy_kwh && summary.external_energy_kwh
+                            ? `${(summary.external_energy_kwh / (summary.home_energy_kwh + summary.external_energy_kwh) * 100).toFixed(1)}%`
+                            : '—'} · {formatCostPerKWh(summary.avg_cost_per_kwh)}
+                        </span>
                       </div>
-                    </div>
-                    <div className="overview-page__split-kpi">
-                      <span className="overview-page__split-kpi-label">GESAMT KM</span>
-                      <span className="overview-page__split-kpi-value">{summary.total_distance_km != null ? formatNumber(summary.total_distance_km) : '—'} km</span>
-                      <span className="overview-page__split-kpi-sub">Im Zeitraum gefahren</span>
-                    </div>
-                    <div className="overview-page__split-kpi">
-                      <span className="overview-page__split-kpi-label">Ø KM/TAG</span>
-                      <span className="overview-page__split-kpi-value">{summary.avg_distance_per_day_km != null ? formatNumber(summary.avg_distance_per_day_km) : '—'} km</span>
-                      <span className="overview-page__split-kpi-sub">Durchschnitt</span>
+                      <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><Bolt size={24} /></div>
                     </div>
                   </div>
                 </div>
@@ -304,209 +217,251 @@ export function OverviewPage() {
         </section>
       )}
 
-      {/* Driving Distance KPI */}
-      {summary && (
+      {/* Gefahrene km */}
+      {summary && (summary.total_distance_km != null || summary.avg_distance_per_day_km != null) && (
         <section className="overview-page__section" aria-labelledby="distance-heading">
           <h2 id="distance-heading" className="overview-page__section-title">Gefahrene km</h2>
-          <div className="overview-page__kpi-grid">
-            <KpiCard
-              label="Gesamt km"
-              value={summary.total_distance_km !== null && summary.total_distance_km !== undefined ? formatNumber(summary.total_distance_km) : '—'}
-              unit="km"
-              icon={(props) => <Activity {...props} />}
-              iconColor="var(--color-primary)"
-              subtitle="Im Zeitraum gefahren"
-            />
-            <KpiCard
-              label="Ø km/Tag"
-              value={summary.avg_distance_per_day_km !== null && summary.avg_distance_per_day_km !== undefined ? formatNumber(summary.avg_distance_per_day_km) : '—'}
-              unit="km"
-              icon={(props) => <Activity {...props} />}
-              iconColor="var(--color-primary)"
-              subtitle={summary.days_with_data !== null && summary.days_with_data !== undefined ? `${summary.days_with_data} Tage mit Daten` : '—'}
-            />
+          <div className="overview-page__kpi-grid overview-page__kpi-grid--km">
+            {summary.total_distance_km != null && (
+              <KpiCard label="Gesamt km" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
+            )}
+            {summary.avg_distance_per_day_km != null && (
+              <KpiCard label="Ø km/Tag" value={formatNumber(summary.avg_distance_per_day_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-home)" horizontal />
+            )}
           </div>
         </section>
       )}
 
-      {/* Sessions List with Pagination */}
-      <section className="overview-page__section" aria-labelledby="sessions-heading">
+      {/* TRENDS */}
+      {sessions.length >= 3 && (
+        <section className="overview-page__section" aria-labelledby="trend-heading">
+          <h2 id="trend-heading" className="overview-page__section-title">Trends</h2>
+          <div className="overview-page__trends-grid">
+            <TrendChart title="Energie pro Session" sessions={sessions} getY={(s) => s.energy_kwh || 0} yLabel="kWh" yFormat={(v) => `${v.toFixed(1)} kWh`} />
+            <TrendChart title="Verbrauch kWh/100 km" sessions={sessions.filter(s => (s.distance_km || 0) > 0)} getY={(s) => (s.energy_kwh || 0) / ((s.distance_km || 1) / 100)} yLabel="kWh/100km" yFormat={(v) => `${v.toFixed(1)} kWh/100km`} />
+            <TrendChart title="Preis pro kWh" sessions={sessions.filter(s => (s.cost_per_kwh || 0) > 0)} getY={(s) => s.cost_per_kwh || 0} yLabel="€/kWh" yFormat={(v) => `${v.toFixed(3)} €/kWh`} />
+            <TrendChart title="Preis pro km" sessions={sessions.filter(s => (s.distance_km || 0) > 0 && (s.cost_eur || 0) > 0)} getY={(s) => (s.cost_eur || 0) / (s.distance_km || 1)} yLabel="€/km" yFormat={(v) => `${v.toFixed(3)} €/km`} />
+            <TrendChart title="Gefahrene km (kumuliert)" sessions={sessions.filter(s => (s.distance_km || 0) > 0)} getY={(s) => s.distance_km || 0} yLabel="km" yFormat={(v) => `${v.toFixed(0)} km`} cumulative />
+          </div>
+        </section>
+      )}
+
+      {/* SESSIONS + MONTHLY COMPARISON */}
+      <section className="overview-page__section" aria-labelledby="recent-sessions-heading">
         <div className="overview-page__section-header">
-          <h2 id="sessions-heading" className="overview-page__section-title">Sessions im Zeitraum</h2>
-          <button
-            className="overview-page__view-all"
-            onClick={() => navigate('/sessions')}
-          >
-            Alle anzeigen →
-          </button>
+          <h2 id="recent-sessions-heading" className="overview-page__section-title">Sessions im Zeitraum</h2>
+          <button className="overview-page__view-all" onClick={() => navigate('/sessions')}>Alle anzeigen →</button>
         </div>
 
-        {sessions.length === 0 ? (
-          <EmptyState
-            title="Keine Sessions im Zeitraum"
-            message="Für den gewählten Zeitraum wurden keine Ladevorgänge gefunden."
-            action={{
-              label: 'Anderen Zeitraum wählen',
-              onClick: () => handleRangeChange('30d'),
-            }}
-          />
+        {recentSessions.length === 0 ? (
+          <EmptyState title="Keine Sessions im Zeitraum" message="Für den gewählten Zeitraum wurden keine Ladevorgänge gefunden." action={{ label: 'Anderen Zeitraum wählen', onClick: () => handleRangeChange('30d') }} />
         ) : (
-          <div className="overview-page__sessions">
-            <SessionsTable sessions={sessions} />
-            <div className="overview-page__mobile-cards">
-              {sessions.map(session => (
-                <SessionMobileCard key={session.id} session={session} />
-              ))}
+          <div className="overview-page__sessions-split">
+            <div className="overview-page__sessions-left">
+              <h3 className="overview-page__sessions-subtitle">Letzte Ladevorgänge</h3>
+              <SessionsTable sessions={recentSessions} compact />
+              <div className="overview-page__mobile-cards">
+                {recentSessions.map(session => (
+                  <SessionMobileCard key={session.id} session={session} />
+                ))}
+              </div>
             </div>
-
-            {/* Pagination */}
-            {pagination.total_pages > 1 && (
-              <nav className="overview-page__pagination" aria-label="Seiten-Navigation">
-                <button
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={!pagination.has_prev}
-                  className="overview-page__page-btn"
-                  aria-label="Vorherige Seite"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-
-                <div className="overview-page__page-info">
-                  <span>
-                    Seite {pagination.page} von {pagination.total_pages} ({pagination.total} Sessions)
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={!pagination.has_next}
-                  className="overview-page__page-btn"
-                  aria-label="Nächste Seite"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </nav>
-            )}
+            <div className="overview-page__sessions-right">
+              <MonthlyComparison sessions={sessions} />
+            </div>
           </div>
         )}
-      </section>
-
-      {/* Small Trend Area */}
-      <section className="overview-page__section" aria-labelledby="trend-heading">
-        <h2 id="trend-heading" className="overview-page__section-title">Trend: Energie pro Session</h2>
-        <div className="overview-page__trend">
-          <TrendChart sessions={sessions} />
-        </div>
-        </section>
-
-        {/* Data Source Status */}
-        <section className="overview-page__section overview-page__section--subtle" aria-labelledby="data-source-heading">
-        <h2 id="data-source-heading" className="overview-page__section-title">
-          Datenquellen-Status
-          {dataSourceStatus && (
-            <span className="overview-page__mode-badge overview-page__mode-badge--live">
-              LIVE
-            </span>
-          )}
-        </h2>
-        <div className="overview-page__import-status">
-        <div className="import-status__item">
-          <span className="import-status__label">Modus</span>
-            <span className="import-status__value import-status__value--ok">
-              Live
-            </span>
-          </div>
-          <div className="import-status__item">
-            <span className="import-status__label">EVCC (Home)</span>
-            <span className={getStatusClass(dataSourceStatus?.evcc)}>
-              {formatSourceStatus(dataSourceStatus?.evcc, 'EVCC')}
-            </span>
-          </div>
-          <div className="import-status__item">
-            <span className="import-status__label">TeslaMateAPI (Extern)</span>
-            <span className={getStatusClass(dataSourceStatus?.teslamateapi)}>
-              {formatSourceStatus(dataSourceStatus?.teslamateapi, 'TeslaMateAPI')}
-            </span>
-          </div>
-          {dataSourceStatus?.data_source === 'live' && dataSourceStatus?.message && (
-            <div className="import-status__item import-status__item--full">
-              <span className="import-status__label">Status</span>
-              <span className="import-status__value import-status__value--warn">
-                {dataSourceStatus.message}
-              </span>
-            </div>
-          )}
-        </div>
       </section>
     </div>
   );
 }
 
-function TrendChart({ sessions }: { sessions: Session[] }) {
-  // Chart data preparation
+/* ===== TrendChart ===== */
+interface TrendChartProps {
+  title: string;
+  sessions: Session[];
+  getY: (s: Session) => number;
+  yLabel: string;
+  yFormat: (v: number) => string;
+  cumulative?: boolean;
+}
+
+function TrendChart({ title, sessions, getY, yLabel, yFormat, cumulative }: TrendChartProps) {
   const chartData = useMemo(() => {
     const sorted = [...sessions].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
+    const rawValues = sorted.map(s => getY(s));
+    const values = cumulative
+      ? rawValues.reduce<number[]>((acc, v) => {
+          const prev = acc.length > 0 ? acc[acc.length - 1] : 0;
+          acc.push(prev + v);
+          return acc;
+        }, [])
+      : rawValues;
+    const windowSize = Math.min(7, Math.max(2, Math.floor(values.length / 3)));
+    const ma = movingAverage(values, windowSize);
+
     return {
       labels: sorted.map(s => {
-        try {
-          return new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-        } catch { return ''; }
+        try { return new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
+        catch { return ''; }
       }),
-      values: sorted.map(s => s.energy_kwh || 0),
+      values,
+      ma,
     };
-  }, [sessions]);
+  }, [sessions, getY, cumulative]);
 
-  if (chartData.labels.length === 0) {
-    return <div className="overview-page__empty-trend">Keine Daten für Trend verfügbar</div>;
+  if (chartData.labels.length < 2) {
+    return <div className="overview-page__trend-card"><h3 className="overview-page__trend-title">{title}</h3><div className="overview-page__empty-trend">Nicht genug Daten</div></div>;
   }
 
   return (
-    <div className="overview-page__chart-container">
-      <Line
-        data={{
-          labels: chartData.labels,
-          datasets: [{
-            label: 'Energie (kWh)',
-            data: chartData.values,
-            fill: true,
-            borderColor: '#0d9488',
-            backgroundColor: 'rgba(13, 148, 136, 0.1)',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: '#0d9488',
-            tension: 0.3,
-          }],
-        }}
-        options={{
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx: any) => `${ctx.parsed.y.toFixed(1)} kWh`,
+    <div className="overview-page__trend-card">
+      <h3 className="overview-page__trend-title">{title}</h3>
+      <div className="overview-page__trend-chart-container">
+        <Line
+          data={{
+            labels: chartData.labels,
+            datasets: [
+              {
+                label: yLabel,
+                data: chartData.values,
+                borderColor: '#0d9488',
+                backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                borderWidth: 2,
+                pointRadius: 2,
+                pointBackgroundColor: '#0d9488',
+                tension: 0.3,
+                fill: true,
+                order: 2,
               },
-            },
-          },
-          scales: {
-            x: {
-              display: true,
-              grid: { display: false },
-              ticks: { maxRotation: 45, font: { size: 10 } },
-            },
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.06)' },
-              ticks: {
-                font: { size: 10 },
-                callback: (val: any) => `${val} kWh`,
+              {
+                label: `MW (${Math.min(7, Math.max(2, Math.floor(chartData.labels.length / 3)))})`,
+                data: chartData.ma,
+                borderColor: '#f59e0b',
+                borderWidth: 2,
+                borderDash: [5, 3],
+                pointRadius: 0,
+                tension: 0.3,
+                fill: false,
+                order: 1,
               },
+            ],
+          }}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
+              tooltip: { callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}` } },
             },
-          },
-        }}
-      />
+            scales: {
+              x: { display: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 }, maxTicksLimit: 10 } },
+              y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 9 }, callback: (val: any) => `${val}` } },
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ===== MonthlyComparison ===== */
+interface MonthlyRow {
+  monthKey: string;
+  monthLabel: string;
+  energy_kwh: number;
+  pv_pct: number | null;
+  distance_km: number;
+  prev_energy_diff: number | null;
+  prev_pv_diff: number | null;
+  prev_distance_diff: number | null;
+}
+
+function MonthlyComparison({ sessions }: { sessions: Session[] }) {
+  const rows = useMemo<MonthlyRow[]>(() => {
+    const byMonth = new Map<string, { energy: number; pv: number; km: number }>();
+    for (const s of sessions) {
+      if (!s.date) continue;
+      const monthKey = s.date.slice(0, 7);
+      const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
+      entry.energy += s.energy_kwh || 0;
+      entry.pv += s.pv_kwh || 0;
+      entry.km += s.distance_km || 0;
+      byMonth.set(monthKey, entry);
+    }
+
+    const sorted = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    return sorted.map(([monthKey, data], i) => {
+      const [y, m] = monthKey.split('-');
+      const monthLabel = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+      const pv_pct = data.energy > 0 ? (data.pv / data.energy) * 100 : null;
+      const prev = i > 0 ? sorted[i - 1][1] : null;
+
+      return {
+        monthKey,
+        monthLabel,
+        energy_kwh: data.energy,
+        pv_pct,
+        distance_km: data.km,
+        prev_energy_diff: prev ? data.energy - prev.energy : null,
+        prev_pv_diff: prev && prev.energy > 0 ? (pv_pct ?? 0) - ((prev.pv / prev.energy) * 100) : null,
+        prev_distance_diff: prev ? data.km - prev.km : null,
+      };
+    }).reverse();
+  }, [sessions]);
+
+  if (rows.length === 0) {
+    return <div className="overview-page__monthly-empty">Keine Monatsdaten verfügbar</div>;
+  }
+
+  const formatChange = (diff: number | null, unit: string): React.ReactNode => {
+    if (diff === null) return <span className="monthly-change monthly-change--neutral">—</span>;
+    const up = diff >= 0;
+    return (
+      <span className={`monthly-change ${up ? 'monthly-change--up' : 'monthly-change--down'}`}>
+        {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+        {' '}{Math.abs(diff).toLocaleString('de-DE', { maximumFractionDigits: 1 })} {unit}
+      </span>
+    );
+  };
+
+  return (
+    <div className="monthly-comparison">
+      <h3 className="overview-page__sessions-subtitle">Monatsvergleich</h3>
+      <div className="monthly-comparison__wrapper">
+        <table className="monthly-comparison__table">
+          <thead>
+            <tr>
+              <th>Monat</th>
+              <th className="text-end">kWh</th>
+              <th className="text-end">%PV</th>
+              <th className="text-end">km</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.monthKey}>
+                <td className="monthly-comparison__month">{r.monthLabel}</td>
+                <td className="text-end">
+                  {r.energy_kwh.toFixed(1)}
+                  <div className="monthly-change-row">{formatChange(r.prev_energy_diff, 'kWh')}</div>
+                </td>
+                <td className="text-end">
+                  {r.pv_pct !== null ? `${r.pv_pct.toFixed(1)} %` : '—'}
+                  <div className="monthly-change-row">{formatChange(r.prev_pv_diff, '%')}</div>
+                </td>
+                <td className="text-end">
+                  {r.distance_km.toFixed(0)}
+                  <div className="monthly-change-row">{formatChange(r.prev_distance_diff, 'km')}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

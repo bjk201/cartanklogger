@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useTheme } from '../app/ThemeContext';
 import { useTimeRange } from '../app/TimeRangeContext';
-import { Sun, Moon, Menu, Calendar, ChevronDown, X } from 'lucide-react';
+import { Sun, Moon, Menu, RefreshCw, Calendar, X } from 'lucide-react';
+import { api } from '../lib/apiClient';
 import './TopBar.css';
 
 const RANGE_OPTIONS = [
@@ -22,6 +23,9 @@ interface TopBarProps {
 export function TopBar({ onMenuClick }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
   const { selectedRange, setSelectedRange, customFrom, setCustomFrom, customTo, setCustomTo, showCustomPicker, setShowCustomPicker, getRangeLabel } = useTimeRange();
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncSuccess, setSyncSuccess] = useState(false);
 
   const handleRangeChange = (value: RangeValue) => {
     setSelectedRange(value);
@@ -33,6 +37,25 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       setShowCustomPicker(false);
     }
   };
+
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncSuccess(false);
+    try {
+      const result = await api.syncDataSources();
+      if (result.ok) {
+        setSyncSuccess(true);
+        setTimeout(() => setSyncSuccess(false), 3000);
+      } else {
+        setSyncError('Sync fehlgeschlagen');
+      }
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Sync-Fehler');
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
 
   return (
     <header className="topbar" role="banner">
@@ -48,7 +71,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         <div className="topbar__status" role="status" aria-live="polite">
           <span className="status-indicator status-indicator--connected" aria-hidden="true" />
           <span className="status-text">Backend verbunden</span>
-          <span className="status-detail" aria-label="Letzte Synchronisation">jetzt</span>
+          <span className="status-detail">{getRangeLabel(selectedRange)}</span>
         </div>
       </div>
       <div className="topbar__center">
@@ -105,6 +128,18 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         </div>
       </div>
       <div className="topbar__right">
+        <button
+          className={`topbar__btn topbar__btn--icon ${syncing ? 'topbar__btn--syncing' : ''} ${syncSuccess ? 'topbar__btn--sync-success' : ''}`}
+          onClick={handleSync}
+          disabled={syncing}
+          aria-label="Daten synchronisieren"
+          title="Sync (EVCC + TeslaMate)"
+        >
+          <RefreshCw size={20} className={syncing ? 'topbar__sync-spin' : ''} />
+        </button>
+        {syncError && (
+          <span className="topbar__sync-error">{syncError}</span>
+        )}
         <button
           className="topbar__btn topbar__btn--icon"
           onClick={toggleTheme}

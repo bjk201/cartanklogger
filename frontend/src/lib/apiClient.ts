@@ -292,6 +292,8 @@ export type {
   DataSourceConfigWrite,
   DataSourceConfigTestRequest,
   DataSourceConfigTestResponse,
+  MatchingRawDataResponse,
+  VehicleInfoResponse,
   MetaInfo,
   ErrorDetail,
 } from '../types/api';
