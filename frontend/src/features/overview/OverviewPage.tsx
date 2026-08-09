@@ -199,7 +199,7 @@ export function OverviewPage() {
                     <span className="overview-page__pie-total">{summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} kWh</span>
                   </div>
 
-                  {/* RIGHT: External + KM */}
+                  {/* RIGHT: External only */}
                   <div className="overview-page__split-right">
                     <div className="overview-page__split-item overview-page__split-item--right">
                       <div className="overview-page__split-data overview-page__split-data--right">
@@ -212,25 +212,18 @@ export function OverviewPage() {
                       </div>
                       <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><PlugZap size={36} /></div>
                     </div>
-                    {/* KM Mini-KPIs */}
-                    <div className="overview-page__mini-km">
-                      {summary.total_distance_km != null && (
-                        <div className="overview-page__mini-km-item">
-                          <span className="overview-page__mini-km-label">Gesamt km</span>
-                          <span className="overview-page__mini-km-value">{formatNumber(summary.total_distance_km)} km</span>
-                        </div>
-                      )}
-                      {summary.avg_distance_per_day_km != null && (
-                        <div className="overview-page__mini-km-item">
-                          <span className="overview-page__mini-km-label">Ø km/Tag</span>
-                          <span className="overview-page__mini-km-value">{formatNumber(summary.avg_distance_per_day_km)} km</span>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
             </article>
+
+            {/* Gesamt km + Ø km/Tag als eigene Kacheln rechts neben dem Pie */}
+            {summary.total_distance_km != null && (
+              <KpiCard label="Gesamt km" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
+            )}
+            {summary.avg_distance_per_day_km != null && (
+              <KpiCard label="Ø km/Tag" value={formatNumber(summary.avg_distance_per_day_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-home)" horizontal />
+            )}
           </div>
         </section>
       )}
