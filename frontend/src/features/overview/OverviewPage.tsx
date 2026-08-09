@@ -111,6 +111,13 @@ export function OverviewPage() {
     return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/kWh';
   };
 
+  const formatCost = (cost: number | null | undefined, energy: number | null | undefined): string => {
+    if (cost != null && energy && energy > 0) return formatCostPerKWh(cost / energy);
+    if (cost != null && energy == null) return formatCostPerKWh(cost);
+    if (cost === 0) return '0,00 €/kWh';
+    return '—';
+  };
+
   const recentSessions: Session[] = useMemo(() => {
     return [...sessions]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -169,7 +176,7 @@ export function OverviewPage() {
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh</span>
                         <span className="overview-page__split-sub">{summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'}</span>
-                        <span className="overview-page__split-sub">{formatCostPerKWh(summary.avg_cost_per_kwh)}</span>
+                        <span className="overview-page__split-sub">{formatCost(summary.home_cost_eur, summary.home_energy_kwh)}</span>
                         <span className="overview-page__split-sub">{summary.home_sessions || 0} Sessions</span>
                       </div>
                     </div>
@@ -214,7 +221,7 @@ export function OverviewPage() {
                             ? `${(summary.external_energy_kwh / (summary.home_energy_kwh + summary.external_energy_kwh) * 100).toFixed(1)}%`
                             : '—'}
                         </span>
-                        <span className="overview-page__split-sub">{formatCostPerKWh(summary.avg_cost_per_kwh)}</span>
+                        <span className="overview-page__split-sub">{formatCost(summary.external_cost_eur, summary.external_energy_kwh)}</span>
                         <span className="overview-page__split-sub">{summary.external_sessions || 0} Sessions</span>
                       </div>
                       <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><PlugZap size={36} /></div>
