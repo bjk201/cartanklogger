@@ -34,10 +34,12 @@ ChartJS.register(
 
 function movingAverage(data: number[], windowSize: number): (number | null)[] {
   return data.map((_, i) => {
-    if (i < windowSize - 1) return null;
+    if (i === 0) return data[0]; // start with first value
+    const start = Math.max(0, i - windowSize + 1);
     let sum = 0;
-    for (let j = i - windowSize + 1; j <= i; j++) sum += data[j];
-    return sum / windowSize;
+    let count = 0;
+    for (let j = start; j <= i; j++) { sum += data[j]; count++; }
+    return count > 0 ? sum / count : null;
   });
 }
 
@@ -166,9 +168,9 @@ export function OverviewPage() {
                       <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true"><House size={36} /></div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh</span>
-                        <span className="overview-page__split-sub">
-                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {summary.home_sessions || 0} Sessions · {formatCostPerKWh(summary.avg_cost_per_kwh)}
-                        </span>
+                        <span className="overview-page__split-sub">{summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'}</span>
+                        <span className="overview-page__split-sub">{formatCostPerKWh(summary.avg_cost_per_kwh)}</span>
+                        <span className="overview-page__split-sub">{summary.home_sessions || 0} Sessions</span>
                       </div>
                     </div>
                   </div>
@@ -210,8 +212,10 @@ export function OverviewPage() {
                         <span className="overview-page__split-sub">
                           {summary.home_energy_kwh && summary.external_energy_kwh
                             ? `${(summary.external_energy_kwh / (summary.home_energy_kwh + summary.external_energy_kwh) * 100).toFixed(1)}%`
-                            : '—'} · {summary.external_sessions || 0} Sessions · {formatCostPerKWh(summary.avg_cost_per_kwh)}
+                            : '—'}
                         </span>
+                        <span className="overview-page__split-sub">{formatCostPerKWh(summary.avg_cost_per_kwh)}</span>
+                        <span className="overview-page__split-sub">{summary.external_sessions || 0} Sessions</span>
                       </div>
                       <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><PlugZap size={36} /></div>
                     </div>
@@ -238,8 +242,8 @@ export function OverviewPage() {
           <div className="overview-page__trends-grid">
             <TrendChartDaily title="Energie pro Session" data={statistics.kpis} />
             <TrendChartDaily title="Verbrauch kWh/100 km" data={statistics.kpis} chartType="consumption" />
-            <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} />
-            <TrendChartDaily title="Preis pro km" data={statistics.kpis} />
+            <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} chartType="noData" />
+            <TrendChartDaily title="Preis pro km" data={statistics.kpis} chartType="noData" />
             <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
           </div>
         </section>
@@ -279,7 +283,7 @@ export function OverviewPage() {
 interface TrendChartDailyProps {
   title: string;
   data: StatisticsKPIs;
-  chartType?: 'energy' | 'consumption' | 'cumulativeKm';
+  chartType?: 'energy' | 'consumption' | 'cumulativeKm' | 'noData';
 }
 
 function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyProps) {
@@ -290,6 +294,11 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
     let color = '#0d9488';
 
     switch (chartType) {
+      case 'noData': {
+        values = [];
+        yLabel = '—';
+        break;
+      }
       case 'consumption': {
         // kWh/100km = daily_kwh / daily_km * 100
         const km = data.daily_km || [];
