@@ -174,22 +174,21 @@ async def get_vehicle_info(db: Session = Depends(get_db)) -> VehicleInfoResponse
             return VehicleInfoResponse(ok=True, data=VehicleInfo(source="none"), errors=[])
 
         car = cars[0]
-        # 1. Priorität: Max odometer_km aus manuellen Vehicle-Records
-        from app.models.vehicle import VehicleRecordModel
-        max_record_km = db.query(func.max(VehicleRecordModel.odometer_km)).scalar()
-
-        # 2. TeslaMate Drives als Fallback / Vergleich
-        current_odometer = max_record_km  # Start mit manuellem Wert
+        # 1. TeslaMate Drives als primäre Quelle für aktuellen km-Stand
+        current_odometer = None
         try:
             drives = await tm_client.get_drives()
             for d in reversed(drives):
                 if d.odometer_end:
-                    tm_odo = d.odometer_end
-                    if current_odometer is None or tm_odo > current_odometer:
-                        current_odometer = tm_odo
+                    current_odometer = d.odometer_end
                     break
         except Exception:
-            pass  # Fallback auf max_record_km (oder None)
+            pass
+
+        # 2. Fallback: Max odometer_km aus manuellen Vehicle-Records
+        if current_odometer is None:
+            from app.models.vehicle import VehicleRecordModel
+            current_odometer = db.query(func.max(VehicleRecordModel.odometer_km)).scalar()
 
         info = VehicleInfo(
             car_id=car.car_id,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Euro, Activity, House, Bolt, Gauge, TrendingUp, TrendingDown } from 'lucide-react';
+import { Zap, Euro, Activity, House, Bolt, Gauge, PlugZap, TrendingUp, TrendingDown } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
@@ -157,18 +157,20 @@ export function OverviewPage() {
               <div className="kpi-card__content">
                 <span className="kpi-card__label">Ladevorgänge: Zuhause & Extern</span>
                 <div className="overview-page__split-chart">
+                  {/* LEFT: Home */}
                   <div className="overview-page__split-left">
                     <div className="overview-page__split-item">
-                      <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true"><House size={24} /></div>
+                      <div className="overview-page__split-icon overview-page__split-icon--home" aria-hidden="true"><House size={36} /></div>
                       <div className="overview-page__split-data">
                         <span className="overview-page__split-value">{summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh</span>
                         <span className="overview-page__split-sub">
-                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {summary.home_sessions || 0} Sessions
+                          {summary.home_share_pct != null ? `${summary.home_share_pct.toFixed(1)}%` : '—'} · {summary.home_sessions || 0} Sessions · {formatCostPerKWh(summary.avg_cost_per_kwh)}
                         </span>
                       </div>
                     </div>
                   </div>
 
+                  {/* CENTER: Pie */}
                   <div className="overview-page__split-center">
                     <div className="pie-chart-wrapper">
                       <Pie
@@ -197,6 +199,7 @@ export function OverviewPage() {
                     <span className="overview-page__pie-total">{summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} kWh</span>
                   </div>
 
+                  {/* RIGHT: External + KM */}
                   <div className="overview-page__split-right">
                     <div className="overview-page__split-item overview-page__split-item--right">
                       <div className="overview-page__split-data overview-page__split-data--right">
@@ -204,30 +207,30 @@ export function OverviewPage() {
                         <span className="overview-page__split-sub">
                           {summary.home_energy_kwh && summary.external_energy_kwh
                             ? `${(summary.external_energy_kwh / (summary.home_energy_kwh + summary.external_energy_kwh) * 100).toFixed(1)}%`
-                            : '—'} · {formatCostPerKWh(summary.avg_cost_per_kwh)}
+                            : '—'} · {summary.external_sessions || 0} Sessions · {formatCostPerKWh(summary.avg_cost_per_kwh)}
                         </span>
                       </div>
-                      <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><Bolt size={24} /></div>
+                      <div className="overview-page__split-icon overview-page__split-icon--supercharger" aria-hidden="true"><PlugZap size={36} /></div>
+                    </div>
+                    {/* KM Mini-KPIs */}
+                    <div className="overview-page__mini-km">
+                      {summary.total_distance_km != null && (
+                        <div className="overview-page__mini-km-item">
+                          <span className="overview-page__mini-km-label">Gesamt km</span>
+                          <span className="overview-page__mini-km-value">{formatNumber(summary.total_distance_km)} km</span>
+                        </div>
+                      )}
+                      {summary.avg_distance_per_day_km != null && (
+                        <div className="overview-page__mini-km-item">
+                          <span className="overview-page__mini-km-label">Ø km/Tag</span>
+                          <span className="overview-page__mini-km-value">{formatNumber(summary.avg_distance_per_day_km)} km</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </article>
-          </div>
-        </section>
-      )}
-
-      {/* Gefahrene km */}
-      {summary && (summary.total_distance_km != null || summary.avg_distance_per_day_km != null) && (
-        <section className="overview-page__section" aria-labelledby="distance-heading">
-          <h2 id="distance-heading" className="overview-page__section-title">Gefahrene km</h2>
-          <div className="overview-page__kpi-grid overview-page__kpi-grid--km">
-            {summary.total_distance_km != null && (
-              <KpiCard label="Gesamt km" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
-            )}
-            {summary.avg_distance_per_day_km != null && (
-              <KpiCard label="Ø km/Tag" value={formatNumber(summary.avg_distance_per_day_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-home)" horizontal />
-            )}
           </div>
         </section>
       )}

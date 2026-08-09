@@ -70,8 +70,6 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         <h1 className="topbar__title">CarTankLogger 2.0</h1>
         <div className="topbar__status" role="status" aria-live="polite">
           <span className="status-indicator status-indicator--connected" aria-hidden="true" />
-          <span className="status-text">Backend verbunden</span>
-          <span className="status-detail">{getRangeLabel(selectedRange)}</span>
         </div>
       </div>
       <div className="topbar__center">
