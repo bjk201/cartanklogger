@@ -72,6 +72,11 @@
   border-color: var(--color-primary);
 }
 
+.btn-icon--danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
 /* ── Modal (aus alter VehiclePage übernommen) ──────────────── */
 .modal-overlay {
   position: fixed;

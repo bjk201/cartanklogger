@@ -207,6 +207,17 @@ export default function VehiclePage() {
 
   useEffect(() => { fetchRecords(); }, []);
 
+  const handleDelete = async (record: VehicleRecordRead) => {
+    const label = record.record_type === 'service' ? record.title : `${record.tire_brand} ${record.tire_position}`;
+    if (!window.confirm(`"${label}" wirklich löschen?`)) return;
+    try {
+      await api.deleteVehicleRecord(record.id);
+      fetchRecords();
+    } catch (e) {
+      alert('Fehler beim Löschen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
+    }
+  };
+
   const services = (records || []).filter(r => r.record_type === 'service');
   const tires = (records || []).filter(r => r.record_type === 'tire');
 
@@ -248,6 +259,7 @@ export default function VehiclePage() {
                   <div className="col col-cost">{rec.cost_eur != null ? rec.cost_eur.toFixed(2) + ' €' : '—'}</div>
                   <div className="col col-actions">
                     <button className="btn-icon" onClick={() => setEditRecord(rec)} title="Bearbeiten">✎</button>
+                    <button className="btn-icon btn-icon--danger" onClick={() => handleDelete(rec)} title="Löschen">✕</button>
                   </div>
                 </div>
               ))}
@@ -308,6 +320,7 @@ export default function VehiclePage() {
                     </div>
                     <div className="col col-actions">
                       <button className="btn-icon" onClick={() => setEditRecord(rec)} title="Bearbeiten">✎</button>
+                      <button className="btn-icon btn-icon--danger" onClick={() => handleDelete(rec)} title="Löschen">✕</button>
                     </div>
                   </div>
                 );
