@@ -33,7 +33,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
   function validate(): boolean {
     const errs: Record<string, string> = {};
     if (!date.trim()) errs.date = 'Datum erforderlich';
-    if (!title.trim()) errs.title = 'Beschreibung erforderlich';
+    if (!isTireSet && !title.trim()) errs.title = 'Beschreibung erforderlich';
     if (isTireSet && !tireBrand.trim()) errs.brand = 'Reifenmarke erforderlich';
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
