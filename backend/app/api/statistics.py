@@ -269,7 +269,7 @@ async def get_statistics(
                 
                 # Group by date
                 from collections import defaultdict
-                daily_data = defaultdict(lambda: {"km": 0.0, "kwh": 0.0})
+                daily_data = defaultdict(lambda: {"km": 0.0, "kwh": 0.0, "odo": None})
                 for drive in tm_drives:
                     if drive.start_date:
                         date_key = drive.start_date.strftime("%Y-%m-%d")
@@ -277,15 +277,22 @@ async def get_statistics(
                             daily_data[date_key]["km"] += drive.odometer_distance
                         if drive.energy_consumed_net:
                             daily_data[date_key]["kwh"] += drive.energy_consumed_net
+                        if drive.odometer_end:
+                            # Keep the max (latest) odometer for each day
+                            current = daily_data[date_key]["odo"]
+                            if current is None or drive.odometer_end > current:
+                                daily_data[date_key]["odo"] = drive.odometer_end
                 
                 # Convert to sorted list for frontend chart
                 sorted_dates = sorted(daily_data.keys())
                 daily_km = [round(daily_data[d]["km"], 1) for d in sorted_dates]
                 daily_kwh = [round(daily_data[d]["kwh"], 2) for d in sorted_dates]
-                
+                daily_odo = [daily_data[d]["odo"] for d in sorted_dates]
+
                 stats['kpis']['daily_dates'] = sorted_dates
                 stats['kpis']['daily_km'] = daily_km
                 stats['kpis']['daily_kwh'] = daily_kwh
+                stats['kpis']['daily_odometer'] = daily_odo
         except Exception:
             stats['kpis']['daily_dates'] = []
             stats['kpis']['daily_km'] = []

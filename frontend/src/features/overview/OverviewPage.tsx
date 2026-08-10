@@ -337,11 +337,11 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
         break;
       }
       case 'cumulativeKm': {
-        const km = data.daily_km || [];
-        let cum = 0;
-        values = km.map(v => { cum += (v || 0); return cum; });
+        // Use odometer readings (real Tacho-Werte) instead of cumulative daily_km
+        const odo = data.daily_odometer || [];
+        values = odo.filter((v): v is number => v !== null && v !== undefined);
         yLabel = 'km';
-        color = '#2563eb';
+        color = '#8b5cf6';
         break;
       }
       default: {
@@ -449,6 +449,13 @@ function MonthlyComparison({ sessions, statsData }: { sessions: Session[]; stats
         entry.km += dailyKm[i] || 0;
         byMonth.set(monthKey, entry);
       }
+      // Add PV from sessions (each session has pv_kwh now)
+      for (const s of sessions) {
+        if (!s.date || !s.pv_kwh) continue;
+        const monthKey = s.date.slice(0, 7);
+        const entry = byMonth.get(monthKey);
+        if (entry) entry.pv += s.pv_kwh;
+      }
     } else {
       // Fallback: aggregate from sessions
       for (const s of sessions) {
@@ -481,7 +488,7 @@ function MonthlyComparison({ sessions, statsData }: { sessions: Session[]; stats
         prev_distance_diff: prev ? data.km - prev.km : null,
       };
     }).reverse();
-  }, [sessions]);
+  }, [sessions, statsData]);
 
   if (rows.length === 0) {
     return <div className="overview-page__monthly-empty">Keine Monatsdaten verfügbar</div>;
