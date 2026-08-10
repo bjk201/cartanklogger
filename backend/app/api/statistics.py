@@ -309,7 +309,8 @@ async def get_statistics(
         # Query daily cost by date (using date() on the session date field)
         cost_query = db.query(
             func.date(SessionModel.date).label('day'),
-            func.sum(SessionModel.cost_eur).label('total_cost')
+            func.sum(SessionModel.cost_eur).label('total_cost'),
+            func.sum(SessionModel.energy_kwh).label('total_energy')
         ).filter(
             SessionModel.source_type.in_(['home', 'external'])
         )
@@ -328,9 +329,11 @@ async def get_statistics(
         
         daily_cost_dates = [str(row.day) for row in cost_rows]
         daily_cost_eur = [float(row.total_cost) for row in cost_rows]
-        
+        daily_cost_kwh = [float(row.total_energy) for row in cost_rows]
+
         stats['kpis']['daily_cost_dates'] = daily_cost_dates
         stats['kpis']['daily_cost_eur'] = daily_cost_eur
+        stats['kpis']['daily_cost_kwh'] = daily_cost_kwh
     except Exception:
         stats['kpis']['daily_cost_dates'] = []
         stats['kpis']['daily_cost_eur'] = []

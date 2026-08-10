@@ -101,6 +101,7 @@ export interface StatisticsKPIs {
   daily_total_kwh?: number[];
   daily_cost_dates?: string[];
   daily_cost_eur?: number[];
+  daily_cost_kwh?: number[];
   daily_odometer?: (number | null)[];
 }
 

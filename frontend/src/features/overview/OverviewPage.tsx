@@ -250,7 +250,7 @@ export function OverviewPage() {
             <TrendChartDaily title="Energie pro Session" data={statistics.kpis} />
             <TrendChartDaily title="Verbrauch kWh/100 km" data={statistics.kpis} chartType="consumption" />
             <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} chartType="pricePerKwh" />
-            <TrendChartDaily title="Preis pro km" data={statistics.kpis} chartType="pricePerKm" />
+            <TrendChartDaily title="Preis pro 100km" data={statistics.kpis} chartType="pricePerKm" />
             <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
           </div>
         </section>
@@ -295,7 +295,7 @@ interface TrendChartDailyProps {
 
 function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyProps) {
   const chartConfig = useMemo(() => {
-    const dates = data.daily_dates || [];
+    let dates = data.daily_dates || [];
     let values: number[] = [];
     let yLabel = '';
     let color = '#0d9488';
@@ -307,20 +307,29 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
         break;
       }
       case 'pricePerKwh': {
-        // €/kWh pro Tag = daily_cost / daily_kwh
+        // €/kWh pro Tag = daily_cost / daily_cost_kwh (beide aus Sessions-DB, selbe Daten!)
+        const costDates = data.daily_cost_dates || [];
         const costs = data.daily_cost_eur || [];
-        const kwh = data.daily_kwh || [];
-        values = costs.map((c, i) => (c && kwh[i] && kwh[i] > 0) ? c / kwh[i] : 0);
+        const costKwh = data.daily_cost_kwh || [];
+        dates = costDates;
+        values = costDates.map((d, i) => (costs[i] && costKwh[i] && costKwh[i] > 0) ? costs[i] / costKwh[i] : 0);
         yLabel = '€/kWh';
         color = '#f59e0b';
         break;
       }
       case 'pricePerKm': {
-        // €/km pro Tag = daily_cost / daily_km
+        // €/100km pro Tag = cost / km * 100
+        const costDates = data.daily_cost_dates || [];
         const costs = data.daily_cost_eur || [];
-        const km = data.daily_km || [];
-        values = costs.map((c, i) => (c && km[i] && km[i] > 0) ? c / km[i] : 0);
-        yLabel = '€/km';
+        const kmDates = data.daily_dates || [];
+        const kmVals = data.daily_km || [];
+        const kmMap = new Map(kmDates.map((d,i) => [d, kmVals[i] || 0]));
+        dates = costDates;
+        values = costDates.map((d, i) => {
+          const km = kmMap.get(d) || 0;
+          return (costs[i] && km > 0) ? (costs[i] / km) * 100 : 0;
+        });
+        yLabel = '€/100km';
         color = '#f59e0b';
         break;
       }

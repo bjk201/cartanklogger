@@ -152,6 +152,8 @@ class StatisticsKPIs(BaseModel):
     # NEW: Daily cost data for price charts
     daily_cost_dates: Optional[List[str]] = None
     daily_cost_eur: Optional[List[float]] = None
+    # NEW: Daily cost energy for price charts  
+    daily_cost_kwh: Optional[List[float]] = None
     # NEW: Daily odometer values for cumulative km chart
     daily_odometer: Optional[List[Optional[float]]] = None
 
