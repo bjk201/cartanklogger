@@ -318,18 +318,43 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
         break;
       }
       case 'pricePerKm': {
-        // €/100km pro Tag = cost / km * 100
+        // €/100km = kumulierte Kosten / kumulierte km * 100
+        // Da Laden und Fahren an unterschiedlichen Tagen stattfinden,
+        // ergibt eine Tages-division keinen Sinn. Kumulativ ist stabiler.
         const costDates = data.daily_cost_dates || [];
         const costs = data.daily_cost_eur || [];
         const kmDates = data.daily_dates || [];
         const kmVals = data.daily_km || [];
-        const kmMap = new Map(kmDates.map((d,i) => [d, kmVals[i] || 0]));
-        dates = costDates;
-        values = costDates.map((d, i) => {
-          const km = kmMap.get(d) || 0;
-          return (costs[i] && km > 0) ? (costs[i] / km) * 100 : 0;
-        });
-        yLabel = '€/100km';
+
+        // Alle Datums-Strings combined + dedup + sort
+        const allDates = [...new Set([...costDates, ...kmDates])].sort();
+
+        // Lookup-Maps
+        const costMap = new Map<string, number>();
+        costDates.forEach((d, i) => { costMap.set(d, (costMap.get(d) || 0) + costs[i]); });
+        const kmMap = new Map<string, number>();
+        kmDates.forEach((d, i) => { kmMap.set(d, (kmMap.get(d) || 0) + kmVals[i]); });
+
+        // Kumulative Arrays
+        let cumCost = 0;
+        let cumKm = 0;
+        const cumValues: number[] = [];
+        const cumDates: string[] = [];
+
+        for (const d of allDates) {
+          const dayCost = costMap.get(d) || 0;
+          const dayKm = kmMap.get(d) || 0;
+          if (dayCost > 0 || dayKm > 0) {
+            cumCost += dayCost;
+            cumKm += dayKm;
+            cumDates.push(d);
+            cumValues.push(cumKm > 0 ? (cumCost / cumKm) * 100 : 0);
+          }
+        }
+
+        dates = cumDates;
+        values = cumValues;
+        yLabel = '€/100km (kum.)';
         color = '#f59e0b';
         break;
       }

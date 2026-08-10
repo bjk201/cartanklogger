@@ -47,6 +47,7 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
             {compact ? (
               <>
                 <th scope="col" className="text-end">kWh</th>
+                <th scope="col" className="text-end">PV %</th>
                 <th scope="col" className="text-end">PV kWh</th>
                 <th scope="col" className="text-end">€/kWh</th>
                 <th scope="col" className="text-end">Kosten</th>
@@ -81,7 +82,10 @@ export function SessionsTable({ sessions, loading = false, emptyMessage = 'Keine
               {compact ? (
                 <>
                   <td className="text-end sessions-table__energy" data-label="kWh">
-                    {session.energy_kwh !== null && session.energy_kwh !== undefined ? session.energy_kwh.toFixed(1) : '—'}
+                    {session.energy_kwh !== null && session.energy_kwh !== undefined ? session.energy_kwh.toFixed(2) : '—'}
+                  </td>
+                  <td className="text-end sessions-table__pv-pct" data-label="PV %">
+                    {session.solar_percentage !== null && session.solar_percentage !== undefined ? `${session.solar_percentage.toFixed(1)} %` : '—'}
                   </td>
                   <td className="text-end sessions-table__pv-kwh" data-label="PV kWh">
                     {session.pv_kwh !== null && session.pv_kwh !== undefined ? session.pv_kwh.toFixed(2) : '—'}

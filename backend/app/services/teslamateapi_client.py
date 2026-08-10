@@ -135,7 +135,7 @@ class TeslaMateAPIClient:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         f"{self.base_url}cars/{car_id}/charges",
-                        params={"page": page, "limit": limit},
+                        params={"page": page, "per_page": limit},
                         headers=self._headers
                     )
                     response.raise_for_status()
@@ -212,7 +212,7 @@ class TeslaMateAPIClient:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         f"{self.base_url}cars/{car_id}/drives",
-                        params={"page": page, "limit": limit},
+                        params={"page": page, "per_page": limit},
                         headers=self._headers
                     )
                     response.raise_for_status()
