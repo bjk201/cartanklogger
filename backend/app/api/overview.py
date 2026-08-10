@@ -113,7 +113,7 @@ def get_recent_sessions(
             distance_km=s.distance_km,
             note=s.note,
             solar_percentage=s.solar_percentage,
-            pv_kwh=s.pv_kwh if s.pv_kwh else (s.energy_kwh if s.energy_kwh else None),
+            pv_kwh=round(s.energy_kwh * s.solar_percentage / 100, 2) if s.solar_percentage and s.energy_kwh else (s.pv_kwh if s.pv_kwh else None),
             cost_per_kwh=s.cost_per_kwh if s.cost_per_kwh else (round(s.cost_eur / s.energy_kwh, 2) if s.cost_eur and s.energy_kwh and s.energy_kwh > 0 else None),
             cost_per_kwh_source=s.cost_per_kwh_source,
         ))

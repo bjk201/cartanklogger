@@ -432,40 +432,25 @@ interface MonthlyRow {
 
 function MonthlyComparison({ sessions, statsData }: { sessions: Session[]; statsData?: StatisticsKPIs | null }) {
   const rows = useMemo<MonthlyRow[]>(() => {
-    // Try to use daily data from statistics for real PV and km values
-    const dailyDates = statsData?.daily_dates || [];
-    const dailyKm = statsData?.daily_km || [];
-    const dailyKwh = statsData?.daily_kwh || [];
-
-    // Aggregate by month from daily data
+    // Aggregate sessions by month for energy + PV
     const byMonth = new Map<string, { energy: number; pv: number; km: number }>();
 
-    // Use daily km/kwh from statistics if available
-    if (dailyDates.length > 0 && dailyDates.length === dailyKm.length) {
-      for (let i = 0; i < dailyDates.length; i++) {
-        const monthKey = dailyDates[i].slice(0, 7);
-        const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
-        entry.energy += dailyKwh[i] || 0;
-        entry.km += dailyKm[i] || 0;
-        byMonth.set(monthKey, entry);
-      }
-      // Add PV from sessions (each session has pv_kwh now)
-      for (const s of sessions) {
-        if (!s.date || !s.pv_kwh) continue;
-        const monthKey = s.date.slice(0, 7);
+    // 1. Energy + PV from sessions (charging data)
+    for (const s of sessions) {
+      if (!s.date) continue;
+      const monthKey = s.date.slice(0, 7);
+      const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
+      entry.energy += s.energy_kwh || 0;
+      entry.pv += s.pv_kwh || 0;
+      byMonth.set(monthKey, entry);
+    }
+
+    // 2. km from daily TM drives (falls vorhanden)
+    if (statsData?.daily_dates?.length && statsData?.daily_km?.length) {
+      for (let i = 0; i < statsData.daily_dates.length; i++) {
+        const monthKey = statsData.daily_dates[i].slice(0, 7);
         const entry = byMonth.get(monthKey);
-        if (entry) entry.pv += s.pv_kwh;
-      }
-    } else {
-      // Fallback: aggregate from sessions
-      for (const s of sessions) {
-        if (!s.date) continue;
-        const monthKey = s.date.slice(0, 7);
-        const entry = byMonth.get(monthKey) || { energy: 0, pv: 0, km: 0 };
-        entry.energy += s.energy_kwh || 0;
-        entry.pv += s.pv_kwh || 0;
-        entry.km += s.distance_km || 0;
-        byMonth.set(monthKey, entry);
+        if (entry) entry.km += statsData.daily_km[i] || 0;
       }
     }
 
