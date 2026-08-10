@@ -4,7 +4,7 @@ import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type SessionMatchItem } from '../lib/apiClient';
+import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type SessionMatchItem, type UnmatchedChargeItem } from '../lib/apiClient';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
@@ -242,7 +242,7 @@ export function SessionsPage() {
   useEffect(() => {
     if (activeTab !== 'unmatched') return;
     setLoadingRaw(true);
-    api.getMatchingRawData(100, getDaysFromRange(selectedRange) || 30)
+    api.getUnmatchedCharges(getDaysFromRange(selectedRange) || 36500)
       .then(setRawData)
       .catch(() => setRawData(null))
       .finally(() => setLoadingRaw(false));
@@ -283,7 +283,7 @@ export function SessionsPage() {
     }
   };
 
-  const unmatchedTMCharges = rawData?.teslamate_charges || [];
+  const unmatchedTMCharges = (rawData as any)?.charges || [];
 
   return (
     <div className="page-container">
@@ -365,14 +365,14 @@ export function SessionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(unmatchedTMCharges as any[]).map((charge: any, idx: number) => (
+                  {(unmatchedTMCharges as UnmatchedChargeItem[]).map((charge, idx) => (
                     <tr key={idx}>
                       <td>{charge.date ? new Date(charge.date).toLocaleDateString('de-DE') : '—'}</td>
                       <td>{charge.location || '—'}</td>
-                      <td className="text-end">{charge.energy_kwh != null ? Number(charge.energy_kwh).toFixed(1) : '—'}</td>
-                      <td className="text-end">{charge.charge_energy_added != null ? Number(charge.charge_energy_added).toFixed(1) : '—'}</td>
-                      <td className="text-end">{charge.charge_energy_used != null ? Number(charge.charge_energy_used).toFixed(1) : '—'}</td>
-                      <td className="text-end">{charge.distance_km || '—'}</td>
+                      <td className="text-end">{charge.energy_added != null ? Number(charge.energy_added).toFixed(1) : '—'}</td>
+                      <td className="text-end">{charge.energy_added != null ? Number(charge.energy_added).toFixed(1) : '—'}</td>
+                      <td className="text-end">{charge.energy_used != null ? Number(charge.energy_used).toFixed(1) : '—'}</td>
+                      <td className="text-end">{charge.odometer || '—'}</td>
                       <td>
                         <button className="btn-match" title="Manuell einer EVCC-Session zuordnen" onClick={() => openMatchDialog(charge)}>
                           <Link2 size={14} /> Matchen

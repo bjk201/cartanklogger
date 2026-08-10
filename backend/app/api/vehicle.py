@@ -178,7 +178,7 @@ async def get_vehicle_info(db: Session = Depends(get_db)) -> VehicleInfoResponse
         current_odometer = None
         try:
             drives = await tm_client.get_drives()
-            for d in reversed(drives):
+            for d in drives:  # drives are already newest-first from TM API
                 if d.odometer_end:
                     current_odometer = d.odometer_end
                     break

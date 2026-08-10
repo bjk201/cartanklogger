@@ -318,6 +318,25 @@ export interface SessionMatchActionResponse {
   tm_charge_id?: number;
 }
 
+export interface UnmatchedChargeItem {
+  charge_id: number;
+  date?: string | null;
+  location?: string | null;
+  energy_added?: number | null;
+  energy_used?: number | null;
+  cost?: number | null;
+  odometer?: number | null;
+}
+
+export interface UnmatchedChargesResponse {
+  ok: boolean;
+  total_tm_charges?: number;
+  home_charges?: number;
+  unmatched_count?: number;
+  charges: UnmatchedChargeItem[];
+  error?: string;
+}
+
 // === Vehicle Types ===
 
 export interface VehicleInfoResponse {

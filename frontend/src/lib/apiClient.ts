@@ -292,6 +292,13 @@ export const api = {
       method: 'DELETE',
     });
   },
+
+  // Unmatched TM Charges (live from TM API)
+  async getUnmatchedCharges(days?: number): Promise<UnmatchedChargesResponse> {
+    const params = new URLSearchParams();
+    if (days) params.set('days', days.toString());
+    return fetchJson<UnmatchedChargesResponse>(`/matching/unmatched${params.toString() ? `?${params.toString()}` : ''}`);
+  },
 };
 
 export { ApiError };
@@ -315,6 +322,8 @@ export type {
   SessionMatchesResponse,
   SessionMatchItem,
   SessionMatchActionResponse,
+  UnmatchedChargesResponse,
+  UnmatchedChargeItem,
   MetaInfo,
   ErrorDetail,
 } from '../types/api';
