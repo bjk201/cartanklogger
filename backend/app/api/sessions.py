@@ -214,9 +214,9 @@ async def get_session_matches(
     else:
         return {"ok": True, "matches": [], "note": "Session has no date"}
 
-    # Run LIVE matching for this session
+    # Run LIVE matching for this session (no limit, use narrow date window for speed)
     result = await run_live_matching_dry_run(
-        limit=10, from_date=from_date, to_date=to_date, db=db
+        limit=None, from_date=from_date, to_date=to_date, db=db
     )
 
     if not result.get("ok", False):
