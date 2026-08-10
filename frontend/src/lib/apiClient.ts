@@ -274,6 +274,24 @@ export const api = {
   async syncDataSources(): Promise<{ ok: boolean; result?: any }> {
     return fetchJson<{ ok: boolean; result?: any }>('/settings/data-sources/sync', { method: 'POST' });
   },
+
+  // Session Matches (new)
+  async getSessionMatches(sessionId: number): Promise<SessionMatchesResponse> {
+    return fetchJson<SessionMatchesResponse>(`/sessions/${sessionId}/matches`);
+  },
+
+  async createSessionMatch(sessionId: number, tmChargeId: number): Promise<SessionMatchActionResponse> {
+    return fetchJson<SessionMatchActionResponse>(`/sessions/${sessionId}/match`, {
+      method: 'POST',
+      body: JSON.stringify({ tm_charge_id: tmChargeId }),
+    });
+  },
+
+  async removeSessionMatch(sessionId: number, tmChargeId: number): Promise<SessionMatchActionResponse> {
+    return fetchJson<SessionMatchActionResponse>(`/sessions/${sessionId}/match/${tmChargeId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export { ApiError };
@@ -294,6 +312,9 @@ export type {
   DataSourceConfigTestResponse,
   MatchingRawDataResponse,
   VehicleInfoResponse,
+  SessionMatchesResponse,
+  SessionMatchItem,
+  SessionMatchActionResponse,
   MetaInfo,
   ErrorDetail,
 } from '../types/api';

@@ -4,7 +4,7 @@ import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, type Session, type PaginationInfo, type MatchingRawDataResponse } from '../lib/apiClient';
+import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type SessionMatchItem } from '../lib/apiClient';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
@@ -147,6 +147,49 @@ export function SessionsPage() {
   // Raw data for unmatched TM
   const [rawData, setRawData] = useState<MatchingRawDataResponse | null>(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
+
+  // Match dialog (unmatched TM → EVCC session)
+  const [matchTarget, setMatchTarget] = useState<any | null>(null);
+  const [homeSessions, setHomeSessions] = useState<Session[]>([]);
+  const [matchSelector, setMatchSelector] = useState('');
+  const [matchSaving, setMatchSaving] = useState(false);
+  const [matchMessage, setMatchMessage] = useState<string | null>(null);
+
+  const openMatchDialog = async (charge: any) => {
+    setMatchTarget(charge);
+    setMatchSelector('');
+    setMatchMessage(null);
+    try {
+      const days = getDaysFromRange(selectedRange) || 30;
+      const res = await api.getSessions({ source_type: 'home', page_size: 100, days });
+      setHomeSessions(res.data || []);
+    } catch {
+      setHomeSessions([]);
+    }
+  };
+
+  const confirmMatch = async () => {
+    if (!matchTarget || !matchSelector) return;
+    setMatchSaving(true);
+    setMatchMessage(null);
+    try {
+      const sessionId = Number(matchSelector);
+      const tmChargeId = Number(matchTarget.tm_charge_id ?? matchTarget.charge_id ?? matchTarget.id);
+      const result = await api.createSessionMatch(sessionId, tmChargeId);
+      setMatchMessage(result.ok ? (result.message || 'Erfolgreich zugeordnet') : (result.error || 'Fehler'));
+      if (result.ok) {
+        setMatchTarget(null);
+        // Refetch raw data
+        api.getMatchingRawData(100, getDaysFromRange(selectedRange) || 30)
+          .then(setRawData)
+          .catch(() => {});
+      }
+    } catch (err) {
+      setMatchMessage(err instanceof Error ? err.message : 'Fehler beim Zuordnen');
+    } finally {
+      setMatchSaving(false);
+    }
+  };
 
   const { selectedRange, customFrom, customTo, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
 
@@ -331,7 +374,7 @@ export function SessionsPage() {
                       <td className="text-end">{charge.charge_energy_used != null ? Number(charge.charge_energy_used).toFixed(1) : '—'}</td>
                       <td className="text-end">{charge.distance_km || '—'}</td>
                       <td>
-                        <button className="btn-match" title="Manuell zuordnen (Backend benötigt)" disabled>
+                        <button className="btn-match" title="Manuell einer EVCC-Session zuordnen" onClick={() => openMatchDialog(charge)}>
                           <Link2 size={14} /> Matchen
                         </button>
                       </td>
@@ -402,6 +445,34 @@ export function SessionsPage() {
 
       {/* Edit Modal */}
       {editSession && <EditModal session={editSession} onClose={() => setEditSession(null)} onSaved={fetchSessions} />}
+
+      {/* Match Dialog */}
+      {matchTarget && (
+        <div className="match-modal-overlay" onClick={() => setMatchTarget(null)}>
+          <div className="match-modal" onClick={e => e.stopPropagation()}>
+            <h3 className="match-modal__title"><Link2 size={16} /> TM-Charge zuordnen</h3>
+            <p className="match-modal__sub">
+              TM-Charge vom <strong>{matchTarget.date ? new Date(matchTarget.date).toLocaleDateString('de-DE') : '—'}</strong> ({matchTarget.location || 'kein Ort'})
+            </p>
+            <label className="match-modal__label" htmlFor="match-select">EVCC-Session wählen</label>
+            <select id="match-select" className="match-modal__select" value={matchSelector} onChange={e => setMatchSelector(e.target.value)}>
+              <option value="">— Session wählen —</option>
+              {homeSessions.map(s => (
+                <option key={s.id} value={s.id}>
+                  {new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {s.energy_kwh?.toFixed(1) ?? '?'} kWh
+                </option>
+              ))}
+            </select>
+            {matchMessage && <p className={`match-modal__message ${matchTarget === null ? 'match-modal__message--success' : ''}`}>{matchMessage}</p>}
+            <div className="match-modal__actions">
+              <button className="btn btn-secondary" onClick={() => setMatchTarget(null)}>Abbrechen</button>
+              <button className="btn btn-primary" onClick={confirmMatch} disabled={!matchSelector || matchSaving}>
+                {matchSaving ? 'Zuordnen…' : 'Zuordnen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,9 +492,7 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
     if (next && !matchData) {
       setLoadingMatch(true);
       try {
-        // TODO: Backend endpoint GET /api/sessions/{id}/matches
-        // For now use dry-run as fallback
-        const result = await api.getMatchingDryRun(50);
+        const result = await api.getSessionMatches(session.id);
         setMatchData(result.matches || []);
       } catch { setMatchData([]); }
       finally { setLoadingMatch(false); }
@@ -467,28 +536,26 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
               {loadingMatch ? (
                 <p className="match-detail__loading">Lädt Match-Daten…</p>
               ) : !matchData || matchData.length === 0 ? (
-                <p className="match-detail__empty">Keine TM-Charges zugeordnet. <span className="match-detail__hint">Backend-Endpoint benötigt.</span></p>
+                <p className="match-detail__empty">Keine TM-Charges zugeordnet.</p>
               ) : (
                 <table className="match-detail__table">
                   <thead>
                     <tr>
                       <th>Datum</th>
-                      <th className="text-end">kWh Added</th>
-                      <th className="text-end">kWh Used</th>
-                      <th className="text-end">km</th>
+                      <th className="text-end">kWh</th>
+                      <th className="text-end">Kosten</th>
                       <th>Ort</th>
-                      <th>Qualität</th>
+                      <th>Match</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {matchData.map((m: any, i: number) => (
+                    {matchData.map((m: SessionMatchItem, i: number) => (
                       <tr key={i}>
-                        <td>{m.date ? new Date(m.date).toLocaleDateString('de-DE') : '—'}</td>
-                        <td className="text-end">{m.energy_added_kwh?.toFixed(1) ?? '—'}</td>
-                        <td className="text-end">{m.energy_used_kwh?.toFixed(1) ?? '—'}</td>
-                        <td className="text-end">{m.distance_km || '—'}</td>
+                        <td>{m.date ? new Date(m.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                        <td className="text-end">{m.energy_kwh?.toFixed(2) ?? '—'}</td>
+                        <td className="text-end">{m.cost_eur != null ? `${m.cost_eur.toFixed(2)} €` : '—'}</td>
                         <td>{m.location || '—'}</td>
-                        <td><span className={`match-quality match-quality--${m.quality || 'unknown'}`}>{m.quality || '—'}</span></td>
+                        <td><span className={`match-quality match-quality--${m.containment || 'unknown'}`}>{m.containment || '—'}{m.accepted_as_candidate === false ? ' (abgelehnt)' : ''}</span></td>
                       </tr>
                     ))}
                   </tbody>

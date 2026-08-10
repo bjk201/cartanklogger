@@ -282,6 +282,42 @@ export interface LiveMatchingStatusResponse {
   errors?: { code: string; message: string }[];
 }
 
+// === Session Matches Types ===
+
+export interface SessionMatchItem {
+  charge_id?: number | null;
+  source_id?: string | null;
+  date?: string | null;
+  energy_kwh?: number | null;
+  cost_eur?: number | null;
+  location?: string | null;
+  accepted_as_candidate?: boolean;
+  reject_reason?: string | null;
+  overlap_seconds?: number;
+  containment?: string;
+  match_source?: string;
+}
+
+export interface SessionMatchesResponse {
+  ok: boolean;
+  matches: SessionMatchItem[];
+  session_id?: number;
+  match_quality?: string;
+  delta_kwh?: number | null;
+  matched_charge_count?: number;
+  note?: string;
+  error?: string;
+}
+
+export interface SessionMatchActionResponse {
+  ok: boolean;
+  message?: string;
+  error?: string;
+  override_id?: number;
+  session_id?: number;
+  tm_charge_id?: number;
+}
+
 // === Vehicle Types ===
 
 export interface VehicleInfoResponse {

@@ -126,9 +126,13 @@ class LiveMatchingService:
         if from_date and to_date:
             from_dt = datetime.fromisoformat(from_date)
             to_dt = datetime.fromisoformat(to_date + ' 23:59:59')
+            # Make aware if source datetimes are aware
+            from_dt = from_dt.replace(tzinfo=timezone.utc) if from_dt.tzinfo is None else from_dt
+            to_dt = to_dt.replace(tzinfo=timezone.utc) if to_dt.tzinfo is None else to_dt
             return [s for s in sessions if from_dt <= s.created <= to_dt]
         elif from_date and not to_date:
             from_dt = datetime.fromisoformat(from_date)
+            from_dt = from_dt.replace(tzinfo=timezone.utc) if from_dt.tzinfo is None else from_dt
             return [s for s in sessions if s.created >= from_dt]
         elif days is not None:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
@@ -146,9 +150,12 @@ class LiveMatchingService:
         if from_date and to_date:
             from_dt = datetime.fromisoformat(from_date)
             to_dt = datetime.fromisoformat(to_date + ' 23:59:59')
+            from_dt = from_dt.replace(tzinfo=timezone.utc) if from_dt.tzinfo is None else from_dt
+            to_dt = to_dt.replace(tzinfo=timezone.utc) if to_dt.tzinfo is None else to_dt
             return [c for c in charges if c.start_date and from_dt <= c.start_date <= to_dt]
         elif from_date and not to_date:
             from_dt = datetime.fromisoformat(from_date)
+            from_dt = from_dt.replace(tzinfo=timezone.utc) if from_dt.tzinfo is None else from_dt
             return [c for c in charges if c.start_date and c.start_date >= from_dt]
         elif days is not None:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
