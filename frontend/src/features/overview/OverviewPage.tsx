@@ -13,12 +13,13 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
   Filler,
 } from 'chart.js';
-import { Line, Pie } from 'react-chartjs-2';
+import { Line, Pie, Bar } from 'react-chartjs-2';
 import './OverviewPage.css';
 
 ChartJS.register(
@@ -26,6 +27,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
@@ -160,6 +162,17 @@ export function OverviewPage() {
             <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             <KpiCard label="Ø Kosten/kWh" value={formatCostPerKWh(summary.avg_cost_per_kwh)} icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
 
+            {/* NEU: KPIs aus Statistics */}
+            {statistics?.kpis?.total_energy_kwh != null && (
+              <KpiCard label="Geladene Menge im Zeitraum" value={formatNumber(statistics.kpis.total_energy_kwh)} unit="kWh" icon={(p) => <PlugZap {...p} />} iconColor="var(--color-primary)" horizontal />
+            )}
+            {statistics?.kpis?.avg_energy_per_session != null && (
+              <KpiCard label="Ø Energie / Session" value={formatNumber(statistics.kpis.avg_energy_per_session)} unit="kWh" icon={(p) => <Bolt {...p} />} iconColor="var(--color-home)" horizontal />
+            )}
+            {statistics?.kpis?.avg_cost_per_session != null && (
+              <KpiCard label="Ø Kosten / Session" value={statistics.kpis.avg_cost_per_session.toFixed(2)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
+            )}
+
             {vehicleInfo?.data?.current_odometer_km != null && (
               <KpiCard label="Aktueller KM-Stand" value={formatNumber(vehicleInfo.data.current_odometer_km)} unit="km" icon={(p) => <Gauge {...p} />} iconColor="var(--color-primary)" horizontal />
             )}
@@ -252,6 +265,7 @@ export function OverviewPage() {
             <TrendChartDaily title="Preis pro kWh" data={statistics.kpis} chartType="pricePerKwh" />
             <TrendChartDaily title="Preis pro 100km" data={statistics.kpis} chartType="pricePerKm" />
             <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
+            <DailyChargedBarChart data={statistics.kpis} />
           </div>
         </section>
       )}
@@ -450,6 +464,84 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
             scales: {
               x: { display: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 }, maxTicksLimit: 10 } },
               y: { beginAtZero: chartType !== 'cumulativeKm', grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 9 } } },
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ===== DailyChargedBarChart ===== */
+// Täglich geladene Energie als Balkendiagramm: Intern (Home) + Extern
+interface DailyChargedBarChartProps {
+  data: StatisticsKPIs;
+}
+
+function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
+  const config = useMemo(() => {
+    const dates = data.daily_charged_dates || [];
+    const home = data.daily_home_kwh || [];
+    const external = data.daily_external_kwh || [];
+
+    const labels = dates.map((d: string) => {
+      try { return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
+      catch { return d; }
+    });
+
+    return { labels, home, external };
+  }, [data]);
+
+  if (config.labels.length < 2 || (config.home.every(v => v === 0) && config.external.every(v => v === 0))) {
+    return (
+      <div className="overview-page__trend-card">
+        <h3 className="overview-page__trend-title">Täglich geladene Energie</h3>
+        <div className="overview-page__empty-trend">Nicht genug Daten</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overview-page__trend-card">
+      <h3 className="overview-page__trend-title">Täglich geladene Energie</h3>
+      <div className="overview-page__trend-chart-container">
+        <Bar
+          data={{
+            labels: config.labels,
+            datasets: [
+              {
+                label: 'Intern (Home)',
+                data: config.home,
+                backgroundColor: '#0d9488',
+                borderColor: '#0f766e',
+                borderWidth: 1,
+                stack: 'charged',
+              },
+              {
+                label: 'Extern',
+                data: config.external,
+                backgroundColor: '#3b82f6',
+                borderColor: '#2563eb',
+                borderWidth: 1,
+                stack: 'charged',
+              },
+            ],
+          }}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index' as const, intersect: false },
+            plugins: {
+              legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kWh`,
+                },
+              },
+            },
+            scales: {
+              x: { stacked: true, display: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 }, maxTicksLimit: 10 } },
+              y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 9 } } },
             },
           }}
         />
