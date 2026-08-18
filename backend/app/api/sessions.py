@@ -190,6 +190,77 @@ def get_sessions(
     )
 
 
+@router.get("/tm-sums")
+async def get_session_tm_sums(
+    days: Optional[int] = Query(None, description="Zeitraum in Tagen (z.B. 30)"),
+    from_date: Optional[str] = Query(None, description="Startdatum YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="Enddatum YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """Liefert für jede EVCC-Home-Session die Summe der zugeordneten TM-Energie
+    (nur akzeptierte Matches). Läuft das Live-Matching ein MAL für den Zeitraum
+    und gruppiert nach EVCC-Source-ID – so kann das Frontend die Summe direkt
+    in der zugeklappten Session-Zeile anzeigen, ohne für jede Session einen
+    Match-Call machen zu müssen."""
+    from datetime import datetime, timedelta, timezone
+    from app.models.session import SessionModel
+    from app.services.live_matching import run_live_matching_dry_run
+
+    # Zeitraum bestimmen
+    if from_date and to_date:
+        try:
+            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            td = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return {"ok": False, "by_source": {}}
+    elif days:
+        td = datetime.now(timezone.utc)
+        fd = td - timedelta(days=days)
+    else:
+        td = datetime.now(timezone.utc)
+        fd = td - timedelta(days=36500)
+
+    # Alle Home-Sessions im Zeitraum (Datum statt Objekt)
+    home_sessions = db.query(SessionModel).filter(
+        SessionModel.source_type == "home",
+        SessionModel.date >= fd,
+        SessionModel.date <= td + timedelta(days=1)
+    ).all()
+
+    result = await run_live_matching_dry_run(
+        limit=None,
+        from_date=fd.strftime("%Y-%m-%d"),
+        to_date=td.strftime("%Y-%m-%d"),
+        db=db
+    )
+
+    # TM-Summe pro EVCC source_id (nur akzeptierte Kandidaten)
+    by_source = {}
+    for m in result.get("matches", []) if result.get("ok") else []:
+        src_id = str(m.get("evcc_source_id"))
+        actual = [c for c in m.get("matched_charges", []) if c.get("accepted_as_candidate")]
+        tm_sum = round(sum(c.get("energy_kwh") or 0 for c in actual), 2)
+        by_source[src_id] = {
+            "tm_sum_kwh": tm_sum,
+            "tm_count": len(actual),
+            "evcc_energy_kwh": m.get("evcc_energy_kwh"),
+        }
+
+    # Nur Home-Sessions zurueckgeben (auch solche ohne Match)
+    out = []
+    for s in home_sessions:
+        info = by_source.get(str(s.source_id), {})
+        out.append({
+            "session_id": s.id,
+            "source_id": s.source_id,
+            "tm_sum_kwh": info.get("tm_sum_kwh"),
+            "tm_count": info.get("tm_count", 0),
+            "evcc_energy_kwh": info.get("evcc_energy_kwh") if info else s.energy_kwh,
+        })
+
+    return {"ok": True, "data": out}
+
+
 @router.get("/{session_id}/matches")
 async def get_session_matches(
     session_id: int,

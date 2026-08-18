@@ -129,6 +129,8 @@ export function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SessionsTab>('all');
+  // TM-Summen pro EVCC-Session (für Anzeige in der zugeklappten Zeile)
+  const [tmSums, setTmSums] = useState<Map<number, { tm_sum_kwh: number | null; tm_count: number }>>(new Map());
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1, page_size: PAGE_SIZE, total: 0, total_pages: 0, has_next: false, has_prev: false,
   });
@@ -207,28 +209,42 @@ export function SessionsPage() {
     } else if (selectedRange === 'all') days = 36500;
 
     try {
-      let sourceType: string | undefined;
-      if (activeTab === 'home') sourceType = 'home';
-      else if (activeTab === 'external') sourceType = 'external';
+          let sourceType: string | undefined;
+          if (activeTab === 'home') sourceType = 'home';
+          else if (activeTab === 'external') sourceType = 'external';
 
-      const response = await api.getPaginatedSessions({
-        page: pagination.page, page_size: PAGE_SIZE,
-        source_type: sourceType,
-        search: search || undefined,
-        sort_desc: sortDesc,
-        days, from_date, to_date,
-      });
+          const response = await api.getPaginatedSessions({
+            page: pagination.page, page_size: PAGE_SIZE,
+            source_type: sourceType,
+            search: search || undefined,
+            sort_desc: sortDesc,
+            days, from_date, to_date,
+          });
 
-      if (!response.ok) throw new Error('API returned error status');
+          if (!response.ok) throw new Error('API returned error status');
 
-      setSessions(response.data);
-      const totalPages = Math.ceil(response.pagination.total / PAGE_SIZE);
-      setPagination({
-        page: response.pagination.page, page_size: response.pagination.page_size,
-        total: response.pagination.total, total_pages: totalPages,
-        has_next: response.pagination.page < totalPages, has_prev: response.pagination.page > 1,
-      });
-    } catch (err) {
+          setSessions(response.data);
+          const totalPages = Math.ceil(response.pagination.total / PAGE_SIZE);
+          setPagination({
+            page: pagination.page, page_size: pagination.page_size,
+            total: response.pagination.total, total_pages: totalPages,
+            has_next: response.pagination.page < totalPages, has_prev: pagination.page > 1,
+          });
+
+          // TM-Summen für die zugeklappte EVCC-Zeile laden (ein Call für den gesamten Zeitraum)
+          if (activeTab === 'all' || activeTab === 'home') {
+            try {
+              const tmResponse = await api.getSessionTmSums(days, from_date, to_date);
+              const map = new Map<number, { tm_sum_kwh: number | null; tm_count: number }>();
+              for (const item of tmResponse.data || []) {
+                map.set(item.session_id, { tm_sum_kwh: item.tm_sum_kwh, tm_count: item.tm_count });
+              }
+              setTmSums(map);
+            } catch {
+              setTmSums(new Map());
+            }
+          }
+        } catch (err) {
       setError(`Fehler beim Laden: ${err instanceof Error ? err.message : 'Unbekannt'}`);
       setSessions([]);
     } finally {
@@ -414,7 +430,7 @@ export function SessionsPage() {
                   </thead>
                   <tbody>
                     {sessions.map(session => (
-                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} />
+                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} tmSum={tmSums.get(session.id)} />
                     ))}
                   </tbody>
                 </table>
@@ -480,7 +496,7 @@ export function SessionsPage() {
 }
 
 /* ===== Session Row with Expand ===== */
-function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void }) {
+function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () => void; tmSum?: { tm_sum_kwh: number | null; tm_count: number } }) {
   const [expanded, setExpanded] = useState(false);
   const [matchData, setMatchData] = useState<any[] | null>(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
@@ -521,8 +537,20 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
         <td className="text-end">{session.solar_percentage != null ? `${session.solar_percentage.toFixed(0)}%` : '—'}</td>
         <td className="text-end">{session.cost_per_kwh != null ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}</td>
         <td className="text-end">{session.cost_eur != null ? `${session.cost_eur.toFixed(2)} €` : '—'}</td>
-        <td className="text-end">{session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—'}</td>
-        <td className="text-end">{session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'}</td>
+        {/* TM Added: bei EVCC die zugeordnete TM-Summe; bei TM der charge_energy_added */}
+        <td className="text-end">
+          {isHome
+            ? (tmSum?.tm_sum_kwh != null ? tmSum.tm_sum_kwh.toFixed(1) : (session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—'))
+            : (session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—')}
+        </td>
+        {/* TM Used: bei EVCC die Anzahl der zugeordneten TM-Charges als Badge; bei TM der charge_energy_used */}
+        <td className="text-end">
+          {isHome
+            ? (tmSum && tmSum.tm_count > 0
+                ? <span className="sessions-table__tm-sum-badge" title={`${tmSum.tm_count} TM-Charges zugeordnet`}>{tmSum.tm_count}× TM</span>
+                : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'))
+            : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—')}
+        </td>
         <td className="sessions-table__location">{session.location || '—'}</td>
         <td>
           <button className="btn-icon btn-icon--sm" onClick={onEdit} title="Bearbeiten">

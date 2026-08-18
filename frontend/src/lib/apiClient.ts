@@ -256,6 +256,30 @@ export function getUnmatchedCharges(days: number = 36500): Promise<UnmatchedChar
   return request(`/matching/unmatched?days=${days}`);
 }
 
+export interface SessionTmSumsResponse {
+  ok: boolean;
+  data?: {
+    session_id: number;
+    source_id: string;
+    tm_sum_kwh: number | null;
+    tm_count: number;
+    evcc_energy_kwh: number | null;
+  }[];
+}
+
+export function getSessionTmSums(
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<SessionTmSumsResponse> {
+  const p = new URLSearchParams();
+  if (days !== undefined) p.set('days', String(days));
+  if (from_date) p.set('from_date', from_date);
+  if (to_date) p.set('to_date', to_date);
+  const qs = p.toString();
+  return request(`/sessions/tm-sums${qs ? `?${qs}` : ''}`);
+}
+
 export function syncDataSources(): Promise<any> {
   return request('/settings/data-sources/sync', { method: 'POST' });
 }
@@ -390,6 +414,7 @@ export const api = {
   createSessionMatch,
   getMatchingRawData,
   getUnmatchedCharges,
+  getSessionTmSums,
   syncDataSources,
   getVehicleRecords,
   createVehicleRecord,
