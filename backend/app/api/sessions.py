@@ -240,8 +240,10 @@ async def get_session_tm_sums(
         src_id = str(m.get("evcc_source_id"))
         actual = [c for c in m.get("matched_charges", []) if c.get("accepted_as_candidate")]
         tm_sum = round(sum(c.get("energy_kwh") or 0 for c in actual), 2)
+        tm_used_sum = round(sum(c.get("charge_energy_used") or 0 for c in actual), 2)
         by_source[src_id] = {
             "tm_sum_kwh": tm_sum,
+            "tm_used_kwh": tm_used_sum,
             "tm_count": len(actual),
             "evcc_energy_kwh": m.get("evcc_energy_kwh"),
         }
@@ -254,6 +256,7 @@ async def get_session_tm_sums(
             "session_id": s.id,
             "source_id": s.source_id,
             "tm_sum_kwh": info.get("tm_sum_kwh"),
+            "tm_used_kwh": info.get("tm_used_kwh"),
             "tm_count": info.get("tm_count", 0),
             "evcc_energy_kwh": info.get("evcc_energy_kwh") if info else s.energy_kwh,
         })

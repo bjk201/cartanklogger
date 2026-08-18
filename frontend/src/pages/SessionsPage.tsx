@@ -130,7 +130,7 @@ export function SessionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SessionsTab>('all');
   // TM-Summen pro EVCC-Session (für Anzeige in der zugeklappten Zeile)
-  const [tmSums, setTmSums] = useState<Map<number, { tm_sum_kwh: number | null; tm_count: number }>>(new Map());
+  const [tmSums, setTmSums] = useState<Map<number, { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number }>>(new Map());
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1, page_size: PAGE_SIZE, total: 0, total_pages: 0, has_next: false, has_prev: false,
   });
@@ -235,9 +235,9 @@ export function SessionsPage() {
           if (activeTab === 'all' || activeTab === 'home') {
             try {
               const tmResponse = await api.getSessionTmSums(days, from_date, to_date);
-              const map = new Map<number, { tm_sum_kwh: number | null; tm_count: number }>();
+              const map = new Map<number, { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number }>();
               for (const item of tmResponse.data || []) {
-                map.set(item.session_id, { tm_sum_kwh: item.tm_sum_kwh, tm_count: item.tm_count });
+                map.set(item.session_id, { tm_sum_kwh: item.tm_sum_kwh, tm_used_kwh: item.tm_used_kwh, tm_count: item.tm_count });
               }
               setTmSums(map);
             } catch {
@@ -496,7 +496,7 @@ export function SessionsPage() {
 }
 
 /* ===== Session Row with Expand ===== */
-function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () => void; tmSum?: { tm_sum_kwh: number | null; tm_count: number } }) {
+function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () => void; tmSum?: { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number } }) {
   const [expanded, setExpanded] = useState(false);
   const [matchData, setMatchData] = useState<any[] | null>(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
@@ -537,17 +537,17 @@ function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () =
         <td className="text-end">{session.solar_percentage != null ? `${session.solar_percentage.toFixed(0)}%` : '—'}</td>
         <td className="text-end">{session.cost_per_kwh != null ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}</td>
         <td className="text-end">{session.cost_eur != null ? `${session.cost_eur.toFixed(2)} €` : '—'}</td>
-        {/* TM Added: bei EVCC die zugeordnete TM-Summe; bei TM der charge_energy_added */}
+        {/* TM Added: bei EVCC die Summe der zugeordneten TM added; bei TM der charge_energy_added */}
         <td className="text-end">
           {isHome
             ? (tmSum?.tm_sum_kwh != null ? tmSum.tm_sum_kwh.toFixed(1) : (session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—'))
             : (session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—')}
         </td>
-        {/* TM Used: bei EVCC die Anzahl der zugeordneten TM-Charges als Badge; bei TM der charge_energy_used */}
+        {/* TM Used: bei EVCC die Summe der zugeordneten TM used_kwh; bei TM der charge_energy_used */}
         <td className="text-end">
           {isHome
-            ? (tmSum && tmSum.tm_count > 0
-                ? <span className="sessions-table__tm-sum-badge" title={`${tmSum.tm_count} TM-Charges zugeordnet`}>{tmSum.tm_count}× TM</span>
+            ? (tmSum?.tm_used_kwh != null
+                ? <span className="sessions-table__tm-sum-badge" title={`${tmSum.tm_count} TM-Charges summiert (Added ${tmSum.tm_sum_kwh ?? '—'} / Used ${tmSum.tm_used_kwh} kWh)`}>{tmSum.tm_used_kwh.toFixed(1)}</span>
                 : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'))
             : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—')}
         </td>

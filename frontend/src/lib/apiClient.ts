@@ -262,6 +262,7 @@ export interface SessionTmSumsResponse {
     session_id: number;
     source_id: string;
     tm_sum_kwh: number | null;
+    tm_used_kwh: number | null;
     tm_count: number;
     evcc_energy_kwh: number | null;
   }[];
