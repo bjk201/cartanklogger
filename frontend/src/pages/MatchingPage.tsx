@@ -4,14 +4,10 @@ import { useTimeRange, type RangeValue, RANGE_OPTIONS } from '../app/TimeRangeCo
 import { api } from '../lib/apiClient';
 import type { 
   MatchingDryRunResponse, 
-  EVCCSessionMatch, 
+  SessionMatch, 
   MatchedCharge,
   MatchingRawDataResponse,
-  EVCCRawSession,
-  TMRawCharge,
   LiveMatchingDryRunResponse,
-  LiveEVCCSessionMatch,
-  LiveMatchedCharge,
   LiveMatchingStatusResponse
 } from '../types/api';
 import './MatchingPage.css';
@@ -26,8 +22,8 @@ const MatchingPage: React.FC = () => {
   const [liveLoading, setLiveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const [selectedTmCharge, setSelectedTmCharge] = useState<MatchedCharge | LiveMatchedCharge | null>(null);
-  const [selectedEvccSession, setSelectedEvccSession] = useState<EVCCSessionMatch | LiveEVCCSessionMatch | null>(null);
+  const [selectedTmCharge, setSelectedTmCharge] = useState<MatchedCharge | null>(null);
+  const [selectedEvccSession, setSelectedEvccSession] = useState<SessionMatch | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideError, setOverrideError] = useState<string | null>(null);
   const [overrideSuccess, setOverrideSuccess] = useState<string | null>(null);
@@ -93,7 +89,7 @@ const MatchingPage: React.FC = () => {
       setLiveDryRun(response);
       setDataSource('live');
       if (!response.ok) {
-        setError(response.error || 'Live-Matching fehlgeschlagen');
+        setError(response.errors?.[0]?.message || 'Live-Matching fehlgeschlagen');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden der Live-Daten');
@@ -155,7 +151,7 @@ const MatchingPage: React.FC = () => {
     }
   }, [viewMode, fetchRawData]);
 
-  const handleCreateOverride = async (tmCharge: MatchedCharge, evccSession: EVCCSessionMatch) => {
+  const handleCreateOverride = async (tmCharge: MatchedCharge, session_id: number) => {
     if (!overrideReason.trim()) {
       setOverrideError('Grund eingeben');
       return;
@@ -166,12 +162,12 @@ const MatchingPage: React.FC = () => {
     try {
       const response = await api.createMatchingOverride({
         teslamate_charge_id: tmCharge.charge_id,
-        evcc_session_id: evccSession.evcc_session_id,
+        evcc_session_id: session_id,
         override_type: 'manual_assign',
-        reason: overrideReason.trim(),
+        override_reason: overrideReason.trim(),
       });
       if (!response.ok) throw new Error('API Error');
-      setOverrideSuccess(`TM ${tmCharge.charge_id} → EVCC ${evccSession.evcc_session_id} zugewiesen`);
+      setOverrideSuccess(`TM ${tmCharge.charge_id} → EVCC ${session_id} zugewiesen`);
       setOverrideReason('');
       setSelectedTmCharge(null);
       setSelectedEvccSession(null);
@@ -200,7 +196,7 @@ const MatchingPage: React.FC = () => {
     }
   };
 
-  const openAssignModal = (tmCharge: MatchedCharge, evccSession: EVCCSessionMatch) => {
+  const openAssignModal = (tmCharge: MatchedCharge, evccSession: SessionMatch) => {
     setSelectedTmCharge(tmCharge);
     setSelectedEvccSession(evccSession);
     setOverrideReason('');
@@ -210,8 +206,8 @@ const MatchingPage: React.FC = () => {
 
   const openAssignModalForSkipped = (tmCharge: MatchedCharge) => {
     // Find the EVCC session that has the manual override for this TM charge
-    const targetSession = dryRun?.matches.find(m => 
-      m.matched_charges.some(c => 
+    const targetSession = dryRun?.matches?.find(m => 
+      m.matched_charges?.some(c => 
         c.charge_id === tmCharge.charge_id && 
         c.match_source === 'manual_override' && 
         c.accepted_as_candidate
@@ -292,17 +288,18 @@ const MatchingPage: React.FC = () => {
     );
   }
 
-  const { matches, summary } = dryRun || { matches: [], summary: { total_evcc_sessions_checked: 0, total_matched: 0, total_evcc_energy: 0, total_tm_energy: 0 } };
+  const { matches: rawMatches, summary } = dryRun || { matches: [], summary: { total_evcc_sessions_checked: 0, total_matched: 0, total_evcc_energy: 0, total_tm_energy: 0 } };
+  const matches = rawMatches || [];
 
   // Filter matches
-  let filteredMatches = matches;
+  let filteredMatches: SessionMatch[] = matches;
   if (showOnlyWithOverrides) {
     filteredMatches = matches.filter(m => 
-      m.matched_charges.some(c => c.match_source === 'manual_override' || c.skipped_due_to_other_override)
+      m.matched_charges?.some(c => c.match_source === 'manual_override' || c.skipped_due_to_other_override)
     );
   }
 
-  const allCharges = filteredMatches.flatMap(m => m.matched_charges);
+  const allCharges = filteredMatches.flatMap(m => m.matched_charges || []);
   const manualCharges = allCharges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
   const skippedCharges = allCharges.filter(c => c.skipped_due_to_other_override);
   const autoCharges = allCharges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
@@ -392,7 +389,7 @@ const MatchingPage: React.FC = () => {
       {liveDryRun && !liveDryRun.ok && viewMode === 'live' && (
         <div className="matching-page__live-banner matching-page__live-banner--error">
           <AlertTriangle className="matching-page__live-banner-icon" />
-          <span>{liveDryRun.error || 'Live-Matching fehlgeschlagen'}</span>
+          <span>{liveDryRun.errors?.[0]?.message || 'Live-Matching fehlgeschlagen'}</span>
           {liveDryRun.config_missing && (
             <a href="/settings" className="matching-page__live-banner-link">Einstellungen konfigurieren</a>
           )}
@@ -410,11 +407,11 @@ const MatchingPage: React.FC = () => {
         <section className="matching-page__summary">
           <div className="matching-page__summary-grid">
             <div className="matching-page__summary-card">
-              <div className="matching-page__summary-value">{summary.total_evcc_sessions_checked}</div>
+              <div className="matching-page__summary-value">{summary?.total_evcc_sessions_checked ?? 0}</div>
               <div className="matching-page__summary-label">EVCC Sessions geprüft</div>
             </div>
             <div className="matching-page__summary-card matching-page__summary-card--matched">
-              <div className="matching-page__summary-value">{summary.total_matched}</div>
+              <div className="matching-page__summary-value">{summary?.total_matched ?? 0}</div>
               <div className="matching-page__summary-label">Mit Matches</div>
             </div>
             <div className="matching-page__summary-card matching-page__summary-card--manual">
@@ -426,11 +423,11 @@ const MatchingPage: React.FC = () => {
               <div className="matching-page__summary-label">Skipped (anderer Override)</div>
             </div>
             <div className="matching-page__summary-card">
-              <div className="matching-page__summary-value">{summary.total_evcc_energy.toFixed(1)}</div>
+              <div className="matching-page__summary-value">{summary?.total_evcc_energy?.toFixed(1) ?? '—'}</div>
               <div className="matching-page__summary-label">EVCC Energie (kWh)</div>
             </div>
             <div className="matching-page__summary-card">
-              <div className="matching-page__summary-value">{summary.total_tm_energy.toFixed(1)}</div>
+              <div className="matching-page__summary-value">{summary?.total_tm_energy?.toFixed(1) ?? '—'}</div>
               <div className="matching-page__summary-label">TM Energie gematcht (kWh)</div>
             </div>
           </div>
@@ -455,31 +452,31 @@ const MatchingPage: React.FC = () => {
               {/* Summary Cards for Live */}
               <div className="matching-page__live-summary">
                 <div className="matching-page__live-summary-card">
-                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_evcc_sessions_checked}</div>
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary?.total_evcc_sessions_checked ?? 0}</div>
                   <div className="matching-page__live-summary-label">EVCC Sessions (Live)</div>
                 </div>
                 <div className="matching-page__live-summary-card matching-page__live-summary-card--matched">
-                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_matched}</div>
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary?.total_matched ?? 0}</div>
                   <div className="matching-page__live-summary-label">Mit Matches</div>
                 </div>
                 <div className="matching-page__live-summary-card matching-page__live-summary-card--manual">
                   <div className="matching-page__live-summary-value">
-                    {liveDryRun.matches.flatMap(m => m.matched_charges).filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate).length}
+                    {(liveDryRun.matches ?? []).flatMap(m => m.matched_charges ?? []).filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate).length}
                   </div>
                   <div className="matching-page__live-summary-label">Manuelle Overrides</div>
                 </div>
                 <div className="matching-page__live-summary-card matching-page__live-summary-card--skipped">
                   <div className="matching-page__live-summary-value">
-                    {liveDryRun.matches.flatMap(m => m.matched_charges).filter(c => c.skipped_due_to_other_override).length}
+                    {(liveDryRun.matches ?? []).flatMap(m => m.matched_charges ?? []).filter(c => c.skipped_due_to_other_override).length}
                   </div>
                   <div className="matching-page__live-summary-label">Skipped (anderer Override)</div>
                 </div>
                 <div className="matching-page__live-summary-card">
-                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_evcc_energy.toFixed(1)}</div>
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary?.total_evcc_energy?.toFixed(1) ?? '—'}</div>
                   <div className="matching-page__live-summary-label">EVCC Energie (kWh)</div>
                 </div>
                 <div className="matching-page__live-summary-card">
-                  <div className="matching-page__live-summary-value">{liveDryRun.summary.total_tm_energy.toFixed(1)}</div>
+                  <div className="matching-page__live-summary-value">{liveDryRun.summary?.total_tm_energy?.toFixed(1) ?? '—'}</div>
                   <div className="matching-page__live-summary-label">TM Energie gematcht (kWh)</div>
                 </div>
               </div>
@@ -487,14 +484,15 @@ const MatchingPage: React.FC = () => {
               {/* Matches List - Live */}
               <section className="matching-page__live-matches">
                 <h2>Live Matching Details</h2>
-                {liveDryRun.matches.length === 0 ? (
+                {(liveDryRun.matches ?? []).length === 0 ? (
                   <p className="matching-page__empty">Keine EVCC Sessions von der Live-API gefunden</p>
                 ) : (
-                  liveDryRun.matches.map((session) => {
-                    const manualMatches = session.matched_charges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
-                    const skippedMatches = showSkipped ? session.matched_charges.filter(c => c.skipped_due_to_other_override) : [];
-                    const autoMatches = session.matched_charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
-                    const rejectedMatches = session.matched_charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
+                  (liveDryRun.matches ?? []).map((session) => {
+                    const charges = session.matched_charges ?? [];
+                    const manualMatches = charges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
+                    const skippedMatches = showSkipped ? charges.filter(c => c.skipped_due_to_other_override) : [];
+                    const autoMatches = charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
+                    const rejectedMatches = charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
 
                     if (manualMatches.length === 0 && skippedMatches.length === 0 && autoMatches.length === 0 && rejectedMatches.length === 0) {
                       return null;
@@ -507,7 +505,7 @@ const MatchingPage: React.FC = () => {
                             <span className="matching-page__session-id">EVCC #{session.evcc_session_id}</span>
                             <span className="matching-page__session-source">{session.evcc_source_id}</span>
                             <span className="matching-page__session-time">
-                              {new Date(session.evcc_start).toLocaleString('de-DE')}
+                              {session.evcc_start ? new Date(session.evcc_start).toLocaleString('de-DE') : '—'}
                             </span>
                             <span className="matching-page__session-energy">
                               {session.evcc_energy_kwh?.toFixed(1)} kWh
@@ -736,7 +734,7 @@ const MatchingPage: React.FC = () => {
           ) : (
             <div className="matching-page__live-error">
               <AlertTriangle className="matching-page__live-error-icon" />
-              <p>{liveDryRun.error || 'Live-Matching fehlgeschlagen'}</p>
+              <p>{liveDryRun.errors?.[0]?.message || 'Live-Matching fehlgeschlagen'}</p>
               {liveDryRun.config_missing && (
                 <a href="/settings" className="btn btn--primary">Einstellungen konfigurieren</a>
               )}
@@ -780,7 +778,7 @@ const MatchingPage: React.FC = () => {
               <section className="matching-page__raw-section">
                 <h3>
                   <Server className="matching-page__section-icon" />
-                  EVCC Sessions (Home) — {rawData.total_evcc} Sessions
+                  EVCC Sessions (Home) — {rawData.total_evcc ?? 0} Sessions
                 </h3>
                 <div className="matching-page__raw-table-container">
                   <table className="matching-page__raw-table">
@@ -801,7 +799,7 @@ const MatchingPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {rawData.evcc_sessions.map((evcc) => (
+                      {rawData.evcc_sessions?.map((evcc: any) => (
                         <tr key={evcc.evcc_session_id}>
                           <td>#{evcc.evcc_session_id}</td>
                           <td>{evcc.created ? new Date(evcc.created).toLocaleString('de-DE') : '—'}</td>
@@ -840,7 +838,7 @@ const MatchingPage: React.FC = () => {
                   <Link className="matching-page__section-icon" />
                   TeslaMateAPI — Zuhause — {rawData.home_tm_charges} Charges
                 </h3>
-                {rawData.home_tm_charges === 0 ? (
+                {(rawData.home_tm_charges ?? 0) === 0 ? (
                   <p className="matching-page__raw-empty">Keine TeslaMate-Charges mit Location "Zuhause" gefunden.</p>
                 ) : (
                   <div className="matching-page__raw-table-container">
@@ -863,8 +861,7 @@ const MatchingPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {rawData.teslamate_charges
-                          .filter(c => c.is_home_location)
+                        {rawData.teslamate_charges?.filter(c => c.is_home_location)
                           .map((tm) => (
                             <tr key={tm.charge_id} className={tm.override ? 'matching-page__raw-row--override' : ''}>
                               <td>#{tm.charge_id}</td>
@@ -940,8 +937,7 @@ const MatchingPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {rawData.teslamate_charges
-                        .filter(c => !c.is_home_location)
+                      {rawData.teslamate_charges?.filter(c => !c.is_home_location)
                         .map((tm) => (
                           <tr key={tm.charge_id} className={tm.override ? 'matching-page__raw-row--override' : ''}>
                             <td>#{tm.charge_id}</td>
@@ -1050,7 +1046,7 @@ const MatchingPage: React.FC = () => {
               <button className="btn btn--secondary" onClick={closeModal}>Abbrechen</button>
               <button
                 className="btn btn--primary"
-                onClick={() => handleCreateOverride(selectedTmCharge!, selectedEvccSession!)}
+                onClick={() => handleCreateOverride(selectedTmCharge!, selectedEvccSession?.evcc_session_id ?? 0)}
                 disabled={saving === `create-${selectedTmCharge.charge_id}` || !overrideReason.trim()}
               >
                 {saving === `create-${selectedTmCharge.charge_id}` ? (
@@ -1076,10 +1072,11 @@ const MatchingPage: React.FC = () => {
           <p className="matching-page__empty">Keine Sessions mit aktuellen Filtern</p>
         ) : (
           filteredMatches.map((session) => {
-            const manualMatches = session.matched_charges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
-            const skippedMatches = showSkipped ? session.matched_charges.filter(c => c.skipped_due_to_other_override) : [];
-            const autoMatches = session.matched_charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
-            const rejectedMatches = session.matched_charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
+            const charges = session.matched_charges || [];
+            const manualMatches = charges.filter(c => c.match_source === 'manual_override' && c.accepted_as_candidate);
+            const skippedMatches = showSkipped ? charges.filter(c => c.skipped_due_to_other_override) : [];
+            const autoMatches = charges.filter(c => c.match_source === 'auto' && c.accepted_as_candidate && !c.skipped_due_to_other_override);
+            const rejectedMatches = charges.filter(c => !c.accepted_as_candidate && !c.skipped_due_to_other_override);
 
             // Show session if it has ANY charges (manual, skipped, auto, or rejected)
             if (manualMatches.length === 0 && skippedMatches.length === 0 && autoMatches.length === 0 && rejectedMatches.length === 0) {
@@ -1093,7 +1090,7 @@ const MatchingPage: React.FC = () => {
                     <span className="matching-page__session-id">EVCC #{session.evcc_session_id}</span>
                     <span className="matching-page__session-source">{session.evcc_source_id}</span>
                     <span className="matching-page__session-time">
-                      {new Date(session.evcc_start).toLocaleString('de-DE')}
+                      {session.evcc_start ? new Date(session.evcc_start).toLocaleString('de-DE') : '—'}
                     </span>
                     <span className="matching-page__session-energy">
                       {session.evcc_energy_kwh?.toFixed(1)} kWh

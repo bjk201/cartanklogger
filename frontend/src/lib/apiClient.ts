@@ -1,26 +1,25 @@
+// API Client for CarTankLogger 2.0
+// Re-exports all types from types/api.ts and provides API functions
+
 import type {
+  Session,
+  PaginationInfo,
   OverviewResponse,
   OverviewSummaryResponse,
-  Session,
-  HealthResponse,
   PaginatedSessionsResponse,
-  PaginationInfo,
-  StatisticsResponse,
   StatisticsKPIs,
   SourceBreakdown,
-  DataSourceStatusResponse,
-  DataSourceConfigRead,
-  DataSourceConfigWrite,
-  DataSourceConfigTestRequest,
-  DataSourceConfigTestResponse,
+  StatisticsResponse,
+  MatchedCharge,
+  SessionMatch,
+  SessionMatchesResponse,
+  SessionMatchActionResponse,
+  UnmatchedChargeItem,
+  UnmatchedChargesResponse,
+  MatchingSummary,
   MatchingDryRunResponse,
-  MatchingOverrideCreate,
-  MatchingOverrideRead,
-  MatchingOverrideListResponse,
-  MatchingOverrideSingleResponse,
-  MatchingRawDataResponse,
   LiveMatchingDryRunResponse,
-  LiveMatchingStatusResponse,
+  MatchingRawDataResponse,
   VehicleInfoResponse,
   VehicleRecordRead,
   VehicleRecordCreate,
@@ -32,298 +31,381 @@ import type {
   ExtraCostUpdate,
   ExtraCostListResponse,
   ExtraCostSingleResponse,
-  MetaInfo,
-  ErrorDetail,
-} from '../types/api';
-
-const API_BASE = '/api';
-
-class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
-async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    throw new ApiError(response.status, `API Error: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
-export const api = {
-  async health(): Promise<HealthResponse> {
-    return fetchJson<HealthResponse>('/health');
-  },
-
-  async getRecentSessions(limit: number = 100, days?: number, from_date?: string, to_date?: string): Promise<OverviewResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.set('limit', limit.toString());
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    return fetchJson<OverviewResponse>(`/overview/recent-sessions?${searchParams.toString()}`);
-  },
-
-  async getSessions(params?: {
-    page?: number;
-    page_size?: number;
-    source_type?: string;
-    search?: string;
-    sort_desc?: boolean;
-    days?: number;
-    from_date?: string;
-    to_date?: string;
-  }): Promise<OverviewResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.page !== undefined) searchParams.set('page', params.page.toString());
-    if (params?.page_size !== undefined) searchParams.set('page_size', params.page_size.toString());
-    if (params?.source_type) searchParams.set('source_type', params.source_type);
-    if (params?.search) searchParams.set('search', params.search);
-    if (params?.sort_desc !== undefined) searchParams.set('sort_desc', params.sort_desc.toString());
-    if (params?.days) searchParams.set('days', params.days.toString());
-    if (params?.from_date) searchParams.set('from_date', params.from_date);
-    if (params?.to_date) searchParams.set('to_date', params.to_date);
-    const query = searchParams.toString();
-    return fetchJson<OverviewResponse>(`/sessions${query ? `?${query}` : ''}`);
-  },
-
-  async getPaginatedSessions(params: {
-    page: number;
-    page_size: number;
-    source_type?: string;
-    search?: string;
-    sort_desc?: boolean;
-    days?: number;
-    from_date?: string;
-    to_date?: string;
-  }): Promise<PaginatedSessionsResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.set('page', params.page.toString());
-    searchParams.set('page_size', params.page_size.toString());
-    if (params.source_type) searchParams.set('source_type', params.source_type);
-    if (params.search) searchParams.set('search', params.search);
-    if (params.sort_desc !== undefined) searchParams.set('sort_desc', params.sort_desc.toString());
-    if (params.days) searchParams.set('days', params.days.toString());
-    if (params.from_date) searchParams.set('from_date', params.from_date);
-    if (params.to_date) searchParams.set('to_date', params.to_date);
-    return fetchJson<PaginatedSessionsResponse>(`/sessions?${searchParams.toString()}`);
-  },
-
-  async getStatistics(days?: number, from_date?: string, to_date?: string): Promise<StatisticsResponse> {
-    const searchParams = new URLSearchParams();
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    const query = searchParams.toString();
-    return fetchJson<StatisticsResponse>(`/statistics${query ? `?${query}` : ''}`);
-  },
-
-  async getOverviewSummary(days?: number, from_date?: string, to_date?: string): Promise<OverviewSummaryResponse> {
-    const searchParams = new URLSearchParams();
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    const query = searchParams.toString();
-    return fetchJson<OverviewSummaryResponse>(`/overview/summary${query ? `?${query}` : ''}`);
-  },
-
-  async getDataSourceStatus(): Promise<DataSourceStatusResponse> {
-    return fetchJson<DataSourceStatusResponse>(`/status`);
-  },
-
-  // Data Sources Settings
-  async getDataSourceConfig(): Promise<DataSourceConfigRead> {
-    return fetchJson<DataSourceConfigRead>(`/settings/data-sources`);
-  },
-
-  async saveDataSourceConfig(config: DataSourceConfigWrite): Promise<DataSourceConfigRead> {
-    return fetchJson<DataSourceConfigRead>(`/settings/data-sources`, {
-      method: 'POST',
-      body: JSON.stringify(config),
-    });
-  },
-
-  async testDataSourceConnection(request: DataSourceConfigTestRequest): Promise<DataSourceConfigTestResponse> {
-    return fetchJson<DataSourceConfigTestResponse>(`/settings/data-sources/test`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
-  },
-
-  // Matching
-  async getMatchingDryRun(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<MatchingDryRunResponse> {
-    const searchParams = new URLSearchParams();
-    if (limit) searchParams.set('limit', limit.toString());
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    const query = searchParams.toString();
-    return fetchJson<MatchingDryRunResponse>(`/matching/dry-run${query ? `?${query}` : ''}`);
-  },
-
-  async getMatchingRawData(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<MatchingRawDataResponse> {
-    const searchParams = new URLSearchParams();
-    if (limit) searchParams.set('limit', limit.toString());
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    const query = searchParams.toString();
-    return fetchJson<MatchingRawDataResponse>(`/matching/raw-data${query ? `?${query}` : ''}`);
-  },
-
-  async getMatchingOverrides(): Promise<MatchingOverrideListResponse> {
-    return fetchJson<MatchingOverrideListResponse>(`/matching/overrides`);
-  },
-
-  async createMatchingOverride(payload: MatchingOverrideCreate): Promise<MatchingOverrideSingleResponse> {
-    return fetchJson<MatchingOverrideSingleResponse>(`/matching/overrides`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-
-  async deleteMatchingOverride(overrideId: number): Promise<MatchingOverrideSingleResponse> {
-    return fetchJson<MatchingOverrideSingleResponse>(`/matching/overrides/${overrideId}`, {
-      method: 'DELETE',
-    });
-  },
-
-    // Live Matching
-  async getMatchingLiveStatus(): Promise<LiveMatchingStatusResponse> {
-    return fetchJson<LiveMatchingStatusResponse>('/matching/dry-run/status');
-  },
-
-  async getMatchingDryRunLive(limit?: number, days?: number, from_date?: string, to_date?: string): Promise<LiveMatchingDryRunResponse> {
-    const searchParams = new URLSearchParams();
-    if (limit) searchParams.set('limit', limit.toString());
-    if (days) searchParams.set('days', days.toString());
-    if (from_date) searchParams.set('from_date', from_date);
-    if (to_date) searchParams.set('to_date', to_date);
-    const query = searchParams.toString();
-    return fetchJson<LiveMatchingDryRunResponse>(`/matching/dry-run/live${query ? `?${query}` : ''}`);
-  },
-
-  // Vehicle
-  async getVehicleInfo(): Promise<VehicleInfoResponse> {
-    return fetchJson<VehicleInfoResponse>('/vehicle/info');
-  },
-  async getVehicleRecords(): Promise<VehicleRecordsResponse> {
-    return fetchJson<VehicleRecordsResponse>('/vehicle/records');
-  },
-  async createVehicleRecord(payload: VehicleRecordCreate): Promise<VehicleSingleResponse> {
-    return fetchJson<VehicleSingleResponse>('/vehicle/records', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-  async updateVehicleRecord(id: number, payload: VehicleRecordUpdate): Promise<VehicleSingleResponse> {
-    return fetchJson<VehicleSingleResponse>(`/vehicle/records/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-  },
-  async deleteVehicleRecord(id: number): Promise<VehicleSingleResponse> {
-    return fetchJson<VehicleSingleResponse>(`/vehicle/records/${id}`, {
-      method: 'DELETE',
-    });
-  },
-  async replaceTire(id: number): Promise<VehicleSingleResponse> {
-    return fetchJson<VehicleSingleResponse>(`/vehicle/records/${id}/replace-tire`, {
-      method: 'PUT',
-    });
-  },
-
-  // Extra Costs
-  async getExtraCosts(): Promise<ExtraCostListResponse> {
-    return fetchJson<ExtraCostListResponse>('/extra-costs');
-  },
-  async getExtraCost(id: number): Promise<ExtraCostSingleResponse> {
-    return fetchJson<ExtraCostSingleResponse>(`/extra-costs/${id}`);
-  },
-  async createExtraCost(payload: ExtraCostCreate): Promise<ExtraCostSingleResponse> {
-    return fetchJson<ExtraCostSingleResponse>('/extra-costs', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-  async updateExtraCost(id: number, payload: ExtraCostUpdate): Promise<ExtraCostSingleResponse> {
-    return fetchJson<ExtraCostSingleResponse>(`/extra-costs/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-  },
-  async deleteExtraCost(id: number): Promise<ExtraCostSingleResponse> {
-    return fetchJson<ExtraCostSingleResponse>(`/extra-costs/${id}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // Data Source Sync
-  async syncDataSources(): Promise<{ ok: boolean; result?: any }> {
-    return fetchJson<{ ok: boolean; result?: any }>('/settings/data-sources/sync', { method: 'POST' });
-  },
-
-  // Session Matches (new)
-  async getSessionMatches(sessionId: number): Promise<SessionMatchesResponse> {
-    return fetchJson<SessionMatchesResponse>(`/sessions/${sessionId}/matches`);
-  },
-
-  async createSessionMatch(sessionId: number, tmChargeId: number): Promise<SessionMatchActionResponse> {
-    return fetchJson<SessionMatchActionResponse>(`/sessions/${sessionId}/match`, {
-      method: 'POST',
-      body: JSON.stringify({ tm_charge_id: tmChargeId }),
-    });
-  },
-
-  async removeSessionMatch(sessionId: number, tmChargeId: number): Promise<SessionMatchActionResponse> {
-    return fetchJson<SessionMatchActionResponse>(`/sessions/${sessionId}/match/${tmChargeId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // Unmatched TM Charges (live from TM API)
-  async getUnmatchedCharges(days?: number): Promise<UnmatchedChargesResponse> {
-    const params = new URLSearchParams();
-    if (days) params.set('days', days.toString());
-    return fetchJson<UnmatchedChargesResponse>(`/matching/unmatched${params.toString() ? `?${params.toString()}` : ''}`);
-  },
-};
-
-export { ApiError };
-export type {
-  OverviewResponse,
-  OverviewSummaryResponse,
-  Session,
-  HealthResponse,
-  PaginatedSessionsResponse,
-  PaginationInfo,
-  StatisticsResponse,
-  StatisticsKPIs,
-  SourceBreakdown,
-  DataSourceStatusResponse,
+  MatchingOverrideCreate,
+  MatchingOverrideRead,
+  MatchingOverrideListResponse,
+  MatchingOverrideSingleResponse,
+  MatchingOverrideUpdate,
   DataSourceConfigRead,
   DataSourceConfigWrite,
   DataSourceConfigTestRequest,
   DataSourceConfigTestResponse,
+  HealthResponse,
+  DataSourceStatusResponse,
+  LiveMatchingStatusResponse,
+  ExtraCostCategory,
+} from '../types/api';
+
+// Re-export all types for consumers
+export type {
+  Session,
+  PaginationInfo,
+  OverviewResponse,
+  OverviewSummaryResponse,
+  PaginatedSessionsResponse,
+  StatisticsKPIs,
+  SourceBreakdown,
+  StatisticsResponse,
+  MatchedCharge,
+  SessionMatch,
+  SessionMatchesResponse,
+  SessionMatchActionResponse,
+  UnmatchedChargeItem,
+  UnmatchedChargesResponse,
+  MatchingSummary,
+  MatchingDryRunResponse,
+  LiveMatchingDryRunResponse,
   MatchingRawDataResponse,
   VehicleInfoResponse,
-  SessionMatchesResponse,
-  SessionMatchItem,
-  SessionMatchActionResponse,
-  UnmatchedChargesResponse,
-  UnmatchedChargeItem,
-  MetaInfo,
-  ErrorDetail,
-} from '../types/api';
+  VehicleRecordRead,
+  VehicleRecordCreate,
+  VehicleRecordUpdate,
+  VehicleRecordsResponse,
+  VehicleSingleResponse,
+  ExtraCostRead,
+  ExtraCostCreate,
+  ExtraCostUpdate,
+  ExtraCostListResponse,
+  ExtraCostSingleResponse,
+  MatchingOverrideCreate,
+  MatchingOverrideRead,
+  MatchingOverrideListResponse,
+  MatchingOverrideSingleResponse,
+  MatchingOverrideUpdate,
+  DataSourceConfigRead,
+  DataSourceConfigWrite,
+  DataSourceConfigTestRequest,
+  DataSourceConfigTestResponse,
+  HealthResponse,
+  DataSourceStatusResponse,
+  LiveMatchingStatusResponse,
+  ExtraCostCategory,
+};
+
+// ===== API Functions =====
+
+const API_BASE = '/api';
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+// --- Health ---
+export function health(): Promise<HealthResponse> {
+  return request('/health');
+}
+
+// --- Overview ---
+export function getOverviewData(): Promise<OverviewResponse> {
+  return request('/overview/recent-sessions');
+}
+
+export function getRecentSessions(
+  limit: number = 100,
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<OverviewResponse> {
+  const p = new URLSearchParams();
+  p.set('limit', String(limit));
+  if (days !== undefined) p.set('days', String(days));
+  if (from_date) p.set('from_date', from_date);
+  if (to_date) p.set('to_date', to_date);
+  return request(`/overview/recent-sessions?${p.toString()}`);
+}
+
+export function getOverviewSummary(
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<OverviewSummaryResponse> {
+  const p = new URLSearchParams();
+  if (days !== undefined) p.set('days', String(days));
+  if (from_date) p.set('from_date', from_date);
+  if (to_date) p.set('to_date', to_date);
+  const qs = p.toString();
+  return request(`/overview/summary${qs ? `?${qs}` : ''}`);
+}
+
+// --- Statistics ---
+export function getStatisticsData(): Promise<StatisticsResponse> {
+  return request('/statistics');
+}
+
+export function getStatistics(
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<StatisticsResponse> {
+  const params = new URLSearchParams();
+  if (days !== undefined) params.set('days', String(days));
+  if (from_date) params.set('from_date', from_date);
+  if (to_date) params.set('to_date', to_date);
+  const qs = params.toString();
+  return request(`/statistics${qs ? `?${qs}` : ''}`);
+}
+
+// --- Data Source ---
+export function getDataSourceStatus(): Promise<DataSourceStatusResponse> {
+  return request('/status');
+}
+
+export function getDataSourceConfig(): Promise<DataSourceConfigRead> {
+  return request('/settings/data-sources');
+}
+
+export function saveDataSourceConfig(payload: DataSourceConfigWrite): Promise<DataSourceConfigRead> {
+  return request('/settings/data-sources', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function testDataSourceConnection(payload: DataSourceConfigTestRequest): Promise<DataSourceConfigTestResponse> {
+  return request('/settings/data-sources/test', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveConfig(payload: any): Promise<any> {
+  return request('/settings/data-sources', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Sessions ---
+export interface GetSessionsParams {
+  page?: number;
+  page_size?: number;
+  source_type?: string;
+  search?: string;
+  sort_desc?: boolean;
+  days?: number;
+  from_date?: string;
+  to_date?: string;
+}
+
+export function getPaginatedSessions(params: GetSessionsParams = {}): Promise<PaginatedSessionsResponse> {
+  const p = new URLSearchParams();
+  if (params.page !== undefined) p.set('page', String(params.page));
+  if (params.page_size !== undefined) p.set('page_size', String(params.page_size));
+  if (params.source_type) p.set('source_type', params.source_type);
+  if (params.search) p.set('search', params.search);
+  if (params.sort_desc !== undefined) p.set('sort_desc', String(params.sort_desc));
+  if (params.days !== undefined) p.set('days', String(params.days));
+  if (params.from_date) p.set('from_date', params.from_date);
+  if (params.to_date) p.set('to_date', params.to_date);
+  const qs = p.toString();
+  return request(`/sessions${qs ? `?${qs}` : ''}`);
+}
+
+export function getSessions(params: GetSessionsParams = {}): Promise<PaginatedSessionsResponse> {
+  return getPaginatedSessions(params);
+}
+
+// --- Session Matches ---
+export function getSessionMatches(sessionId: number): Promise<SessionMatchesResponse> {
+  return request(`/sessions/${sessionId}/matches`);
+}
+
+export function createSessionMatch(
+  sessionId: number,
+  tmChargeId: number
+): Promise<SessionMatchActionResponse> {
+  return request(`/sessions/${sessionId}/match`, {
+    method: 'POST',
+    body: JSON.stringify({ tm_charge_id: tmChargeId }),
+  });
+}
+
+// --- Matching ---
+export function getMatchingRawData(
+  limit?: number,
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<MatchingRawDataResponse> {
+  const p = new URLSearchParams();
+  if (limit !== undefined) p.set('limit', String(limit));
+  if (days !== undefined) p.set('days', String(days));
+  if (from_date) p.set('from_date', from_date);
+  if (to_date) p.set('to_date', to_date);
+  return request(`/matching/raw-data?${p.toString()}`);
+}
+
+export function getUnmatchedCharges(days: number = 36500): Promise<UnmatchedChargesResponse> {
+  return request(`/matching/unmatched?days=${days}`);
+}
+
+export function syncDataSources(): Promise<any> {
+  return request('/settings/data-sources/sync', { method: 'POST' });
+}
+
+// --- Vehicle Records ---
+export function getVehicleRecords(): Promise<VehicleRecordsResponse> {
+  return request('/vehicle/records');
+}
+
+export function createVehicleRecord(data: VehicleRecordCreate): Promise<VehicleSingleResponse> {
+  return request('/vehicle/records', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateVehicleRecord(id: number, data: VehicleRecordUpdate): Promise<VehicleSingleResponse> {
+  return request(`/vehicle/records/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteVehicleRecord(id: number): Promise<any> {
+  return request(`/vehicle/records/${id}`, { method: 'DELETE' });
+}
+
+// --- Extra Costs ---
+export function getExtraCosts(): Promise<ExtraCostListResponse> {
+  return request('/extra-costs');
+}
+
+export function createExtraCost(data: ExtraCostCreate): Promise<ExtraCostSingleResponse> {
+  return request('/extra-costs', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateExtraCost(id: number, data: ExtraCostUpdate): Promise<ExtraCostSingleResponse> {
+  return request(`/extra-costs/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteExtraCost(id: number): Promise<any> {
+  return request(`/extra-costs/${id}`, { method: 'DELETE' });
+}
+
+// --- Matching Overrides ---
+export function getMatchingOverrides(): Promise<MatchingOverrideListResponse> {
+  return request('/matching/overrides');
+}
+
+export function createMatchingOverride(data: MatchingOverrideCreate): Promise<MatchingOverrideSingleResponse> {
+  return request('/matching/overrides', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateMatchingOverride(id: number, data: MatchingOverrideUpdate): Promise<MatchingOverrideSingleResponse> {
+  return request(`/matching/overrides/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteMatchingOverride(id: number): Promise<any> {
+  return request(`/matching/overrides/${id}`, { method: 'DELETE' });
+}
+
+// --- Live Matching ---
+export function getMatchingDryRun(
+  limit: number = 200,
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<MatchingDryRunResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (days !== undefined) params.set('days', String(days));
+  if (from_date) params.set('from_date', from_date);
+  if (to_date) params.set('to_date', to_date);
+  return request(`/matching/dry-run?${params.toString()}`);
+}
+
+export function getMatchingDryRunLive(
+  limit: number = 200,
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<LiveMatchingDryRunResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (days !== undefined) params.set('days', String(days));
+  if (from_date) params.set('from_date', from_date);
+  if (to_date) params.set('to_date', to_date);
+  return request(`/matching/dry-run/live?${params.toString()}`);
+}
+
+export function getMatchingLiveStatus(): Promise<LiveMatchingStatusResponse> {
+  return request('/matching/dry-run/status');
+}
+
+export function getLiveMatchingStatus(): Promise<LiveMatchingStatusResponse> {
+  return request('/matching/dry-run/status');
+}
+
+// --- Vehicle Info ---
+export function getVehicleInfo(): Promise<VehicleInfoResponse> {
+  return request('/vehicle/info');
+}
+
+// ===== API Object (convenience wrapper) =====
+export const api = {
+  health,
+  getOverviewData,
+  getRecentSessions,
+  getOverviewSummary,
+  getStatisticsData,
+  getStatistics,
+  getDataSourceStatus,
+  getDataSourceConfig,
+  saveDataSourceConfig,
+  testDataSourceConnection,
+  saveConfig,
+  getPaginatedSessions,
+  getSessions,
+  getSessionMatches,
+  createSessionMatch,
+  getMatchingRawData,
+  getUnmatchedCharges,
+  syncDataSources,
+  getVehicleRecords,
+  createVehicleRecord,
+  updateVehicleRecord,
+  deleteVehicleRecord,
+  getExtraCosts,
+  createExtraCost,
+  updateExtraCost,
+  deleteExtraCost,
+  getMatchingOverrides,
+  createMatchingOverride,
+  updateMatchingOverride,
+  deleteMatchingOverride,
+  getLiveMatchingStatus,
+  getMatchingDryRun,
+  getMatchingDryRunLive,
+  getMatchingLiveStatus,
+  getVehicleInfo,
+};

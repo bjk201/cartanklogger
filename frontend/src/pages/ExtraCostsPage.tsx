@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/apiClient';
-import type { ExtraCostRead, ExtraCostCreate, ExtraCostUpdate, ExtraCostCategory, VehicleRecordRead } from '../types/api';
+import type { ExtraCostRead, ExtraCostCreate, ExtraCostUpdate, VehicleRecordRead } from '../types/api';
 import './ExtraCostsPage.css';
 
 // ─── Category labels (German) ──────────────────────────────
-const CATEGORY_LABELS: Record<ExtraCostCategory, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   VERSICHERUNG: 'Versicherung',
   ZUBEHOER: 'Zubehör',
   STEUER: 'Steuer',
@@ -12,7 +12,7 @@ const CATEGORY_LABELS: Record<ExtraCostCategory, string> = {
   REIFENKAUF: 'Reifenkauf',
 };
 
-const CATEGORY_OPTIONS: { value: ExtraCostCategory; label: string }[] = [
+const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'VERSICHERUNG', label: 'Versicherung' },
   { value: 'ZUBEHOER', label: 'Zubehör' },
   { value: 'STEUER', label: 'Steuer' },
@@ -25,11 +25,13 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
   return dateStr.slice(0, 10);
 }
 
-function formatEuro(value: number): string {
+function formatEuro(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
   return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 }
 
@@ -75,7 +77,7 @@ interface DeleteConfirmProps {
 const DeleteConfirmModal: React.FC<DeleteConfirmProps> = ({ record, onConfirm, onCancel, deleting }) => (
   <Modal title="Eintrag löschen" onClose={onCancel}>
     <div className="delete-confirm">
-      <p>Soll der Eintrag <strong>"{record.title}"</strong> ({formatEuro(record.cost_eur)}) wirklich gelöscht werden?</p>
+      <p>Soll der Eintrag <strong>"{record.description}"</strong> ({formatEuro(record.amount)}) wirklich gelöscht werden?</p>
       <div className="form-actions">
         <button className="btn-secondary" onClick={onCancel} disabled={deleting}>Abbrechen</button>
         <button className="btn-danger" onClick={onConfirm} disabled={deleting}>
@@ -98,10 +100,10 @@ const ExtraCostFormModal: React.FC<ExtraCostFormModalProps> = ({ onClose, onSave
   const isEdit = !!editRecord;
 
   const [date, setDate] = useState(editRecord ? formatDate(editRecord.date) : todayStr());
-  const [category, setCategory] = useState<ExtraCostCategory>(editRecord?.category || 'VERSICHERUNG');
+  const [category, setCategory] = useState<string>(editRecord?.category || 'VERSICHERUNG');
   const [title, setTitle] = useState(editRecord?.title || '');
   const [cost, setCost] = useState(editRecord?.cost_eur?.toString() || '');
-  const [note, setNote] = useState(editRecord?.note || '');
+  const [note, setNote] = useState(editRecord?.description || '');
   const [linkedTireId, setLinkedTireId] = useState<number | undefined>(editRecord?.linked_tire_id || undefined);
 
   const [saving, setSaving] = useState(false);
@@ -147,11 +149,11 @@ const ExtraCostFormModal: React.FC<ExtraCostFormModalProps> = ({ onClose, onSave
 
     const payload: ExtraCostCreate = {
       date: new Date(date).toISOString(),
-      title: title.trim(),
-      category,
-      cost_eur: Number(cost),
-      note: note.trim() || undefined,
-      linked_tire_id: category === 'REIFENKAUF' ? linkedTireId : undefined,
+      description: title.trim(),
+      category: category as string,
+      amount: Number(cost),
+      currency: 'EUR',
+      linked_tire_id: (category ?? '') === 'REIFENKAUF' ? linkedTireId : undefined,
     };
 
     try {
@@ -182,7 +184,7 @@ const ExtraCostFormModal: React.FC<ExtraCostFormModalProps> = ({ onClose, onSave
           <input type="date" value={date} onChange={e => setDate(e.target.value)} />
         </FormField>
         <FormField label="Kategorie" required>
-          <select value={category} onChange={e => setCategory(e.target.value as ExtraCostCategory)}>
+          <select value={category} onChange={e => setCategory(e.target.value as string)}>
             {CATEGORY_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -251,7 +253,7 @@ export default function ExtraCostsPage() {
     setError(null);
     try {
       const data = await api.getExtraCosts();
-      setRecords(data.data || []);
+      setRecords(data.costs || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler');
     } finally {
@@ -284,12 +286,12 @@ export default function ExtraCostsPage() {
     setShowFormModal(true);
   }
 
-  function getCategoryBadge(cat: ExtraCostCategory): string {
+  function getCategoryBadge(cat: string): string {
     return `badge badge--${cat.toLowerCase()}`;
   }
 
   // Total sum
-  const totalCost = records.reduce((sum, r) => sum + r.cost_eur, 0);
+  const totalCost = records.reduce((sum, r) => sum + (r.amount || 0), 0);
 
   return (
     <div className="extra-costs-page">
@@ -331,16 +333,16 @@ export default function ExtraCostsPage() {
 
           <div className="table-body">
             {records.map(rec => (
-              <div key={rec.id} className={`table-row ec-row ${rec.category === 'REIFENKAUF' ? 'ec-row--tire' : ''}`}>
-                <div className="col col-date" data-label="Datum">{formatDate(rec.date)}</div>
+              <div key={rec.id} className={`table-row ec-row ${(rec.category ?? '') === 'REIFENKAUF' ? 'ec-row--tire' : ''}`}>
+                <div className="col col-date" data-label="Datum">{formatDate(rec.date ?? undefined)}</div>
                 <div className="col col-category" data-label="Kategorie">
-                  <span className={getCategoryBadge(rec.category)}>
-                    {CATEGORY_LABELS[rec.category]}
+                  <span className={getCategoryBadge(rec.category ?? '')}>
+                    {CATEGORY_LABELS[rec.category ?? 'SONSTIGES']}
                   </span>
                 </div>
-                <div className="col col-title" data-label="Titel">{rec.title}</div>
-                <div className="col col-cost" data-label="Betrag">{formatEuro(rec.cost_eur)}</div>
-                <div className="col col-note" data-label="Notiz">{rec.note || '—'}</div>
+                <div className="col col-title" data-label="Titel">{rec.description}</div>
+                <div className="col col-cost" data-label="Betrag">{formatEuro(rec.amount ?? undefined)}</div>
+                <div className="col col-note" data-label="Notiz">{rec.description || '—'}</div>
                 <div className="col col-actions" data-label="Aktionen">
                   <button className="btn-action" onClick={() => handleEdit(rec)} title="Bearbeiten">✏️</button>
                   <button className="btn-action btn-action--delete" onClick={() => setDeleteRecord(rec)} title="Löschen">🗑️</button>

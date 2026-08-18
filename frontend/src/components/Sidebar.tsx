@@ -47,10 +47,15 @@ export function Sidebar({ isMobileOpen, onMobileToggle }: SidebarProps) {
     return location.pathname.startsWith(path);
   };
 
-  const formatStatusText = (status: { configured: boolean; reachable: boolean } | undefined): { text: string; className: string } => {
+  const formatStatusText = (status: { configured?: boolean; reachable?: boolean; level?: string; source?: string } | undefined): { text: string; className: string } => {
     if (!status) return { text: 'Unbekannt', className: 'sidebar__status--unknown' };
     if (!status.configured) return { text: 'Nicht konfiguriert', className: 'sidebar__status--warn' };
-    if (status.reachable) return { text: 'Erreichbar', className: 'sidebar__status--ok' };
+    if (status.reachable) {
+      if (status.level === 'healthy') return { text: 'Erreichbar', className: 'sidebar__status--ok' };
+      if (status.level === 'degraded') return { text: 'Erreichbar, Datenabruf fehlgeschlagen', className: 'sidebar__status--warn' };
+      if (status.level === 'down') return { text: 'Nicht erreichbar', className: 'sidebar__status--error' };
+      return { text: 'Erreichbar', className: 'sidebar__status--ok' };
+    }
     return { text: 'Nicht erreichbar', className: 'sidebar__status--error' };
   };
 

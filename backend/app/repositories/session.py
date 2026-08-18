@@ -233,19 +233,19 @@ class SessionRepository:
             "energy_by_source": {
                 "home": round(home_energy, 2),
                 "external": round(external_energy, 2),
-                "import": round(import_energy, 2),
+                "import_": round(import_energy, 2),
                 "total": round(total_energy, 2),
             },
             "cost_by_source": {
                 "home": round(home_cost, 2),
                 "external": round(external_cost, 2),
-                "import": round(import_cost, 2),
+                "import_": round(import_cost, 2),
                 "total": round(total_cost, 2),
             },
             "sessions_by_source": {
                 "home": home_sessions,
                 "external": external_sessions,
-                "import": import_sessions,
+                "import_": import_sessions,
                 "total": total_sessions,
             },
         }

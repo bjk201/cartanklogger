@@ -83,9 +83,9 @@ async def get_statistics(
                 "trip_total_cost_eur": 0.0,
                 "trip_avg_distance_km": None,
             },
-            energy_by_source={"home": 0.0, "external": 0.0, "import": 0.0, "total": 0.0},
-            cost_by_source={"home": 0.0, "external": 0.0, "import": 0.0, "total": 0.0},
-            sessions_by_source={"home": 0, "external": 0, "import": 0, "total": 0},
+            energy_by_source={"home": 0.0, "external": 0.0, "import_": 0.0, "total": 0.0},
+            cost_by_source={"home": 0.0, "external": 0.0, "import_": 0.0, "total": 0.0},
+            sessions_by_source={"home": 0, "external": 0, "import_": 0, "total": 0},
             range_days=days or 0,
             range_label="Keine Konfiguration",
             errors=[]
@@ -167,9 +167,9 @@ async def get_statistics(
         stats["kpis"]["external_ac_cost_eur"] = 0.0
     
     # Recalculate totals based on filtered values
-    stats["energy_by_source"]["total"] = stats["energy_by_source"]["home"] + stats["energy_by_source"]["external"] + stats["energy_by_source"]["import"]
-    stats["cost_by_source"]["total"] = stats["cost_by_source"]["home"] + stats["cost_by_source"]["external"] + stats["cost_by_source"]["import"]
-    stats["sessions_by_source"]["total"] = stats["sessions_by_source"]["home"] + stats["sessions_by_source"]["external"] + stats["sessions_by_source"]["import"]
+    stats["energy_by_source"]["total"] = stats["energy_by_source"]["home"] + stats["energy_by_source"]["external"] + stats["energy_by_source"]["import_"]
+    stats["cost_by_source"]["total"] = stats["cost_by_source"]["home"] + stats["cost_by_source"]["external"] + stats["cost_by_source"]["import_"]
+    stats["sessions_by_source"]["total"] = stats["sessions_by_source"]["home"] + stats["sessions_by_source"]["external"] + stats["sessions_by_source"]["import_"]
     stats["kpis"]["total_energy_kwh"] = stats["energy_by_source"]["total"]
     stats["kpis"]["total_cost_eur"] = stats["cost_by_source"]["total"]
     stats["kpis"]["total_sessions"] = stats["sessions_by_source"]["total"]

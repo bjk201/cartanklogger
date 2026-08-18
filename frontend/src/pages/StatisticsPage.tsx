@@ -131,11 +131,13 @@ export function StatisticsPage() {
     return num.toLocaleString('de-DE', { maximumFractionDigits: 2 });
   };
 
-  const formatKWh = (num: number): string => {
+  const formatKWh = (num: number | undefined | null): string => {
+    if (num === null || num === undefined) return '—';
     return num.toLocaleString('de-DE', { maximumFractionDigits: 1 });
   };
 
-  const formatEur = (num: number): string => {
+  const formatEur = (num: number | undefined | null): string => {
+    if (num === null || num === undefined) return '—';
     return (
       num.toLocaleString('de-DE', {
         minimumFractionDigits: 2,
@@ -504,12 +506,33 @@ export function StatisticsPage() {
   }
 
   const {
-    kpis,
-    energy_by_source,
-    cost_by_source,
-    sessions_by_source,
+    kpis: k,
+    energy_by_source: rawEnergy,
+    cost_by_source: rawCost,
+    sessions_by_source: rawSessions,
     range_label,
   } = data;
+
+  const kpis = k!;
+
+  const energy_by_source = {
+    home: rawEnergy?.home ?? 0,
+    external: rawEnergy?.external ?? 0,
+    import_: rawEnergy?.import_ ?? 0,
+    total: rawEnergy?.total ?? 0,
+  };
+  const cost_by_source = {
+    home: rawCost?.home ?? 0,
+    external: rawCost?.external ?? 0,
+    import_: rawCost?.import_ ?? 0,
+    total: rawCost?.total ?? 0,
+  };
+  const sessions_by_source = {
+    home: rawSessions?.home ?? 0,
+    external: rawSessions?.external ?? 0,
+    import_: rawSessions?.import_ ?? 0,
+    total: rawSessions?.total ?? 0,
+  };
 
   return (
     <div className="page-container">
@@ -608,10 +631,10 @@ export function StatisticsPage() {
                   kpis.charging_losses_pct !== null ? (
                     <>
                       <span className="kpi-card__value-main">
-                        {formatKWh(Math.abs(kpis.charging_losses_kwh))} kWh
+                        {formatKWh(Math.abs(kpis.charging_losses_kwh ?? 0))} kWh
                       </span>
                       <span className="kpi-card__value-sub">
-                        {kpis.charging_losses_kwh >= 0 ? (
+                        {(kpis.charging_losses_kwh ?? 0) >= 0 ? (
                           <ArrowUpRight
                             size={12}
                             className="kpi-card__loss-positive"
@@ -622,7 +645,7 @@ export function StatisticsPage() {
                             className="kpi-card__loss-negative"
                           />
                         )}
-                        {Math.abs(kpis.charging_losses_pct).toFixed(1)}%
+                        {Math.abs(kpis.charging_losses_pct ?? 0).toFixed(1)}%
                       </span>
                     </>
                   ) : (
@@ -679,15 +702,15 @@ export function StatisticsPage() {
                   kpis.external_charging_losses_pct !== null ? (
                     <>
                       <span className="kpi-card__value-main">
-                        {formatKWh(Math.abs(kpis.external_charging_losses_kwh))} kWh
+                        {formatKWh(Math.abs(kpis.external_charging_losses_kwh ?? 0))} kWh
                       </span>
                       <span className="kpi-card__value-sub">
-                        {kpis.external_charging_losses_kwh >= 0 ? (
+                        {(kpis.external_charging_losses_kwh ?? 0) >= 0 ? (
                           <ArrowUpRight size={12} className="kpi-card__loss-positive" />
                         ) : (
                           <ArrowDownRight size={12} className="kpi-card__loss-negative" />
                         )}
-                        {Math.abs(kpis.external_charging_losses_pct).toFixed(1)}%
+                        {Math.abs(kpis.external_charging_losses_pct ?? 0).toFixed(1)}%
                       </span>
                     </>
                   ) : (
@@ -958,7 +981,7 @@ export function StatisticsPage() {
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
                 <span className="distribution-card__percentage">
-                  {getPercentage(energy_by_source.import, energy_by_source.total)}%
+                  {getPercentage(energy_by_source.import_, energy_by_source.total)}%
                 </span>
               </header>
               <div className="distribution-card__bar">
@@ -966,7 +989,7 @@ export function StatisticsPage() {
                   className="distribution-card__fill distribution-card__fill--import"
                   style={{
                     width: `${getPercentage(
-                      energy_by_source.import,
+                      energy_by_source.import_,
                       energy_by_source.total
                     )}%`,
                   }}
@@ -974,7 +997,7 @@ export function StatisticsPage() {
               </div>
               <footer className="distribution-card__footer">
                 <span className="distribution-card__value">
-                  {formatKWh(energy_by_source.import)} kWh
+                  {formatKWh(energy_by_source.import_)} kWh
                 </span>
               </footer>
             </article>
@@ -1041,7 +1064,7 @@ export function StatisticsPage() {
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
                 <span className="distribution-card__percentage">
-                  {getPercentage(cost_by_source.import, cost_by_source.total)}%
+                  {getPercentage(cost_by_source.import_, cost_by_source.total)}%
                 </span>
               </header>
               <div className="distribution-card__bar">
@@ -1049,7 +1072,7 @@ export function StatisticsPage() {
                   className="distribution-card__fill distribution-card__fill--import"
                   style={{
                     width: `${getPercentage(
-                      cost_by_source.import,
+                      cost_by_source.import_,
                       cost_by_source.total
                     )}%`,
                   }}
@@ -1057,7 +1080,7 @@ export function StatisticsPage() {
               </div>
               <footer className="distribution-card__footer">
                 <span className="distribution-card__value">
-                  {formatEur(cost_by_source.import)}
+                  {formatEur(cost_by_source.import_)}
                 </span>
               </footer>
             </article>
@@ -1124,7 +1147,7 @@ export function StatisticsPage() {
               <header className="distribution-card__header">
                 <span className="distribution-card__source">Import</span>
                 <span className="distribution-card__percentage">
-                  {getPercentage(sessions_by_source.import, sessions_by_source.total)}%
+                  {getPercentage(sessions_by_source.import_, sessions_by_source.total)}%
                 </span>
               </header>
               <div className="distribution-card__bar">
@@ -1132,7 +1155,7 @@ export function StatisticsPage() {
                   className="distribution-card__fill distribution-card__fill--import"
                   style={{
                     width: `${getPercentage(
-                      sessions_by_source.import,
+                      sessions_by_source.import_,
                       sessions_by_source.total
                     )}%`,
                   }}
@@ -1140,7 +1163,7 @@ export function StatisticsPage() {
               </div>
               <footer className="distribution-card__footer">
                 <span className="distribution-card__value">
-                  {sessions_by_source.import.toFixed(0)} Sessions
+                  {sessions_by_source.import_.toFixed(0)} Sessions
                 </span>
               </footer>
             </article>

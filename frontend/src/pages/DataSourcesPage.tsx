@@ -99,9 +99,9 @@ export function DataSourcesPage() {
     try {
       const savePayload: DataSourceConfigWrite = {
         evcc_base_url: form.evcc_base_url.trim(),
-        evcc_api_token: form.evcc_api_token || null,
+        evcc_api_token: form.evcc_api_token || undefined,
         teslamateapi_base_url: form.teslamate_base_url.trim(),
-        teslamateapi_token: form.teslamate_token || null,
+        teslamateapi_token: form.teslamate_token || undefined,
       };
       
       const response = await api.saveDataSourceConfig(savePayload);
@@ -158,7 +158,7 @@ export function DataSourcesPage() {
     }
   };
 
-  const getStatusBadge = (status: { configured: boolean; reachable: boolean; level?: string; status_code?: number; error?: string; data_error?: string; last_checked?: string } | undefined) => {
+  const getStatusBadge = (status: { configured?: boolean; reachable?: boolean; level?: string; status_code?: number; error?: string; data_error?: string; last_checked?: string } | undefined) => {
     if (!status) return <span className="status-badge status-badge--unknown">Nicht getestet</span>;
     if (!status.configured) return <span className="status-badge status-badge--not-configured">Nicht konfiguriert</span>;
     if (status.reachable && status.level === 'reachable') return <span className="status-badge status-badge--ok"><CheckCircle size={12} /> Erreichbar</span>;

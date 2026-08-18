@@ -4,7 +4,7 @@ import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type SessionMatchItem, type UnmatchedChargeItem } from '../lib/apiClient';
+import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge } from '../lib/apiClient';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
@@ -176,7 +176,7 @@ export function SessionsPage() {
       const sessionId = Number(matchSelector);
       const tmChargeId = Number(matchTarget.tm_charge_id ?? matchTarget.charge_id ?? matchTarget.id);
       const result = await api.createSessionMatch(sessionId, tmChargeId);
-      setMatchMessage(result.ok ? (result.message || 'Erfolgreich zugeordnet') : (result.error || 'Fehler'));
+      setMatchMessage(result.ok ? (result.message || 'Erfolgreich zugeordnet') : 'Fehler');
       if (result.ok) {
         setMatchTarget(null);
         // Refetch raw data
@@ -549,7 +549,7 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
                     </tr>
                   </thead>
                   <tbody>
-                    {matchData.map((m: SessionMatchItem, i: number) => (
+                    {matchData.map((m: MatchedCharge, i: number) => (
                       <tr key={i}>
                         <td>{m.date ? new Date(m.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td className="text-end">{m.energy_kwh?.toFixed(2) ?? '—'}</td>

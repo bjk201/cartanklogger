@@ -90,11 +90,8 @@ class SourceBreakdown(BaseModel):
     """Breakdown by source type"""
     home: float
     external: float
-    import_: float = Field(alias="import")
+    import_: float
     total: float
-
-    class Config:
-        populate_by_name = True
 
 
 class StatisticsKPIs(BaseModel):
