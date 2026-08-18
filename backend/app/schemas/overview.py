@@ -36,6 +36,11 @@ class SessionRead(BaseModel):
     charge_type: Optional[ChargeType] = None
     fast_charger_brand: Optional[str] = None
     max_charge_power_kw: Optional[float] = None
+    
+    # TM-specific charging details (for external sessions)
+    charge_energy_added: Optional[float] = None
+    charge_energy_used: Optional[float] = None
+    duration_min: Optional[int] = None
 
     class Config:
         from_attributes = True

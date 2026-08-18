@@ -42,6 +42,14 @@ class SessionModel(Base):
     fast_charger_brand = Column(String(50), nullable=True)  # Tesla, Ionity, etc.
     max_charge_power_kw = Column(Float, nullable=True)  # Max power during charge
     
+    # TM-specific charging details (for external sessions)
+    # charge_energy_added = energy actually added to EV battery (kWh)
+    # charge_energy_used   = energy drawn from TM battery / wallbox (kWh)
+    # duration_min         = charging duration in minutes
+    charge_energy_added = Column(Float, nullable=True)
+    charge_energy_used = Column(Float, nullable=True)
+    duration_min = Column(Integer, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

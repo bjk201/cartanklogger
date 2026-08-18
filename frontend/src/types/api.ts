@@ -18,6 +18,10 @@ export interface Session {
   charge_type?: "DC" | "AC" | "unknown";
   fast_charger_brand?: string;
   max_charge_power_kw?: number;
+  // TM-specific charging details (external sessions)
+  charge_energy_added?: number;
+  charge_energy_used?: number;
+  duration_min?: number;
 }
 
 export interface ErrorDetail {

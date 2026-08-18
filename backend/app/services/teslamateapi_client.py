@@ -43,6 +43,7 @@ class TeslaMateAPICharge:
     charge_type: Optional[str] = None  # 'DC', 'AC', 'unknown'
     fast_charger_brand: Optional[str] = None
     max_charge_power_kw: Optional[float] = None
+    duration_min: Optional[float] = None  # charging duration in minutes
 
 
 @dataclass
@@ -174,7 +175,8 @@ class TeslaMateAPIClient:
                             vehicle=None,  # Could add car name from cars list
                             charge_type=charge_type,
                             fast_charger_brand=fast_charger_brand,
-                            max_charge_power_kw=max_charge_power_kw
+                            max_charge_power_kw=max_charge_power_kw,
+                            duration_min=item.get("duration_min")
                         )
                         all_charges.append(charge)
 

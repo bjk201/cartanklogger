@@ -163,6 +163,10 @@ def get_sessions(
             charge_type=s.charge_type,
             fast_charger_brand=s.fast_charger_brand,
             max_charge_power_kw=s.max_charge_power_kw,
+            # TM-specific charging details
+            charge_energy_added=s.charge_energy_added,
+            charge_energy_used=s.charge_energy_used,
+            duration_min=s.duration_min,
         ))
 
     # Calculate pagination info

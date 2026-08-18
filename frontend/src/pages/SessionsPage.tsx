@@ -403,9 +403,11 @@ export function SessionsPage() {
                       <th scope="col">Datum</th>
                       <th scope="col">Quelle</th>
                       <th scope="col" className="text-end">kWh</th>
-                      <th scope="col" className="text-end">Kosten</th>
+                      <th scope="col" className="text-end">Anteil PV</th>
                       <th scope="col" className="text-end">€/kWh</th>
-                      <th scope="col" className="text-end">PV kWh</th>
+                      <th scope="col" className="text-end">Kosten</th>
+                      <th scope="col" className="text-end">TM Added</th>
+                      <th scope="col" className="text-end">TM Used</th>
                       <th scope="col">Ort</th>
                       <th scope="col" style={{ width: '50px' }}></th>
                     </tr>
@@ -516,9 +518,11 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
           </span>
         </td>
         <td className="text-end">{session.energy_kwh?.toFixed(1) ?? '—'}</td>
-        <td className="text-end">{session.cost_eur != null ? `${session.cost_eur.toFixed(2)} €` : '—'}</td>
+        <td className="text-end">{session.solar_percentage != null ? `${session.solar_percentage.toFixed(0)}%` : '—'}</td>
         <td className="text-end">{session.cost_per_kwh != null ? `${session.cost_per_kwh.toFixed(2)} €/kWh` : '—'}</td>
-        <td className="text-end">{session.pv_kwh != null ? session.pv_kwh.toFixed(2) : '—'}</td>
+        <td className="text-end">{session.cost_eur != null ? `${session.cost_eur.toFixed(2)} €` : '—'}</td>
+        <td className="text-end">{session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—'}</td>
+        <td className="text-end">{session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'}</td>
         <td className="sessions-table__location">{session.location || '—'}</td>
         <td>
           <button className="btn-icon btn-icon--sm" onClick={onEdit} title="Bearbeiten">
@@ -528,7 +532,7 @@ function SessionRow({ session, onEdit }: { session: Session; onEdit: () => void 
       </tr>
       {expanded && (
         <tr className="sessions-table__match-row">
-          <td colSpan={9}>
+          <td colSpan={11}>
             <div className="match-detail">
               <h4 className="match-detail__title">
                 <ExternalLink size={14} /> TM-Charges zu dieser EVCC-Session
