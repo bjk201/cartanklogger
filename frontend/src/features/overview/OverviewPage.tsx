@@ -321,6 +321,9 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
         // €/100km = kumulierte Kosten / kumulierte km * 100
         // Da Laden und Fahren an unterschiedlichen Tagen stattfinden,
         // ergibt eine Tages-division keinen Sinn. Kumulativ ist stabiler.
+        // Erst ab MIN_CUM_KM kumulierten km anzeigen, damit der verzerrte
+        // Startwert (wenige km tragen angehaeufte Ladekosten) ausgeblendet wird.
+        const MIN_CUM_KM = 100;
         const costDates = data.daily_cost_dates || [];
         const costs = data.daily_cost_eur || [];
         const kmDates = data.daily_dates || [];
@@ -347,8 +350,11 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
           if (dayCost > 0 || dayKm > 0) {
             cumCost += dayCost;
             cumKm += dayKm;
-            cumDates.push(d);
-            cumValues.push(cumKm > 0 ? (cumCost / cumKm) * 100 : 0);
+            // Erst ab Schwellwert pubishen (verhindert verzerrten Startpunkt)
+            if (cumKm >= MIN_CUM_KM) {
+              cumDates.push(d);
+              cumValues.push(cumKm > 0 ? (cumCost / cumKm) * 100 : 0);
+            }
           }
         }
 
