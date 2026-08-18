@@ -544,11 +544,9 @@ function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () =
             : (session.charge_energy_added != null ? session.charge_energy_added.toFixed(1) : '—')}
         </td>
         {/* TM Used: bei EVCC die Summe der zugeordneten TM used_kwh; bei TM der charge_energy_used */}
-        <td className="text-end">
+        <td className="text-end" title={isHome && tmSum?.tm_used_kwh != null && tmSum.tm_count > 0 ? `${tmSum.tm_count} TM-Charges summiert (Added ${tmSum.tm_sum_kwh ?? '—'} / Used ${tmSum.tm_used_kwh} kWh)` : undefined}>
           {isHome
-            ? (tmSum?.tm_used_kwh != null
-                ? <span className="sessions-table__tm-sum-badge" title={`${tmSum.tm_count} TM-Charges summiert (Added ${tmSum.tm_sum_kwh ?? '—'} / Used ${tmSum.tm_used_kwh} kWh)`}>{tmSum.tm_used_kwh.toFixed(1)}</span>
-                : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'))
+            ? (tmSum?.tm_used_kwh != null ? tmSum.tm_used_kwh.toFixed(1) : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—'))
             : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—')}
         </td>
         <td className="sessions-table__location">{session.location || '—'}</td>
