@@ -141,6 +141,16 @@ class StatisticsKPIs(BaseModel):
     external_charging_losses_kwh: Optional[float] = None
     external_charging_losses_pct: Optional[float] = None
 
+    # NEW: TM totals over ALL charges (home + external)
+    tm_total_energy_added_kwh: Optional[float] = None
+    tm_total_energy_used_kwh: Optional[float] = None
+
+    # NEW: Weighted PV share per month (for radar chart)
+    monthly_pv: Optional[List[dict]] = None
+
+    # NEW: Cost of charging losses (losses per source x avg working price of source)
+    charging_loss_costs: Optional[dict] = None
+
     # NEW: Daily drives data for chart
     daily_dates: Optional[List[str]] = None
     daily_km: Optional[List[float]] = None

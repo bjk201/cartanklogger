@@ -5,7 +5,6 @@ from typing import Optional, List
 from app.database import get_db
 from app.repositories.session import SessionRepository
 from app.services.matching import run_matching_dry_run
-from app.services.live_matching import run_live_matching_dry_run
 from app.schemas.overview import StatisticsResponse, ErrorDetail
 from app.models.datasource import DataSourceConfig
 
@@ -174,42 +173,40 @@ async def get_statistics(
     stats["kpis"]["total_cost_eur"] = stats["cost_by_source"]["total"]
     stats["kpis"]["total_sessions"] = stats["sessions_by_source"]["total"]
     
-    # Calculate charging losses from live matching (only if both EVCC and TM configured)
-    if configured["evcc"] and configured["teslamateapi"]:
+    # Calculate charging losses from ALL TeslaMate charges (home + external):
+    # losses = Σ(charge_energy_used) − Σ(charge_energy_added) — same definition as the TM app summary.
+    if configured["teslamateapi"]:
+        tm_charges_all = None
         try:
-            # Use live matching which fetches TM home charges from API (not DB)
-            matching_result = await run_live_matching_dry_run(limit, range_days, from_date, to_date, db)
-            if matching_result.get('ok') and matching_result.get('summary'):
-                summary = matching_result['summary']
-                total_evcc_energy = summary.get('total_evcc_energy', 0)
-                total_tm_energy = summary.get('total_tm_energy', 0)
-                if total_evcc_energy > 0:
-                    charging_losses_kwh = round(total_tm_energy - total_evcc_energy, 2)
-                    charging_losses_pct = round((charging_losses_kwh / total_evcc_energy) * 100, 1)
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            config = db.query(DataSourceConfig).first()
+            tm_client = await create_teslamateapi_client_from_config(config)
+            if tm_client:
+                tm_charges_all = await tm_client.get_charges()
+                if range_days or from_date or to_date:
+                    tm_charges_all = tm_client._filter_tm_by_date_range(tm_charges_all, range_days, from_date, to_date)
+
+                total_added = sum(c.charge_energy_added or 0 for c in tm_charges_all)
+                total_used = sum(c.charge_energy_used or 0 for c in tm_charges_all)
+                stats['kpis']['tm_total_energy_added_kwh'] = round(total_added, 2)
+                stats['kpis']['tm_total_energy_used_kwh'] = round(total_used, 2)
+                if total_added > 0:
+                    losses = round(total_used - total_added, 2)
+                    stats['kpis']['charging_losses_kwh'] = losses
+                    stats['kpis']['charging_losses_pct'] = round((losses / total_added) * 100, 1)
                 else:
-                    charging_losses_kwh = None
-                    charging_losses_pct = None
-                
-                stats['kpis']['charging_losses_kwh'] = charging_losses_kwh
-                stats['kpis']['charging_losses_pct'] = charging_losses_pct
-                stats['kpis']['evcc_energy_matched_kwh'] = round(total_evcc_energy, 2)
-                stats['kpis']['tm_energy_matched_kwh'] = round(total_tm_energy, 2)
-            else:
-                stats['kpis']['charging_losses_kwh'] = None
-                stats['kpis']['charging_losses_pct'] = None
-                stats['kpis']['evcc_energy_matched_kwh'] = None
-                stats['kpis']['tm_energy_matched_kwh'] = None
+                    stats['kpis']['charging_losses_kwh'] = None
+                    stats['kpis']['charging_losses_pct'] = None
         except Exception:
             stats['kpis']['charging_losses_kwh'] = None
             stats['kpis']['charging_losses_pct'] = None
-            stats['kpis']['evcc_energy_matched_kwh'] = None
-            stats['kpis']['tm_energy_matched_kwh'] = None
+            stats['kpis']['tm_total_energy_added_kwh'] = None
+            stats['kpis']['tm_total_energy_used_kwh'] = None
     else:
-        # Not both configured - no matching possible
         stats['kpis']['charging_losses_kwh'] = None
         stats['kpis']['charging_losses_pct'] = None
-        stats['kpis']['evcc_energy_matched_kwh'] = None
-        stats['kpis']['tm_energy_matched_kwh'] = None
+        stats['kpis']['tm_total_energy_added_kwh'] = None
+        stats['kpis']['tm_total_energy_used_kwh'] = None
     
     # Calculate external charging losses from TM API (charge_energy_used - charge_energy_added)
     # This is the energy lost between TM's battery and the EV battery during external charging.
@@ -409,6 +406,130 @@ async def get_statistics(
         stats['kpis']['pv_share_pct'] = None
         stats['kpis']['pv_kwh'] = None
         stats['kpis']['total_charged_kwh'] = None
+
+    # Cost of charging losses:
+    # Home:   loss_home = Σ(used − added) über HOME-Charges, bewertet mit Ø-Arbeitspreis Zuhause
+    #         (= EVCC-Kosten / EVCC-geladene kWh im Zeitraum; da nur der Netzanteil kostet,
+    #          ist das bereits der PV-Gewichtete Mischpreis → exakte Zusatzkosten der Verluste)
+    # Extern: loss_ext = Σ(used − added) über EXTERNE Charges, bewertet mit Ø-Preis extern
+    #         (= externe Kosten / externe kWh, inkl. Gebühren)
+    try:
+        from sqlalchemy import func
+        from app.models.session import SessionModel
+        from datetime import datetime, timezone, timedelta
+        loss_costs = {
+            'home_loss_kwh': None, 'home_price_eur_per_kwh': None, 'home_cost_eur': None,
+            'external_loss_kwh': None, 'external_price_eur_per_kwh': None, 'external_cost_eur': None,
+            'total_cost_eur': None, 'grid_share_home': 1.0,
+        }
+        if configured["teslamateapi"]:
+            from app.services.teslamateapi_client import create_teslamateapi_client_from_config
+            config = db.query(DataSourceConfig).first()
+            tm_client_c = await create_teslamateapi_client_from_config(config)
+            if tm_client_c:
+                tm_charges_cost = await tm_client_c.get_charges()
+                if range_days or from_date or to_date:
+                    tm_charges_cost = tm_client_c._filter_tm_by_date_range(tm_charges_cost, range_days, from_date, to_date)
+
+                home_kw = {"zuhause", "garage", "home", "haus"}
+                used_h = added_h = used_e = added_e = 0.0
+                for c in tm_charges_cost:
+                    loc = (getattr(c, 'location', '') or '').lower()
+                    if any(k in loc for k in home_kw):
+                        used_h += c.charge_energy_used or 0
+                        added_h += c.charge_energy_added or 0
+                    else:
+                        used_e += c.charge_energy_used or 0
+                        added_e += c.charge_energy_added or 0
+
+                home_loss = round(used_h - added_h, 2)
+                ext_loss = round(used_e - added_e, 2)
+
+                home_energy = stats["energy_by_source"].get("home", 0.0)
+                home_cost = stats["cost_by_source"].get("home", 0.0)
+                ext_energy = stats["energy_by_source"].get("external", 0.0)
+                ext_cost = stats["cost_by_source"].get("external", 0.0)
+
+                home_price = round(home_cost / home_energy, 4) if home_energy > 0 else None
+                ext_price = round(ext_cost / ext_energy, 4) if ext_energy > 0 else None
+
+                # Gewichteteter PV-/Netzanteil Zuhause (für Anzeige; Preis ist schon PV-gewichtet)
+                pv_q = db.query(
+                    func.sum(SessionModel.pv_kwh),
+                    func.sum(SessionModel.energy_kwh),
+                    func.sum(SessionModel.energy_kwh * SessionModel.solar_percentage) / func.sum(SessionModel.energy_kwh),
+                ).filter(SessionModel.source_type == 'home')
+                if range_days:
+                    pv_q = pv_q.filter(SessionModel.date >= datetime.now(timezone.utc) - timedelta(days=range_days))
+                if from_date:
+                    pv_q = pv_q.filter(func.date(SessionModel.date) >= from_date)
+                if to_date:
+                    pv_q = pv_q.filter(func.date(SessionModel.date) <= to_date)
+                pv_row = pv_q.first()
+                en_sum = float(pv_row[1] or 0) if pv_row else 0.0
+                pv_frac = None
+                if en_sum > 0:
+                    pv_direct = float(pv_row[0] or 0)
+                    if pv_direct > 0:
+                        pv_frac = pv_direct / en_sum
+                    elif pv_row[2] is not None:
+                        pv_frac = max(0.0, min(1.0, float(pv_row[2]) / 100.0))
+                grid_share = round(1 - pv_frac, 4) if pv_frac is not None else 1.0
+
+                home_cost_losses = round(abs(home_loss) * home_price, 2) if (home_price is not None and home_loss != 0) else None
+                ext_cost_losses = round(abs(ext_loss) * ext_price, 2) if (ext_price is not None and ext_loss != 0) else None
+                total_cost = round((home_cost_losses or 0) + (ext_cost_losses or 0), 2)
+
+                loss_costs = {
+                    'home_loss_kwh': home_loss,
+                    'home_price_eur_per_kwh': home_price,
+                    'home_cost_eur': home_cost_losses,
+                    'external_loss_kwh': ext_loss,
+                    'external_price_eur_per_kwh': ext_price,
+                    'external_cost_eur': ext_cost_losses,
+                    'total_cost_eur': total_cost,
+                    'grid_share_home': grid_share,
+                }
+        stats['kpis']['charging_loss_costs'] = loss_costs
+    except Exception:
+        stats['kpis']['charging_loss_costs'] = None
+
+    # Weighted monthly PV share (radar chart data) — label formatting happens in the frontend
+    try:
+        from sqlalchemy import func
+        from app.models.session import SessionModel
+        from datetime import datetime, timezone, timedelta
+        month_expr = func.strftime('%Y-%m', SessionModel.date)
+        mpv_q = db.query(
+            month_expr.label('m'),
+            func.sum(SessionModel.energy_kwh).label('en'),
+            func.sum(SessionModel.pv_kwh).label('pv'),
+            (func.sum(SessionModel.energy_kwh * SessionModel.solar_percentage) / func.sum(SessionModel.energy_kwh)).label('sp'),
+        ).filter(SessionModel.source_type == 'home')
+        if range_days:
+            mpv_q = mpv_q.filter(SessionModel.date >= datetime.now(timezone.utc) - timedelta(days=range_days))
+        if from_date:
+            mpv_q = mpv_q.filter(func.date(SessionModel.date) >= from_date)
+        if to_date:
+            mpv_q = mpv_q.filter(func.date(SessionModel.date) <= to_date)
+        monthly_pv = []
+        for r in mpv_q.group_by(month_expr).order_by(month_expr).all():
+            en_m = float(r.en or 0)
+            if en_m <= 0:
+                continue
+            pv_m = float(r.pv or 0)
+            frac = (pv_m / en_m) if pv_m > 0 else ((float(r.sp) / 100.0) if r.sp is not None else None)
+            if frac is not None:
+                frac = max(0.0, min(1.0, frac))
+            monthly_pv.append({
+                'month': r.m,
+                'pv_pct': round(frac * 100, 1) if frac is not None else None,
+                'energy_kwh': round(en_m, 1),
+                'pv_kwh': round(pv_m, 1),
+            })
+        stats['kpis']['monthly_pv'] = monthly_pv
+    except Exception:
+        stats['kpis']['monthly_pv'] = []
 
     return StatisticsResponse(
         ok=True,
