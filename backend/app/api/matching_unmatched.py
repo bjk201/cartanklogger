@@ -52,11 +52,30 @@ async def get_unmatched_charges(
     # 3. Filter to "Zuhause" TM charges only
     home_charges = [c for c in tm_charges if c.location and "zuhause" in c.location.lower()]
 
+    # 3b. Load manual overrides (latest per TM charge wins) — these decide matched/unmatched
+    from app.models.matching_override import MatchingOverride, OverrideType
+    latest_override: dict = {}
+    for ov in db.query(MatchingOverride).order_by(MatchingOverride.id.asc()).all():
+        latest_override[ov.teslamate_charge_id] = ov
+
+    manually_assigned_ids = {
+        cid for cid, ov in latest_override.items()
+        if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id
+    }
+    manually_unassigned_ids = {
+        cid for cid, ov in latest_override.items()
+        if ov.override_type == OverrideType.manual_unassign
+    }
+
     # 4. Build unmatched list by checking date overlap with EVCC sessions
     unmatched = []
     for tm in home_charges:
+        if tm.id in manually_assigned_ids:
+            continue  # manually matched via override → not unmatched
         is_matched = False
-        if tm.start_date:
+        if tm.id in manually_unassigned_ids:
+            pass  # explicitly unassigned → stays unmatched regardless of date overlap
+        elif tm.start_date:
             for evcc in evcc_sessions:
                 if evcc.date:
                     tm_date = tm.start_date.date() if hasattr(tm.start_date, 'date') else tm.start_date
