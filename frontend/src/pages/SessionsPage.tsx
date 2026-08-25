@@ -181,8 +181,8 @@ export function SessionsPage() {
       setMatchMessage(result.ok ? (result.message || 'Erfolgreich zugeordnet') : 'Fehler');
       if (result.ok) {
         setMatchTarget(null);
-        // Refetch raw data
-        api.getMatchingRawData(100, getDaysFromRange(selectedRange) || 30)
+        // Refetch unmatched charges (same source the tab renders from)
+        api.getUnmatchedCharges(getDaysFromRange(selectedRange) || 36500)
           .then(setRawData)
           .catch(() => {});
       }
