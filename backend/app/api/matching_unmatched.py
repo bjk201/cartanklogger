@@ -67,14 +67,37 @@ async def get_unmatched_charges(
         if ov.override_type == OverrideType.manual_unassign
     }
 
-    # 4. Build unmatched list by checking date overlap with EVCC sessions
+    # 4. Build unmatched list via staged gates:
+    #    Gate A: date within ±1 day + odometer delta ≤ 2 km  (same parking spot → same stop)
+    #    Gate B: date within ±2 days if ΔKM ≤ 2 km           (car parked for days, no driving)
+    #    Fallback: same calendar day only (legacy behaviour, e.g. missing odometer)
+    ODO_TOLERANCE_KM = 2.0
+    DAY = timedelta(days=1)
+
+    def _naive_utc(dt):
+        """Normalize to naive UTC so aware (TM API) and naive (DB) datetimes can be subtracted."""
+        if dt.tzinfo is not None:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+
     unmatched = []
     for tm in home_charges:
         if tm.id in manually_assigned_ids:
             continue  # manually matched via override → not unmatched
         is_matched = False
         if tm.id in manually_unassigned_ids:
-            pass  # explicitly unassigned → stays unmatched regardless of date overlap
+            pass  # explicitly unassigned → stays unmatched regardless of gates
+        elif tm.start_date and tm.odometer is not None:
+            tm_dt = _naive_utc(tm.start_date)
+            for evcc in evcc_sessions:
+                if not evcc.date or evcc.odometer_km is None:
+                    continue
+                dt_abs = abs((tm_dt - _naive_utc(evcc.date)).total_seconds())
+                dkm = abs(float(tm.odometer) - float(evcc.odometer_km))
+                # Same parking spot (ΔKM ≤ 2 km) + car parked up to 2 days between charge start and session
+                if dkm <= ODO_TOLERANCE_KM and dt_abs <= 2 * DAY.total_seconds():
+                    is_matched = True
+                    break
         elif tm.start_date:
             for evcc in evcc_sessions:
                 if evcc.date:

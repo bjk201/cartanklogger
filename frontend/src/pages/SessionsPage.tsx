@@ -164,10 +164,21 @@ export function SessionsPage() {
     try {
       const days = getDaysFromRange(selectedRange) || 30;
       const res = await api.getSessions({ source_type: 'home', page_size: 100, days });
-      setHomeSessions(res.data || []);
+      // Sort by odometer proximity to the TM charge (closest first) — best match candidate on top
+      const chargeOdo = Number(charge.odometer ?? 0);
+      const sessions = [...(res.data || [])].sort((a, b) =>
+        Math.abs((Number(a.odometer_km) || 0) - chargeOdo) - Math.abs((Number(b.odometer_km) || 0) - chargeOdo)
+      );
+      setHomeSessions(sessions);
     } catch {
       setHomeSessions([]);
     }
+  };
+
+  // Odometer delta (km, one decimal) between a home session and the charge in the dialog
+  const odoDelta = (sessionOdo: number | null | undefined): number | null => {
+    if (!matchTarget || sessionOdo == null || matchTarget.odometer == null) return null;
+    return Math.round(Math.abs(Number(sessionOdo) - Number(matchTarget.odometer)) * 10) / 10;
   };
 
   const confirmMatch = async () => {
@@ -475,11 +486,15 @@ export function SessionsPage() {
             <label className="match-modal__label" htmlFor="match-select">EVCC-Session wählen</label>
             <select id="match-select" className="match-modal__select" value={matchSelector} onChange={e => setMatchSelector(e.target.value)}>
               <option value="">— Session wählen —</option>
-              {homeSessions.map(s => (
+              {homeSessions.map(s => {
+                const d = odoDelta(s.odometer_km);
+                const odoHint = d == null ? '' : d <= 2 ? ` · Δ ${d.toFixed(1)} km ✓` : ` · Δ ${d.toFixed(0)} km`;
+                return (
                 <option key={s.id} value={s.id}>
-                  {new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {s.energy_kwh?.toFixed(1) ?? '?'} kWh
+                  {new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {s.energy_kwh?.toFixed(1) ?? '?'} kWh{odoHint}
                 </option>
-              ))}
+                );
+              })}
             </select>
             {matchMessage && <p className={`match-modal__message ${matchTarget === null ? 'match-modal__message--success' : ''}`}>{matchMessage}</p>}
             <div className="match-modal__actions">
