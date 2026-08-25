@@ -206,8 +206,9 @@
 
 /* ===== Split Chart Layout ===== */
 .overview-page__split-chart {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  /* 1fr | pie | 1fr → donut always exactly centered, independent of side content width */
+  grid-template-columns: 1fr minmax(110px, 150px) 1fr;
   align-items: center;
   gap: 0.5rem;
   flex: 1;
@@ -216,11 +217,10 @@
 }
 
 .overview-page__split-left {
-  flex: 0 0 auto;
+  justify-self: start;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  width: 25%;
 }
 
 .overview-page__split-center {
@@ -236,11 +236,10 @@
 }
 
 .overview-page__split-right {
-  flex: 0 0 auto;
+  justify-self: end;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  width: 35%;
   align-items: flex-end;
   justify-content: center;
 }
