@@ -1,5 +1,4 @@
 import { createServer } from 'http';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -24,18 +23,32 @@ const server = createServer(async (req, res) => {
   if (req.url?.startsWith('/api')) {
     const target = 'http://localhost:13132';
     const url = new URL(req.url, target);
-    
-    const proxyReq = await fetch(url.toString(), {
-      method: req.method,
-      headers: {
-        ...req.headers,
-        host: 'localhost:13132',
-      },
-    });
-    
-    res.writeHead(proxyReq.status, Object.fromEntries(proxyReq.headers.entries()));
-    const body = await proxyReq.arrayBuffer();
-    res.end(Buffer.from(body));
+
+    // Collect request body (needed for POST/PUT/PATCH)
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+
+    try {
+      const proxyRes = await fetch(url.toString(), {
+        method: req.method,
+        headers: {
+          ...req.headers,
+          host: 'localhost:13132',
+        },
+        body: body.length > 0 ? body : undefined,
+        duplex: 'half',
+      });
+
+      const resHeaders = { 'content-type': proxyRes.headers.get('content-type') || 'application/json' };
+      res.writeHead(proxyRes.status, resHeaders);
+      const resBody = Buffer.from(await proxyRes.arrayBuffer());
+      res.end(resBody);
+    } catch (err) {
+      console.error('Proxy error:', err);
+      res.writeHead(502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Bad gateway (proxy)' }));
+    }
     return;
   }
 
