@@ -128,7 +128,10 @@
   gap: 0.75rem;
   padding: 0.625rem 0.875rem;
   min-height: 0;
-  max-height: 64px;
+}
+
+.kpi-card--horizontal:has(.kpi-card__subtitle) {
+  max-height: none;
 }
 
 .kpi-card--horizontal .kpi-card__body {
@@ -219,7 +222,6 @@
 
   .kpi-card--horizontal {
     padding: 0.5rem 0.75rem;
-    max-height: 58px;
   }
 
   .kpi-card--horizontal .kpi-card__value {

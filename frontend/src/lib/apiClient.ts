@@ -44,6 +44,7 @@ import type {
   DataSourceStatusResponse,
   LiveMatchingStatusResponse,
   ExtraCostCategory,
+  MonthlyPvPoint,
 } from '../types/api';
 
 // Re-export all types for consumers
@@ -54,6 +55,7 @@ export type {
   OverviewSummaryResponse,
   PaginatedSessionsResponse,
   StatisticsKPIs,
+  MonthlyPvPoint,
   SourceBreakdown,
   StatisticsResponse,
   MatchedCharge,

@@ -90,6 +90,14 @@ export interface PaginationInfo {
 
 // === Statistics Types ===
 
+export interface MonthlyPvPoint {
+  month: string;          // 'YYYY-MM'
+  label: string;          // 'Jun', 'Jul', …
+  pv_pct: number | null;  // gewichteter PV-Anteil %
+  energy_kwh: number;
+  pv_kwh: number;
+}
+
 export interface StatisticsKPIs {
   // Core totals
   total_sessions: number;
@@ -122,6 +130,9 @@ export interface StatisticsKPIs {
   charging_losses_pct?: number;
   external_charging_losses_kwh?: number;
   external_charging_losses_pct?: number;
+  // TM totals over ALL charges (home + external)
+  tm_total_energy_added_kwh?: number | null;
+  tm_total_energy_used_kwh?: number | null;
   // EVCC/TM matching
   evcc_energy_matched_kwh?: number;
   tm_energy_matched_kwh?: number;
@@ -129,6 +140,19 @@ export interface StatisticsKPIs {
   pv_share_pct?: number;
   pv_kwh?: number;
   total_charged_kwh?: number;
+  // Monthly PV share (radar chart)
+  monthly_pv?: MonthlyPvPoint[];
+  // Charging loss costs (Verluste je Quelle × Ø-Arbeitspreis der Quelle)
+  charging_loss_costs?: {
+    home_loss_kwh: number | null;
+    home_price_eur_per_kwh: number | null;
+    home_cost_eur: number | null;
+    external_loss_kwh: number | null;
+    external_price_eur_per_kwh: number | null;
+    external_cost_eur: number | null;
+    total_cost_eur: number | null;
+    grid_share_home: number;   // Netzanteil Zuhause (1 − PV-Anteil)
+  };
   // Trip stats
   trip_count?: number;
   trip_total_energy_kwh?: number;

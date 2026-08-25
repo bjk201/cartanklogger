@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
-import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs } from '../../lib/apiClient';
+import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs, type MonthlyPvPoint } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,12 +14,13 @@ import {
   PointElement,
   LineElement,
   BarElement,
+  RadialLinearScale,
+  Filler,
   Title,
   Tooltip,
   Legend,
-  Filler,
 } from 'chart.js';
-import { Line, Pie, Bar } from 'react-chartjs-2';
+import { Line, Pie, Bar, Radar } from 'react-chartjs-2';
 import './OverviewPage.css';
 
 ChartJS.register(
@@ -28,10 +29,11 @@ ChartJS.register(
   PointElement,
   LineElement,
   BarElement,
+  RadialLinearScale,
+  Filler,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 );
 
 function movingAverage(data: number[], windowSize: number): (number | null)[] {
@@ -173,14 +175,27 @@ export function OverviewPage() {
               <KpiCard label="Ø Kosten / Session" value={statistics.kpis.avg_cost_per_session.toFixed(2)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             )}
 
-            {/* Ladeverluste: TM used − EVCC geladen (positiv = Verlust) */}
+            {/* Ladeverluste: TM used − added über ALLE Charges (positiv = Verlust) */}
             {statistics?.kpis?.charging_losses_kwh != null && (
               <KpiCard
                 label="Ladeverluste"
                 value={formatNumber(Math.abs(statistics.kpis.charging_losses_kwh))}
                 unit="kWh"
-                subtitle={`${statistics.kpis.charging_losses_pct != null ? `${Math.abs(statistics.kpis.charging_losses_pct).toFixed(1)} %` : '—'} · TM ${formatNumber(statistics.kpis.tm_energy_matched_kwh ?? 0)} → EVCC ${formatNumber(statistics.kpis.evcc_energy_matched_kwh ?? 0)} kWh`}
+                subtitle={`${statistics.kpis.charging_losses_pct != null ? `${Math.abs(statistics.kpis.charging_losses_pct).toFixed(1)} %` : '—'} · TM ${formatNumber(statistics.kpis.tm_total_energy_used_kwh ?? 0)} → ${formatNumber(statistics.kpis.tm_total_energy_added_kwh ?? 0)} kWh`}
                 icon={(p) => <Activity {...p} />}
+                iconColor="#ef4444"
+                horizontal
+              />
+            )}
+
+            {/* Kosten der Ladeverluste (je Quelle × Ø-Arbeitspreis der Quelle) */}
+            {statistics?.kpis?.charging_loss_costs?.total_cost_eur != null && (
+              <KpiCard
+                label="Kosten Ladeverluste"
+                value={statistics.kpis.charging_loss_costs.total_cost_eur.toFixed(2)}
+                unit="€"
+                subtitle={`Zuhause ${statistics.kpis.charging_loss_costs.home_cost_eur?.toFixed(2) ?? '—'} € · Ext. ${(statistics.kpis.charging_loss_costs.external_cost_eur ?? 0).toFixed(2)} €`}
+                icon={(p) => <Euro {...p} />}
                 iconColor="#ef4444"
                 horizontal
               />
@@ -212,6 +227,8 @@ export function OverviewPage() {
                   <div className="overview-page__split-center">
                     <div className="pie-chart-wrapper">
                       <Pie
+                        width={110}
+                        height={110}
                         data={{
                           labels: ['Zuhause', 'Extern'],
                           datasets: [{
@@ -221,7 +238,7 @@ export function OverviewPage() {
                           }],
                         }}
                         options={{
-                          responsive: true,
+                          responsive: false,
                           maintainAspectRatio: false,
                           plugins: {
                             legend: { display: false },
@@ -280,6 +297,13 @@ export function OverviewPage() {
             <TrendChartDaily title="Gefahrene km (kumuliert)" data={statistics.kpis} chartType="cumulativeKm" />
             <DailyChargedBarChart data={statistics.kpis} />
           </div>
+        </section>
+      )}
+
+      {/* RADAR: Sonnenanteil über das Jahr */}
+      {statistics?.kpis?.monthly_pv && statistics.kpis.monthly_pv.length >= 3 && (
+        <section className="overview-page__section">
+          <PvRadarChart data={statistics.kpis.monthly_pv} />
         </section>
       )}
 
@@ -559,6 +583,71 @@ function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
           }}
         />
       </div>
+    </div>
+  );
+}
+
+/* ===== PvRadarChart (Sonnenanteil über das Jahr) ===== */
+interface PvRadarChartProps {
+  data: MonthlyPvPoint[];
+}
+
+function PvRadarChart({ data }: PvRadarChartProps) {
+  const labels = useMemo(
+    () => data.map((p) => new Date(parseInt(p.month.slice(0, 4)), parseInt(p.month.slice(5, 7)) - 1).toLocaleDateString('de-DE', { month: 'short' })),
+    [data]
+  );
+  const values = useMemo(() => data.map((p) => (p.pv_pct != null ? Math.round(p.pv_pct * 10) / 10 : null)), [data]);
+  // Radar braucht >= 3 Achsen; mit weniger Punkten kein sinnvolles Diagramm
+  if (labels.length < 3 || values.every((v) => v == null)) return null;
+
+  return (
+    <div className="overview-page__trend-card">
+      <h3 className="overview-page__trend-title">Sonnenanteil über das Jahr</h3>
+      <div className="overview-page__radar-wrapper">
+        <Radar
+          data={{
+            labels,
+            datasets: [
+              {
+                label: 'PV-Anteil %',
+                data: values,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                pointBackgroundColor: '#f59e0b',
+                borderWidth: 2,
+                fill: true,
+              },
+            ],
+          }}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx: any) => {
+                    const p = data[ctx.dataIndex];
+                    return `${ctx.label}: ${ctx.parsed.r?.toFixed(1)} % PV · ${p.energy_kwh.toFixed(1)} kWh`;
+                  },
+                },
+              },
+            },
+            scales: {
+              r: {
+                min: 0,
+                max: 100,
+                ticks: { stepSize: 20, font: { size: 8 }, backdropColor: 'transparent' },
+                grid: { color: 'rgba(0,0,0,0.08)' },
+                angleLines: { color: 'rgba(0,0,0,0.08)' },
+                pointLabels: { font: { size: 10 } },
+              },
+            },
+          }}
+        />
+      </div>
+      <p className="overview-page__radar-note">Gewichteter PV-Anteil der Home-Ladevorgänge je Monat (%)</p>
     </div>
   );
 }
