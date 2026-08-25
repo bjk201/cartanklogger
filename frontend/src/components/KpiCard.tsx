@@ -33,6 +33,7 @@ export function KpiCard({ label, value, unit, icon: Icon, iconColor = 'var(--col
             <span className="kpi-card__value">{value}</span>
             {unit && <span className="kpi-card__unit">{unit}</span>}
           </div>
+          {subtitle && <span className="kpi-card__subtitle">{subtitle}</span>}
         </div>
         {trend && (
           <div className="kpi-card__trend" style={trendStyle}>

@@ -173,6 +173,19 @@ export function OverviewPage() {
               <KpiCard label="Ø Kosten / Session" value={statistics.kpis.avg_cost_per_session.toFixed(2)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             )}
 
+            {/* Ladeverluste: TM used − EVCC geladen (positiv = Verlust) */}
+            {statistics?.kpis?.charging_losses_kwh != null && (
+              <KpiCard
+                label="Ladeverluste"
+                value={formatNumber(Math.abs(statistics.kpis.charging_losses_kwh))}
+                unit="kWh"
+                subtitle={`${statistics.kpis.charging_losses_pct != null ? `${Math.abs(statistics.kpis.charging_losses_pct).toFixed(1)} %` : '—'} · TM ${formatNumber(statistics.kpis.tm_energy_matched_kwh ?? 0)} → EVCC ${formatNumber(statistics.kpis.evcc_energy_matched_kwh ?? 0)} kWh`}
+                icon={(p) => <Activity {...p} />}
+                iconColor="#ef4444"
+                horizontal
+              />
+            )}
+
             {vehicleInfo?.data?.current_odometer_km != null && (
               <KpiCard label="Aktueller KM-Stand" value={formatNumber(vehicleInfo.data.current_odometer_km)} unit="km" icon={(p) => <Gauge {...p} />} iconColor="var(--color-primary)" horizontal />
             )}
