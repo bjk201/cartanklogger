@@ -7,10 +7,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 # SQLite-spezifische Konfiguration für Thread-Sicherheit
-connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_is_memory = _is_sqlite and (":memory:" in settings.DATABASE_URL or "mode=memory" in settings.DATABASE_URL)
 
-# StaticPool für SQLite in Entwicklung/Testing
-poolclass = StaticPool if settings.DATABASE_URL.startswith("sqlite") else None
+connect_args = {"check_same_thread": False} if _is_sqlite else {}
+
+# StaticPool NUR für In-Memory-SQLite. Bei Datei-DBs würde StaticPool eine EINZIGE
+# Connection an alle parallelen Requests verteilen → sqlite3.InterfaceError
+# ("bad parameter or other API misuse") bei gleichzeitiger Nutzung.
+poolclass = StaticPool if _is_memory else None
 
 engine = create_engine(
     settings.DATABASE_URL,
