@@ -2,6 +2,7 @@
   /* Light mode colors */
   --color-bg: #f8fafc;
   --color-bg-card: #ffffff;
+  --color-surface: #ffffff;
   --color-bg-hover: #f1f5f9;
   --color-border: #e2e8f0;
   --color-border-strong: #cbd5e1;
@@ -30,6 +31,7 @@
 [data-theme="dark"] {
   --color-bg: #0f172a;
   --color-bg-card: #1e293b;
+  --color-surface: #1e293b;
   --color-bg-hover: #334155;
   --color-border: #334155;
   --color-border-strong: #475569;
