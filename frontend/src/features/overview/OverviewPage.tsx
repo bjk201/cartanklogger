@@ -9,6 +9,7 @@ import { LoadingState, ErrorState, EmptyState } from '../../components/StateView
 import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs, type MonthlyPvPoint } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
+  ChartDataset,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -613,7 +614,7 @@ function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
   );
 }
 
-/* ===== KmBackgroundChart (Hintergrund: km/Tag + kumulierte km als Linien) ===== */
+/* ===== KmBackgroundChart (Hintergrund: km/Tag als Balken + kumulierte km als Linie) ===== */
 interface KmBackgroundChartProps {
   data: StatisticsKPIs;
 }
@@ -639,31 +640,36 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
 
   return (
     <div className="overview-page__km-bg-chart" aria-hidden="true">
-      <Line
+      <Bar
         data={{
           labels: config.labels,
           datasets: [
             {
               label: 'km/Tag',
               data: config.km,
-              borderColor: 'rgba(13, 148, 136, 0.55)',
-              backgroundColor: 'rgba(13, 148, 136, 0.10)',
-              borderWidth: 1.5,
-              pointRadius: 0,
-              tension: 0.35,
-              fill: true,
+              yAxisID: 'y',
+              backgroundColor: 'rgba(13, 148, 136, 0.28)',
+              hoverBackgroundColor: 'rgba(13, 148, 136, 0.4)',
+              borderWidth: 0,
+              barPercentage: 0.75,
+              categoryPercentage: 0.85,
               order: 2,
             },
             {
-              label: 'kumuliert',
-              data: config.cumulative,
-              borderColor: 'rgba(139, 92, 246, 0.45)',
-              borderWidth: 1.5,
-              borderDash: [4, 3],
-              pointRadius: 0,
-              tension: 0.35,
-              fill: false,
-              order: 1,
+              // Mixed-Chart: Line-Dataset im Bar-Container (TS verlangt hier einen Cast)
+              ...( {
+                type: 'line',
+                label: 'kumuliert',
+                data: config.cumulative,
+                yAxisID: 'y1',
+                borderColor: 'rgba(139, 92, 246, 0.45)',
+                borderWidth: 1.5,
+                borderDash: [4, 3],
+                pointRadius: 0,
+                tension: 0.35,
+                fill: false,
+                order: 1,
+              } as unknown as ChartDataset<'bar', number[]> ),
             },
           ],
         }}
@@ -677,8 +683,11 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
             tooltip: { enabled: false },
           },
           scales: {
+            // Eigene Achsen: Tages-km (0–50) und Kumulativ (~1000) skalieren unabhängig,
+            // damit beide Linien die volle Kachelhöhe nutzen
             x: { display: false },
             y: { display: false, beginAtZero: true },
+            y1: { display: false, beginAtZero: true },
           },
         }}
       />

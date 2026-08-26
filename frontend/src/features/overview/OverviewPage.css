@@ -454,7 +454,10 @@
 }
 
 .overview-page__km-swatch--daily {
-  background: rgba(13, 148, 136, 0.75);
+  width: 7px;
+  height: 9px;
+  border-radius: 1px;
+  background: rgba(13, 148, 136, 0.35);
 }
 
 .overview-page__km-swatch--cum {
