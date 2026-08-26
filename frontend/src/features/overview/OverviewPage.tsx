@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Zap, Euro, Activity, House, Bolt, Gauge, PlugZap, TrendingUp, TrendingDown } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
@@ -620,6 +620,7 @@ interface KmBackgroundChartProps {
 }
 
 function KmBackgroundChart({ data }: KmBackgroundChartProps) {
+  const tipRef = useRef<HTMLDivElement | null>(null);
   const config = useMemo(() => {
     const dates = data.daily_dates || [];
     const km = data.daily_km || [];
@@ -639,7 +640,8 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
   if (config.labels.length < 2) return null;
 
   return (
-    <div className="overview-page__km-bg-chart" aria-hidden="true">
+    <>
+      <div className="overview-page__km-bg-chart" aria-hidden="true">
       <Bar
         data={{
           labels: config.labels,
@@ -677,10 +679,37 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
           responsive: true,
           maintainAspectRatio: false,
           animation: { duration: 0 },
-          events: [],
+          events: ['mousemove', 'mouseout'],
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
-            tooltip: { enabled: false },
+            tooltip: {
+              enabled: false,
+              // Eigenes HTML-Tooltip (liegt als Geschwister-Element ÜBER der Wertebene)
+              external(context) {
+                const { tooltip: tt, chart } = context;
+                const el = tipRef.current;
+                if (!el) return;
+                if (tt.opacity === 0 || !tt.dataPoints?.length) { el.style.opacity = '0'; return; }
+                const idx = tt.dataPoints[0].dataIndex;
+                const fmt = (n: number) => n.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+                const km = fmt(config.km[idx] ?? 0);
+                const cum = fmt(config.cumulative[idx] ?? 0);
+                const dateLabel = config.labels[idx];
+                el.innerHTML =
+                  '<span class="overview-page__km-tooltip-date">' + dateLabel + '</span>' +
+                  '<span class="overview-page__km-tooltip-row"><i class="overview-page__km-swatch overview-page__km-swatch--daily"></i>km/Tag<b>' + km + ' km</b></span>' +
+                  '<span class="overview-page__km-tooltip-row"><i class="overview-page__km-swatch overview-page__km-swatch--cum"></i>kumuliert<b>' + cum + ' km</b></span>';
+                // Ankerpunkt: oberster der beiden Punkte an dieser Stelle
+                const barPt = chart.getDatasetMeta(0).data[idx];
+                const linePt = chart.getDatasetMeta(1) ? chart.getDatasetMeta(1).data[idx] : undefined;
+                const topY = Math.min(barPt ? barPt.y : tt.caretY, linePt ? linePt.y : tt.caretY);
+                const left = Math.min(Math.max(tt.caretX, 60), chart.width - 60);
+                el.style.left = left + 'px';
+                el.style.top = topY + 'px';
+                el.style.opacity = '1';
+              },
+            },
           },
           scales: {
             // Eigene Achsen: Tages-km (0–50) und Kumulativ (~1000) skalieren unabhängig,
@@ -691,7 +720,9 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
           },
         }}
       />
-    </div>
+      </div>
+      <div ref={tipRef} className="overview-page__km-tooltip" aria-hidden="true" />
+    </>
   );
 }
 
