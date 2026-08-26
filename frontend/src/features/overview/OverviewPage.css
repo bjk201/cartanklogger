@@ -411,6 +411,11 @@
   color: #ef4444;
 }
 
+/* Neutrale Akzentfarbe für Mittelwerte (z. B. Kilometer-Kachel) */
+.overview-page__losses-val--accent {
+  color: var(--color-primary);
+}
+
 /* ===== Sessions Split Layout (table + monthly comparison) ===== */
 .overview-page__sessions-split {
   display: flex;

@@ -161,7 +161,7 @@ export function OverviewPage() {
           <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen</h2>
           <div className="overview-page__kpi-grid">
             <KpiCard label="Geladene kWh" value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} unit="kWh" icon={(p) => <Zap {...p} />} iconColor="var(--color-home)" horizontal />
-            <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
+            <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? formatNumber(summary.total_cost_eur) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             <KpiCard label="Ø Kosten/kWh" value={formatCostPerKWh(summary.avg_cost_per_kwh)} icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
 
             {/* NEU: KPIs aus Statistics */}
@@ -202,17 +202,13 @@ export function OverviewPage() {
             {statistics?.kpis?.charging_loss_costs?.total_cost_eur != null && (
               <KpiCard
                 label="Kosten Ladeverluste"
-                value={statistics.kpis.charging_loss_costs.total_cost_eur.toFixed(2)}
+                value={formatNumber(statistics.kpis.charging_loss_costs.total_cost_eur)}
                 unit="€"
-                subtitle={`Zuhause ${statistics.kpis.charging_loss_costs.home_cost_eur?.toFixed(2) ?? '—'} € · Ext. ${(statistics.kpis.charging_loss_costs.external_cost_eur ?? 0).toFixed(2)} €`}
+                subtitle={`Zuhause ${formatNumber(statistics.kpis.charging_loss_costs.home_cost_eur ?? 0)} € · Ext. ${formatNumber(statistics.kpis.charging_loss_costs.external_cost_eur ?? 0)} €`}
                 icon={(p) => <Euro {...p} />}
                 iconColor="#ef4444"
                 horizontal
               />
-            )}
-
-            {vehicleInfo?.data?.current_odometer_km != null && (
-              <KpiCard label="Aktueller KM-Stand" value={formatNumber(vehicleInfo.data.current_odometer_km)} unit="km" icon={(p) => <Gauge {...p} />} iconColor="var(--color-primary)" horizontal />
             )}
 
             {/* Ladevorgänge double-width card */}
@@ -284,13 +280,26 @@ export function OverviewPage() {
               </div>
             </article>
 
-            {/* Gesamt km + Ø km/Tag als eigene Kacheln rechts neben dem Pie */}
-            {summary.total_distance_km != null && (
-              <KpiCard label="Getrackte km im Zeitraum" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
-            )}
-            {summary.avg_distance_per_day_km != null && (
-              <KpiCard label="Ø km/Tag" value={formatNumber(summary.avg_distance_per_day_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-home)" horizontal />
-            )}
+            {/* Kilometer: Aktueller Stand | Getrackt | Ø/Tag — Doppelkachel passend zur Ladevorgänge-Kachel */}
+            <article className="kpi-card kpi-card--double-width">
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Kilometer</span>
+                <div className="overview-page__losses-row">
+                  <div className="overview-page__losses-item">
+                    <span className="overview-page__losses-key">Aktueller Stand</span>
+                    <span className="overview-page__losses-val">{vehicleInfo?.data?.current_odometer_km != null ? formatNumber(vehicleInfo.data.current_odometer_km) : '—'} km</span>
+                  </div>
+                  <div className="overview-page__losses-item overview-page__losses-item--total">
+                    <span className="overview-page__losses-key">Getrackt im Zeitraum</span>
+                    <span className="overview-page__losses-val overview-page__losses-val--accent">{summary.total_distance_km != null ? formatNumber(summary.total_distance_km) : '—'} km</span>
+                  </div>
+                  <div className="overview-page__losses-item overview-page__losses-item--right">
+                    <span className="overview-page__losses-key">Ø pro Tag</span>
+                    <span className="overview-page__losses-val">{summary.avg_distance_per_day_km != null ? formatNumber(summary.avg_distance_per_day_km) : '—'} km</span>
+                  </div>
+                </div>
+              </div>
+            </article>
           </div>
         </section>
       )}
