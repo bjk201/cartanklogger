@@ -280,10 +280,17 @@ export function OverviewPage() {
               </div>
             </article>
 
-            {/* Kilometer: Aktueller Stand | Getrackt | Ø/Tag — Doppelkachel passend zur Ladevorgänge-Kachel */}
-            <article className="kpi-card kpi-card--double-width">
+            {/* Kilometer: Aktueller Stand | Getrackt | Ø/Tag + Hintergrund-Chart (km/Tag & kumuliert) */}
+            <article className="kpi-card kpi-card--double-width overview-page__km-card">
+              {statistics?.kpis && <KmBackgroundChart data={statistics.kpis} />}
               <div className="kpi-card__content">
-                <span className="kpi-card__label">Kilometer</span>
+                <span className="kpi-card__label">
+                  Kilometer
+                  <span className="overview-page__km-legend">
+                    <span className="overview-page__km-legend-item"><span className="overview-page__km-swatch overview-page__km-swatch--daily" /> km/Tag</span>
+                    <span className="overview-page__km-legend-item"><span className="overview-page__km-swatch overview-page__km-swatch--cum" /> kumuliert</span>
+                  </span>
+                </span>
                 <div className="overview-page__losses-row">
                   <div className="overview-page__losses-item">
                     <span className="overview-page__losses-key">Aktueller Stand</span>
@@ -602,6 +609,79 @@ function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
           }}
         />
       </div>
+    </div>
+  );
+}
+
+/* ===== KmBackgroundChart (Hintergrund: km/Tag + kumulierte km als Linien) ===== */
+interface KmBackgroundChartProps {
+  data: StatisticsKPIs;
+}
+
+function KmBackgroundChart({ data }: KmBackgroundChartProps) {
+  const config = useMemo(() => {
+    const dates = data.daily_dates || [];
+    const km = data.daily_km || [];
+
+    const labels = dates.map((d: string) => {
+      try { return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
+      catch { return d; }
+    });
+
+    // Kumulativ aus daily_km (odo-Werte sind punktuell, nicht lückenlos kumuliert)
+    let cum = 0;
+    const cumulative = km.map(v => (cum += v || 0));
+
+    return { labels, km, cumulative };
+  }, [data]);
+
+  if (config.labels.length < 2) return null;
+
+  return (
+    <div className="overview-page__km-bg-chart" aria-hidden="true">
+      <Line
+        data={{
+          labels: config.labels,
+          datasets: [
+            {
+              label: 'km/Tag',
+              data: config.km,
+              borderColor: 'rgba(13, 148, 136, 0.55)',
+              backgroundColor: 'rgba(13, 148, 136, 0.10)',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true,
+              order: 2,
+            },
+            {
+              label: 'kumuliert',
+              data: config.cumulative,
+              borderColor: 'rgba(139, 92, 246, 0.45)',
+              borderWidth: 1.5,
+              borderDash: [4, 3],
+              pointRadius: 0,
+              tension: 0.35,
+              fill: false,
+              order: 1,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 0 },
+          events: [],
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false },
+          },
+          scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: true },
+          },
+        }}
+      />
     </div>
   );
 }

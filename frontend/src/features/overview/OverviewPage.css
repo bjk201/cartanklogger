@@ -412,6 +412,55 @@
 }
 
 /* Neutrale Akzentfarbe für Mittelwerte (z. B. Kilometer-Kachel) */
+/* ===== Kilometer-Kachel mit Hintergrund-Chart ===== */
+.overview-page__km-card {
+  position: relative;
+}
+
+.overview-page__km-card .kpi-card__content {
+  position: relative;
+  z-index: 1;
+}
+
+.overview-page__km-bg-chart {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* Mini-Legende im Label */
+.overview-page__km-legend {
+  display: inline-flex;
+  gap: 0.625rem;
+  margin-left: 0.5rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.overview-page__km-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.5625rem;
+  color: var(--color-text-muted);
+}
+
+.overview-page__km-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+}
+
+.overview-page__km-swatch--daily {
+  background: rgba(13, 148, 136, 0.75);
+}
+
+.overview-page__km-swatch--cum {
+  background: repeating-linear-gradient(90deg, rgba(139, 92, 246, 0.7) 0 4px, transparent 4px 6px);
+}
+
 .overview-page__losses-val--accent {
   color: var(--color-primary);
 }
