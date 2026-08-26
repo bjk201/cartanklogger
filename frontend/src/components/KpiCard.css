@@ -168,11 +168,17 @@
   max-height: 180px;
   overflow: hidden;
   min-height: 0;
+  /* Gegenregel zu .kpi-card { align-items: flex-start } aus StatisticsPage.css
+     (globales Leak ohne Scoping) — sonst schrumpft der Content auf Fit-Content */
+  align-items: stretch;
 }
 
 .kpi-card--double-width .kpi-card__content {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: none;
+  flex: none;
   height: 100%;
   gap: 0.5rem;
 }
