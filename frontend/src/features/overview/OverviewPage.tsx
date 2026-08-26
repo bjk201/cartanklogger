@@ -160,32 +160,42 @@ export function OverviewPage() {
         <section className="overview-page__section" aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen</h2>
           <div className="overview-page__kpi-grid">
-            <KpiCard label="Gesamt kWh" value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} unit="kWh" icon={(p) => <Zap {...p} />} iconColor="var(--color-home)" horizontal />
+            <KpiCard label="Geladene kWh" value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} unit="kWh" icon={(p) => <Zap {...p} />} iconColor="var(--color-home)" horizontal />
             <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? summary.total_cost_eur.toFixed(2) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             <KpiCard label="Ø Kosten/kWh" value={formatCostPerKWh(summary.avg_cost_per_kwh)} icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
 
             {/* NEU: KPIs aus Statistics */}
-            {statistics?.kpis?.total_energy_kwh != null && (
-              <KpiCard label="Geladene Menge im Zeitraum" value={formatNumber(statistics.kpis.total_energy_kwh)} unit="kWh" icon={(p) => <PlugZap {...p} />} iconColor="var(--color-primary)" horizontal />
-            )}
             {statistics?.kpis?.avg_energy_per_session != null && (
               <KpiCard label="Ø Energie / Session" value={formatNumber(statistics.kpis.avg_energy_per_session)} unit="kWh" icon={(p) => <Bolt {...p} />} iconColor="var(--color-home)" horizontal />
             )}
             {statistics?.kpis?.avg_cost_per_session != null && (
-              <KpiCard label="Ø Kosten / Session" value={statistics.kpis.avg_cost_per_session.toFixed(2)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
+              <KpiCard label="Ø Kosten / Session" value={formatNumber(statistics.kpis.avg_cost_per_session)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
             )}
 
-            {/* Ladeverluste: TM used − added über ALLE Charges (positiv = Verlust) */}
+            {/* Ladeverluste: TM used − added je Quelle (positiv = Verlust) */}
             {statistics?.kpis?.charging_losses_kwh != null && (
-              <KpiCard
-                label="Ladeverluste"
-                value={formatNumber(Math.abs(statistics.kpis.charging_losses_kwh))}
-                unit="kWh"
-                subtitle={`${statistics.kpis.charging_losses_pct != null ? `${Math.abs(statistics.kpis.charging_losses_pct).toFixed(1)} %` : '—'} · TM ${formatNumber(statistics.kpis.tm_total_energy_used_kwh ?? 0)} → ${formatNumber(statistics.kpis.tm_total_energy_added_kwh ?? 0)} kWh`}
-                icon={(p) => <Activity {...p} />}
-                iconColor="#ef4444"
-                horizontal
-              />
+              <article className="kpi-card kpi-card--double-width">
+                <div className="kpi-card__content">
+                  <span className="kpi-card__label">Ladeverluste (TM used − added)</span>
+                  <div className="overview-page__losses-row">
+                    <div className="overview-page__losses-item">
+                      <span className="overview-page__losses-key">Zuhause</span>
+                      <span className="overview-page__losses-val">{formatNumber(Math.abs(statistics.kpis.charging_loss_costs?.home_loss_kwh ?? 0))} kWh</span>
+                    </div>
+                    <div className="overview-page__losses-item overview-page__losses-item--total">
+                      <span className="overview-page__losses-key">Gesamt</span>
+                      <span className="overview-page__losses-val overview-page__losses-val--total">
+                        {formatNumber(Math.abs(statistics.kpis.charging_losses_kwh))} kWh
+                        {statistics.kpis.charging_losses_pct != null ? ` (${Math.abs(statistics.kpis.charging_losses_pct).toFixed(1)} %)` : ''}
+                      </span>
+                    </div>
+                    <div className="overview-page__losses-item overview-page__losses-item--right">
+                      <span className="overview-page__losses-key">Extern</span>
+                      <span className="overview-page__losses-val">{formatNumber(Math.abs(statistics.kpis.charging_loss_costs?.external_loss_kwh ?? 0))} kWh</span>
+                    </div>
+                  </div>
+                </div>
+              </article>
             )}
 
             {/* Kosten der Ladeverluste (je Quelle × Ø-Arbeitspreis der Quelle) */}
@@ -276,7 +286,7 @@ export function OverviewPage() {
 
             {/* Gesamt km + Ø km/Tag als eigene Kacheln rechts neben dem Pie */}
             {summary.total_distance_km != null && (
-              <KpiCard label="Gesamt km" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
+              <KpiCard label="Getrackte km im Zeitraum" value={formatNumber(summary.total_distance_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
             )}
             {summary.avg_distance_per_day_km != null && (
               <KpiCard label="Ø km/Tag" value={formatNumber(summary.avg_distance_per_day_km)} unit="km" icon={(p) => <Activity {...p} />} iconColor="var(--color-home)" horizontal />
@@ -602,7 +612,7 @@ function PvRadarChart({ data }: PvRadarChartProps) {
   if (labels.length < 3 || values.every((v) => v == null)) return null;
 
   return (
-    <div className="overview-page__trend-card">
+    <div className="overview-page__trend-card overview-page__radar-card">
       <h3 className="overview-page__trend-title">Sonnenanteil über das Jahr</h3>
       <div className="overview-page__radar-wrapper">
         <Radar

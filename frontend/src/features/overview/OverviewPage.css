@@ -337,11 +337,28 @@
 }
 
 /* ===== PV Radar ===== */
+.overview-page__radar-card {
+  /* Breite einer KPI-Kachel (4 Spalten, 0.75rem Gap), aber doppelte Höhe */
+  max-width: calc((100% - 2.25rem) / 4);
+}
+
+@media (max-width: 1024px) {
+  .overview-page__radar-card {
+    max-width: calc((100% - 0.75rem) / 2);
+  }
+}
+
+@media (max-width: 480px) {
+  .overview-page__radar-card {
+    max-width: none;
+  }
+}
+
 .overview-page__radar-wrapper {
   position: relative;
   width: 100%;
   max-width: 320px;
-  height: 240px;
+  height: 300px;
   margin: 0 auto;
 }
 
@@ -350,6 +367,48 @@
   font-size: 0.6875rem;
   color: var(--color-text-muted);
   margin-top: 0.375rem;
+}
+
+/* ===== Ladeverluste-Zeile (Zuhause | Gesamt | Extern) ===== */
+.overview-page__losses-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0.5rem 0.125rem;
+}
+
+.overview-page__losses-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+
+.overview-page__losses-item--total {
+  align-items: center;
+}
+
+.overview-page__losses-item--right {
+  align-items: flex-end;
+}
+
+.overview-page__losses-key {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.overview-page__losses-val {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.overview-page__losses-val--total {
+  color: #ef4444;
 }
 
 /* ===== Sessions Split Layout (table + monthly comparison) ===== */
