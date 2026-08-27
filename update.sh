@@ -190,14 +190,25 @@ stop_container "${FE_APP_NAME}"
 
 build_image "${FE_IMAGE}" "${FE_BUILD_CONTEXT}" "${FE_DOCKERFILE}" "Frontend"
 
+# WICHTIG: KEIN Bind-Mount von ./frontend nach /app!
+# Ein Bind-Mount ueberschattet das im Image gebaute dist/ (frontend/dist/
+# ist gitignored und fehlt nach frischem git pull auf dem Server) -> 404.
 docker run -d \
   --name "${FE_APP_NAME}" \
   --restart unless-stopped \
   -p "${FE_HOST_PORT}:${FE_CONTAINER_PORT}" \
-  -v "$(pwd)/frontend:/app" \
-  -v "/app/node_modules" \
-  -e VITE_API_BASE=/api \
+  --add-host=host.docker.internal:host-gateway \
+  -e PROXY_TARGET="http://host.docker.internal:${CTL20_HOST_PORT}" \
   "${FE_IMAGE}"
+
+# Sanity: gebaute SPA MUSS im finalen Container liegen
+if docker exec "${FE_APP_NAME}" test -f /app/dist/index.html; then
+  log_info "Frontend: /app/dist/index.html im Container vorhanden"
+else
+  log_error "Frontend: /app/dist/index.html fehlt im Container!"
+  show_container_logs "${FE_APP_NAME}"
+  exit 1
+fi
 
 if wait_for_health "http://localhost:${FE_HOST_PORT}" "Frontend"; then
   log_success "Frontend läuft auf http://localhost:${FE_HOST_PORT}"

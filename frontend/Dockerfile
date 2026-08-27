@@ -10,12 +10,13 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build for production
+# Build for production -> /app/dist
 RUN npm run build
 
-# Use serve to serve static files
-RUN npm install -g serve
+# Sanity-Check: dist MUSS im finalen Image existieren
+RUN test -f dist/index.html || (echo "FEHLER: dist/index.html fehlt nach Build" && exit 1)
 
 EXPOSE 5173
 
-CMD ["serve", "-s", "dist", "-l", "5173"]
+# SPA-Server mit /app/dist-Root + API-Proxy
+CMD ["node", "serve-static.mjs"]
