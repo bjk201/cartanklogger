@@ -9,6 +9,7 @@ import { SessionsPage } from './pages/SessionsPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { ImportReviewPlaceholderPage } from './pages/ImportReviewPlaceholderPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
+import { TmCostExportPage } from './pages/TmCostExportPage';
 import VehiclePage from './pages/VehiclePage';
 import './styles/global.css';
 import './styles/layout.css';
@@ -31,6 +32,7 @@ function App() {
                   <Route path="/statistics" element={<StatisticsPage />} />
                   <Route path="/import-review" element={<ImportReviewPlaceholderPage />} />
                   <Route path="/settings" element={<DataSourcesPage />} />
+                  <Route path="/tm-cost-export" element={<TmCostExportPage />} />
                   <Route path="/vehicle" element={<VehiclePage />} />
                 </Routes>
               </main>

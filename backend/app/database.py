@@ -58,6 +58,7 @@ def init_db() -> None:
     from app.models import datasource  # noqa: F401
     from app.models import vehicle  # noqa: F401
     from app.models import extra_costs  # noqa: F401
+    from app.models import tm_cost_export  # noqa: F401
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
         _migrate_sessions_columns(conn)

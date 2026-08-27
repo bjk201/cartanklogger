@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     # Data source mode
     DATA_SOURCE: str = "demo"  # demo | live
 
+    # TeslaMate Postgres (kontrollierter Kosten-Writeback, NIEMALS ans Frontend)
+    TESLAMATE_DB_HOST: str = ""
+    TESLAMATE_DB_PORT: int = 5432
+    TESLAMATE_DB_NAME: str = "teslamate"
+    TESLAMATE_DB_USER: str = "teslamate"
+    TESLAMATE_DB_PASSWORD: str = ""
+
     class Config:
         env_file = "/app/config.yaml" if os.path.exists("/app/config.yaml") else None
         env_file_encoding = "utf-8"
