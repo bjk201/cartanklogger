@@ -16,7 +16,17 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# Selbstüberschreibungs-Schutz: git pull ersetzt DIESE laufende Datei.
+# Bash liest Skripte stückweise von der alten Byte-Position weiter und wuerde
+# so den ALTEN docker-run-Block ausfuehren. Deshalb: erst komplett einlesen,
+# dann aus dem Snapshot starten ($0 wird dabei ungültig -> DIR exportieren).
+if [ -z "${CTL_UPDATE_REEXEC:-}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  export CTL_UPDATE_REEXEC=1 CTL_SCRIPT_DIR="$SCRIPT_DIR"
+  exec bash <(cat "$SCRIPT_DIR/update.sh") "$@"
+fi
+
+cd "${CTL_SCRIPT_DIR:-$(dirname "$0")}"
 
 # ============================================================
 # KONFIGURATION – NUR NOCH CTL 2.0
