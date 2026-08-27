@@ -47,6 +47,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
+import { attachFloatingTooltip } from '../lib/chartTooltip';
 import './StatisticsPage.css';
 
 // Register Chart.js components
@@ -64,6 +65,7 @@ ChartJS.register(
 );
 
 export function StatisticsPage() {
+  const externalTooltip = useMemo(attachFloatingTooltip, []);
   const [data, setData] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +168,7 @@ export function StatisticsPage() {
     if (!data?.kpis?.daily_dates || data?.kpis?.daily_dates.length === 0) return null;
 
     return {
-      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
+      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[0]}`; }), // DD.MM
       datasets: [
         {
           label: 'km',
@@ -212,10 +214,9 @@ export function StatisticsPage() {
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        titleFont: { size: 13, family: 'system-ui' },
-        bodyFont: { size: 12, family: 'system-ui' },
+        enabled: false,
+        // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+        external: externalTooltip,
         callbacks: {
           label: (context: any) => {
             const label = context.dataset.label || '';
@@ -286,7 +287,7 @@ export function StatisticsPage() {
       return null;
 
     return {
-      labels: data?.kpis?.daily_charged_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
+      labels: data?.kpis?.daily_charged_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[0]}`; }), // DD.MM
       datasets: [
         {
           type: 'bar',
@@ -350,10 +351,9 @@ export function StatisticsPage() {
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        titleFont: { size: 13, family: 'system-ui' },
-        bodyFont: { size: 12, family: 'system-ui' },
+        enabled: false,
+        // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+        external: externalTooltip,
         callbacks: {
           label: (context: any) => {
             const label = context.dataset.label || '';
@@ -413,7 +413,7 @@ export function StatisticsPage() {
     }
 
     return {
-      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[2]}`; }), // DD.MM format
+      labels: data?.kpis?.daily_dates.map((d) => { const p = d.slice(5).split("-"); return `${p[1]}.${p[0]}`; }), // DD.MM
       datasets: [
         {
           label: 'Kumulierte km',
@@ -441,10 +441,9 @@ export function StatisticsPage() {
         display: false,
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        titleFont: { size: 13, family: 'system-ui' },
-        bodyFont: { size: 12, family: 'system-ui' },
+        enabled: false,
+        // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+        external: externalTooltip,
         callbacks: {
           label: (context: any) => {
             const value = context.parsed.y;

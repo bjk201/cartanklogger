@@ -22,6 +22,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line, Pie, Bar, Radar } from 'react-chartjs-2';
+import { attachFloatingTooltip } from '../../lib/chartTooltip';
 import './OverviewPage.css';
 
 ChartJS.register(
@@ -50,6 +51,7 @@ function movingAverage(data: number[], windowSize: number): (number | null)[] {
 
 export function OverviewPage() {
   const navigate = useNavigate();
+  const pieExternalTooltip = useMemo(attachFloatingTooltip, []);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoResponse | null>(null);
@@ -250,6 +252,9 @@ export function OverviewPage() {
                           plugins: {
                             legend: { display: false },
                             tooltip: {
+                              enabled: false,
+                              // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+                              external: pieExternalTooltip,
                               callbacks: {
                                 label: (ctx: any) => `${ctx.label}: ${ctx.parsed.toFixed(1)} kWh`,
                               },
@@ -372,6 +377,7 @@ interface TrendChartDailyProps {
 }
 
 function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyProps) {
+  const externalTooltip = useMemo(attachFloatingTooltip, []);
   const chartConfig = useMemo(() => {
     let dates = data.daily_dates || [];
     let values: number[] = [];
@@ -521,9 +527,15 @@ function TrendChartDaily({ title, data, chartType = 'energy' }: TrendChartDailyP
           options={{
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
               legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
-              tooltip: { callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}` } },
+              tooltip: {
+                enabled: false,
+                // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+                external: externalTooltip,
+                callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}` },
+              },
             },
             scales: {
               x: { display: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 }, maxTicksLimit: 10 } },
@@ -543,6 +555,7 @@ interface DailyChargedBarChartProps {
 }
 
 function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
+  const externalTooltip = useMemo(attachFloatingTooltip, []);
   const config = useMemo(() => {
     const dates = data.daily_charged_dates || [];
     const home = data.daily_home_kwh || [];
@@ -598,6 +611,9 @@ function DailyChargedBarChart({ data }: DailyChargedBarChartProps) {
             plugins: {
               legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
               tooltip: {
+                enabled: false,
+                // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+                external: externalTooltip,
                 callbacks: {
                   label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kWh`,
                 },
@@ -620,7 +636,7 @@ interface KmBackgroundChartProps {
 }
 
 function KmBackgroundChart({ data }: KmBackgroundChartProps) {
-  const tipRef = useRef<HTMLDivElement | null>(null);
+  const externalTooltip = useMemo(attachFloatingTooltip, []);
   const config = useMemo(() => {
     const dates = data.daily_dates || [];
     const km = data.daily_km || [];
@@ -640,8 +656,7 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
   if (config.labels.length < 2) return null;
 
   return (
-    <>
-      <div className="overview-page__km-bg-chart" aria-hidden="true">
+    <div className="overview-page__km-bg-chart" aria-hidden="true">
       <Bar
         data={{
           labels: config.labels,
@@ -685,38 +700,10 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
             legend: { display: false },
             tooltip: {
               enabled: false,
-              // Eigenes HTML-Tooltip (liegt als Geschwister-Element ÜBER der Wertebene)
-              external(context) {
-                const { tooltip: tt, chart } = context;
-                const el = tipRef.current;
-                if (!el) return;
-                if (tt.opacity === 0 || !tt.dataPoints?.length) { el.style.opacity = '0'; return; }
-                const idx = tt.dataPoints[0].dataIndex;
-                const fmt = (n: number) => n.toLocaleString('de-DE', { maximumFractionDigits: 1 });
-                const km = fmt(config.km[idx] ?? 0);
-                const cum = fmt(config.cumulative[idx] ?? 0);
-                const dateLabel = config.labels[idx];
-                el.innerHTML =
-                  '<span class="overview-page__km-tooltip-date">' + dateLabel + '</span>' +
-                  '<span class="overview-page__km-tooltip-row"><i class="overview-page__km-swatch overview-page__km-swatch--daily"></i>km/Tag<b>' + km + ' km</b></span>' +
-                  '<span class="overview-page__km-tooltip-row"><i class="overview-page__km-swatch overview-page__km-swatch--cum"></i>kumuliert<b>' + cum + ' km</b></span>';
-                // Ankerpunkt: oberster der beiden Punkte an dieser Stelle
-                const barPt = chart.getDatasetMeta(0).data[idx];
-                const linePt = chart.getDatasetMeta(1) ? chart.getDatasetMeta(1).data[idx] : undefined;
-                const topY = Math.min(barPt ? barPt.y : tt.caretY, linePt ? linePt.y : tt.caretY);
-                // Horizontal exakt an die Kachelränder klemmen (echte Tooltip-Breite)
-                const w = el.offsetWidth;
-                const left = Math.min(Math.max(tt.caretX, w / 2 + 8), chart.width - w / 2 - 8);
-                el.style.left = left + 'px';
-                // Vertikal: genug Platz darüber? Sonst unterhalb des Punkts einblenden (Flip)
-                const h = el.offsetHeight;
-                if (topY < h + 14) {
-                  el.classList.add('overview-page__km-tooltip--below');
-                } else {
-                  el.classList.remove('overview-page__km-tooltip--below');
-                }
-                el.style.top = topY + 'px';
-                el.style.opacity = '1';
+              // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+              external: externalTooltip,
+              callbacks: {
+                label: (ctx: any) => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`,
               },
             },
           },
@@ -729,9 +716,7 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
           },
         }}
       />
-      </div>
-      <div ref={tipRef} className="overview-page__km-tooltip" aria-hidden="true" />
-    </>
+    </div>
   );
 }
 
@@ -741,6 +726,7 @@ interface PvRadarChartProps {
 }
 
 function PvRadarChart({ data }: PvRadarChartProps) {
+  const externalTooltip = useMemo(attachFloatingTooltip, []);
   const labels = useMemo(
     () => data.map((p) => new Date(parseInt(p.month.slice(0, 4)), parseInt(p.month.slice(5, 7)) - 1).toLocaleDateString('de-DE', { month: 'short' })),
     [data]
@@ -771,9 +757,13 @@ function PvRadarChart({ data }: PvRadarChartProps) {
           options={{
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
             plugins: {
               legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
               tooltip: {
+                enabled: false,
+                // Universelles Floating-Tooltip (am Body, nie abgeschnitten)
+                external: externalTooltip,
                 callbacks: {
                   label: (ctx: any) => {
                     const p = data[ctx.dataIndex];
