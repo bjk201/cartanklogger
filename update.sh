@@ -168,12 +168,18 @@ docker run -d \
   --name "${CTL20_APP_NAME}" \
   --restart unless-stopped \
   -p "${CTL20_HOST_PORT}:${CTL20_CONTAINER_PORT}" \
+  --add-host=host.docker.internal:host-gateway \
   -v "$(pwd)/config:/app/config" \
   -v "$(pwd)/data:/app/data" \
   -e CONFIG_PATH="${CTL20_CONFIG_FILE}" \
   -e DB_PATH="${CTL20_DB_PATH}" \
   -e MOCK_MODE="${MOCK_MODE}" \
   -e ALLOWED_ORIGINS="${ALLOWED_ORIGINS}" \
+  -e TESLAMATE_DB_HOST="${TESLAMATE_DB_HOST:-}" \
+  -e TESLAMATE_DB_PORT="${TESLAMATE_DB_PORT:-}" \
+  -e TESLAMATE_DB_USER="${TESLAMATE_DB_USER:-}" \
+  -e TESLAMATE_DB_PASSWORD="${TESLAMATE_DB_PASSWORD:-}" \
+  -e TESLAMATE_DB_NAME="${TESLAMATE_DB_NAME:-}" \
   "${CTL20_IMAGE}"
 
 if wait_for_health "http://localhost:${CTL20_HOST_PORT}/health" "CTL 2.0"; then
