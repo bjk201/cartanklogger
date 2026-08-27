@@ -139,6 +139,20 @@ export function TmCostExportPage() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Allokationen NEU BERECHNEN (POST /refresh): holt EVCC+TM live, matched,
+  // schreibt session_cost_allocations. Schreibt NIE in TeslaMate.
+  const recompute = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await req<{ ok: boolean }>('/api/tm-cost-export/refresh', { method: 'POST' });
+      await loadList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLoading(false);
+    }
+  }, [loadList]);
+
   const openDialog = (kind: DialogKind, item: ListItem) => {
     setCheckedConfirmed(false);
     setActionError(null);
@@ -189,9 +203,19 @@ export function TmCostExportPage() {
             EVCC-Kosten werden nur nach Prüfung und expliziter Freigabe in TeslaMate geschrieben.
           </p>
         </div>
-        <button className="tmexp-btn" onClick={loadList} disabled={loading}>
-          <RefreshCw size={15} className={loading ? 'spin' : ''} aria-hidden /> Neu laden
-        </button>
+        <div className="tmexp-header__actions">
+          <button
+            className="tmexp-btn"
+            onClick={recompute}
+            disabled={loading}
+            title="Matched EVCC-Sessions mit TeslaMate-Chargen neu und schreibt die Allokationen (kein TeslaMate-Write!)"
+          >
+            <RefreshCw size={15} className={loading ? 'spin' : ''} aria-hidden /> Berechnen
+          </button>
+          <button className="tmexp-btn" onClick={loadList} disabled={loading}>
+            <Eye size={15} aria-hidden /> Neu laden
+          </button>
+        </div>
       </header>
 
       {/* Status-KPIs */}
