@@ -704,8 +704,17 @@ function KmBackgroundChart({ data }: KmBackgroundChartProps) {
                 const barPt = chart.getDatasetMeta(0).data[idx];
                 const linePt = chart.getDatasetMeta(1) ? chart.getDatasetMeta(1).data[idx] : undefined;
                 const topY = Math.min(barPt ? barPt.y : tt.caretY, linePt ? linePt.y : tt.caretY);
-                const left = Math.min(Math.max(tt.caretX, 60), chart.width - 60);
+                // Horizontal exakt an die Kachelränder klemmen (echte Tooltip-Breite)
+                const w = el.offsetWidth;
+                const left = Math.min(Math.max(tt.caretX, w / 2 + 8), chart.width - w / 2 - 8);
                 el.style.left = left + 'px';
+                // Vertikal: genug Platz darüber? Sonst unterhalb des Punkts einblenden (Flip)
+                const h = el.offsetHeight;
+                if (topY < h + 14) {
+                  el.classList.add('overview-page__km-tooltip--below');
+                } else {
+                  el.classList.remove('overview-page__km-tooltip--below');
+                }
                 el.style.top = topY + 'px';
                 el.style.opacity = '1';
               },

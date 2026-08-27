@@ -488,6 +488,11 @@
   transition: opacity 0.12s ease;
 }
 
+/* Platzmangel oben (hohe Kumuliert-Punkte rechts): Tooltip erscheint unterhalb */
+.overview-page__km-tooltip--below {
+  transform: translate(-50%, 12px);
+}
+
 .overview-page__km-tooltip-date {
   font-weight: 600;
   color: var(--color-text-muted);
