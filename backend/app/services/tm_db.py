@@ -60,7 +60,7 @@ def _get_connection():
         raise TeslaMateDBConfigError("TESLAMATE_DB_* nicht konfiguriert")
 
     try:
-        return psycopg2.connect(**kw, connect_timeout=8)
+        return psycopg2.connect(**{**kw, "connect_timeout": 8})
     except psycopg2.OperationalError as exc:
         # Klartext-Fehler statt 500-Traceback; typische Fehlkonfigurationen benennen
         host = kw.get("host"); port = kw.get("port")
