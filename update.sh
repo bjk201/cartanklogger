@@ -196,6 +196,20 @@ docker run -d \
   -e TESLAMATE_DB_NAME="${TESLAMATE_DB_NAME:-}" \
   "${CTL20_IMAGE}"
 
+# Optional: Backend zusaetzlich ins Docker-Netzwerk von TeslaMate haengen,
+# damit es die NICHT nach aussen exponierte TeslaMate-Postgres erreicht.
+# In .env setzen: TESLAMATE_DB_NETWORK=<netzname>
+# Netzwerkname herausfinden:
+#   docker inspect teslamate-database-1 --format '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}'
+# Dann gilt in .env: TESLAMATE_DB_HOST=<service-name-der-db, z.B. database>, PORT=5432
+if [ -n "${TESLAMATE_DB_NETWORK:-}" ]; then
+  if docker network connect "${TESLAMATE_DB_NETWORK}" "${CTL20_APP_NAME}" >/dev/null 2>&1; then
+    log_info "Backend mit Docker-Netzwerk '${TESLAMATE_DB_NETWORK}' verbunden (TeslaMate-Postgres erreichbar)"
+  else
+    log_info "Backend bereits in '${TESLAMATE_DB_NETWORK}' oder Netzwerk nicht gefunden"
+  fi
+fi
+
 if wait_for_health "http://localhost:${CTL20_HOST_PORT}/health" "CTL 2.0"; then
   log_success "CTL 2.0 läuft auf http://localhost:${CTL20_HOST_PORT}"
 
