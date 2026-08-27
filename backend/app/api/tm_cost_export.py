@@ -18,6 +18,7 @@ from app.services.tm_cost_export_service import (
     TMCostExportService,
     TMCostExportError,
 )
+from app.services.tm_db import TeslaMateDBConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def approve_session(evcc_session_id: int, db: DBSession = Depends(get_db)):
     """
     try:
         return _svc(db).approve(evcc_session_id)
-    except TMCostExportError as exc:
+    except (TMCostExportError, TeslaMateDBConfigError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
@@ -101,8 +102,8 @@ def execute_session(
         )
     try:
         return _svc(db).execute(evcc_session_id, confirm=True)
-    except TMCostExportError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except (TMCostExportError, TeslaMateDBConfigError) as exc:
+        raise HTTPException(status_code=503, detail=f"TeslaMate-Writeback fehlgeschlagen: {exc}")
 
 
 @router.post("/{evcc_session_id}/rollback")
