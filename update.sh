@@ -56,6 +56,20 @@ COMMIT_HASH="$(git rev-parse --short HEAD 2>/dev/null || echo "n/a")"
 
 # Umgebung aus .env laden (falls vorhanden), z.B. MOCK_MODE
 if [ -f .env ]; then
+  # Vorab-Pruefung: .env wird als Shell-Code gesourced und MUSS valide sein,
+  # sonst crasht das Skript hier mit kryptischem Bash-Fehler.
+  if ! bash -n .env 2>/dev/null; then
+    echo ""
+    echo "❌ .env hat kein gueltiges Format (bash -n fehlgeschlagen):"
+    bash -n .env 2>&1 | head -3 | sed 's/^/   /' || true
+    echo ""
+    echo "   Regeln fuer .env:"
+    echo "     - Nur Zeilen der Form  SCHLUESSEL='WERT'"
+    echo "     - Werte am besten in EINFACHE Anfuehrungszeichen (schuetzt Sonderzeichen)"
+    echo "     - Kommentare als eigene Zeile beginnend mit #  (keine Notizen hinter Werten!)"
+    echo ""
+    exit 1
+  fi
   set -a
   # shellcheck disable=SC1091
   . ./.env
