@@ -208,6 +208,14 @@ if [ -n "${TESLAMATE_DB_NETWORK:-}" ]; then
   else
     log_info "Backend bereits in '${TESLAMATE_DB_NETWORK}' oder Netzwerk nicht gefunden"
   fi
+  # DNS-Verifikation: ist der DB-Host aus dem Backend-Container aufloesbar?
+  if docker exec "${CTL20_APP_NAME}" python -c "import socket; socket.gethostbyname('${TESLAMATE_DB_HOST:-database}')" >/dev/null 2>&1; then
+    log_success "TeslaMate-DB '${TESLAMATE_DB_HOST:-database}' per DNS erreichbar (Netzwerk-Join OK)"
+  else
+    log_error "TeslaMate-DB-Host '${TESLAMATE_DB_HOST:-database}' ist aus dem Backend NICHT aufloesbar!"
+    log_error "  Netzwerkname pruefen mit: docker inspect teslamate-database-1 --format \"{{json .NetworkSettings.Networks}}\""
+    log_error "  Dann TESLAMATE_DB_NETWORK in .env EXAKT auf diesen Namen setzen und ./update.sh erneut ausfuehren."
+  fi
 fi
 
 if wait_for_health "http://localhost:${CTL20_HOST_PORT}/health" "CTL 2.0"; then
