@@ -59,7 +59,20 @@ def _get_connection():
     if not kw.get("dbname"):
         raise TeslaMateDBConfigError("TESLAMATE_DB_* nicht konfiguriert")
 
-    return psycopg2.connect(**kw)
+    try:
+        return psycopg2.connect(**kw, connect_timeout=8)
+    except psycopg2.OperationalError as exc:
+        # Klartext-Fehler statt 500-Traceback; typische Fehlkonfigurationen benennen
+        host = kw.get("host"); port = kw.get("port")
+        hint = ""
+        if port in (80, 4000, 8080, 4001):
+            hint = (
+                f" Port {port} ist kein Postgres-Port — TESLAMATE_DB_PORT muss auf die "
+                "TeslaMate-POSTGRES-DB zeigen (Standard 5432), NICHT auf die TeslaMateApi (4000/8080)."
+            )
+        raise TeslaMateDBConfigError(
+            f"Verbindung zu TeslaMate-DB {host}:{port} fehlgeschlagen: {exc}.{hint}"
+        ) from exc
 
 
 @contextmanager
