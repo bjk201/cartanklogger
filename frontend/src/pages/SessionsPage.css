@@ -709,3 +709,52 @@
   background: #f3e8ff;
   color: #7c3aed;
 }
+/* === Edit-Modal: Löschen links, Abbrechen/Speichern rechts === */
+.form-actions--split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+.form-actions__right {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+html[data-theme='dark'] .btn-danger {
+  color: #f87171;
+}
+.session-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--ctl-text-muted, #64748b);
+  cursor: pointer;
+  user-select: none;
+}
+.session-delete-confirm input[type='checkbox'] {
+  accent-color: #dc2626;
+}

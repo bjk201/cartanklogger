@@ -59,8 +59,10 @@ class SyncService:
                 return result
             
             live_sessions = await client.get_sessions()
-            
+
+            live_source_ids = set()
             for live_session in live_sessions:
+                live_source_ids.add(live_session.source_id)
                 try:
                     # Check if already exists (by source_id)
                     existing = self.db.query(SessionModel).filter(
@@ -114,7 +116,52 @@ class SyncService:
                     result["errors"].append(f"Session {live_session.source_id}: {e}")
             
             self.db.commit()
-            
+
+            # --- Lösch-Replikation: EVCC ist führend für Home-Sessions ---
+            # Home-Sessions, die in EVCC gelöscht wurden, werden aus CTL
+            # entfernt — ABER nur ohne Audit-Referenzen (Allokationen,
+            # Exporte, Overrides), damit die TM-Kostenexport-Historie
+            # nicht verwaist. Gelöschte Sessions mit Referenzen bleiben
+            # erhalten und werden im Ergebnis gemeldet.
+            from app.models.tm_cost_export import SessionCostAllocation, TMCostExport
+            from app.models.matching_override import MatchingOverride
+
+            kept_by_ref = []
+            deleted_n = 0
+            home_rows = (
+                self.db.query(SessionModel)
+                .filter(SessionModel.source_type == "home")
+                .all()
+            )
+            for row in home_rows:
+                if row.source_id in live_source_ids:
+                    continue  # existiert weiter in EVCC
+                alloc_n = (
+                    self.db.query(SessionCostAllocation)
+                    .filter_by(evcc_session_id=row.id)
+                    .count()
+                )
+                exp_n = (
+                    self.db.query(TMCostExport)
+                    .filter_by(evcc_session_id=row.id)
+                    .count()
+                )
+                ov_n = (
+                    self.db.query(MatchingOverride)
+                    .filter_by(evcc_session_id=row.id)
+                    .count()
+                )
+                if alloc_n or exp_n or ov_n:
+                    kept_by_ref.append(f"#{row.id} (Allokation/Export/Override vorhanden)")
+                    continue
+                self.db.delete(row)
+                deleted_n += 1
+            self.db.commit()
+            if deleted_n:
+                result["deleted"] = deleted_n
+            for k in kept_by_ref:
+                result["errors"].append(f"Session {k} in EVCC geloescht, aber in CTL behalten (Export-Historie)")
+
         except Exception as e:
             self.db.rollback()
             result["errors"].append(f"EVCC Sync failed: {e}")

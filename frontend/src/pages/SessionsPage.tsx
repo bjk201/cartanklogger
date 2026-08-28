@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Edit2, Link2, ChevronRight as ChevronRightIcon, ExternalLink } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Edit2, Link2, ChevronRight as ChevronRightIcon, ExternalLink, Trash2 } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge } from '../lib/apiClient';
+import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge } from '../lib/apiClient';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
@@ -38,21 +38,46 @@ function EditModal({ session, onClose, onSaved }: EditModalProps) {
   const [note, setNote] = useState(session.note || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lösch-Bestätigung (Checkbox-Zwang, wie beim TM-Kostenexport)
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      // TODO: Backend PUT /api/sessions/{id} endpoint needed
-      // For now simulate save
-      await new Promise(r => setTimeout(r, 500));
+      await updateSession(session.id, {
+        date: date || undefined,
+        energy_kwh: energy === '' ? null : Number(energy),
+        cost_eur: cost === '' ? null : Number(cost),
+        cost_per_kwh: costPerKwh === '' ? null : Number(costPerKwh),
+        location: location === '' ? null : location,
+        odometer_km: odometer === '' ? null : Number(odometer),
+        distance_km: distance === '' ? null : Number(distance),
+        note: note === '' ? null : note,
+      });
       onSaved();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteSession(session.id);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Löschen');
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -110,12 +135,32 @@ function EditModal({ session, onClose, onSaved }: EditModalProps) {
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} />
             </div>
             {error && <div className="form-submit-error">{error}</div>}
-            <div className="form-actions">
-              <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Abbrechen</button>
-              <button type="submit" className="btn-primary" disabled={saving}>
-                {saving ? 'Wird gespeichert…' : 'Speichern'}
+            <div className="form-actions form-actions--split">
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={handleDelete}
+                disabled={!confirmDelete || deleting || saving}
+                title={confirmDelete ? 'Session unwiderruflich löschen' : 'Erst Checkbox bestätigen'}
+              >
+                {deleting ? 'Wird gelöscht…' : <><Trash2 size={14} aria-hidden /> Löschen</>}
               </button>
+              <div className="form-actions__right">
+                <button type="button" className="btn-secondary" onClick={onClose} disabled={saving || deleting}>Abbrechen</button>
+                <button type="submit" className="btn-primary" disabled={saving || deleting}>
+                  {saving ? 'Wird gespeichert…' : 'Speichern'}
+                </button>
+              </div>
             </div>
+            <label className="session-delete-confirm">
+              <input
+                type="checkbox"
+                checked={confirmDelete}
+                onChange={e => setConfirmDelete(e.target.checked)}
+                disabled={deleting || saving}
+              />
+              Ich bestätige: Diese Session aus CTL löschen (Quelle z. B. EVCC bleibt unberührt)
+            </label>
           </form>
         </div>
       </div>
@@ -299,9 +344,19 @@ export function SessionsPage() {
     setSyncMessage(null);
     try {
       const result = await api.syncDataSources();
-      setSyncMessage(result.ok ? 'Sync erfolgreich!' : 'Sync teilweise fehlgeschlagen');
+      if (!result?.ok) {
+        setSyncMessage('Sync teilweise fehlgeschlagen');
+      } else {
+        const evcc = result.result?.evcc || {};
+        const deleted = evcc.deleted || 0;
+        const kept = (evcc.errors || []).filter((e: string) => e.includes('behalten')).length;
+        let msg = `Sync OK: ${evcc.synced ?? 0} EVCC-Sessions`;
+        if (deleted) msg += `, ${deleted} in EVCC gelöschte entfernt`;
+        if (kept) msg += `, ${kept} mit Export-Historie behalten`;
+        setSyncMessage(msg);
+      }
       await fetchSessions();
-      setTimeout(() => setSyncMessage(null), 3000);
+      setTimeout(() => setSyncMessage(null), 5000);
     } catch (err) {
       setSyncMessage('Sync-Fehler: ' + (err instanceof Error ? err.message : 'Unbekannt'));
       setTimeout(() => setSyncMessage(null), 5000);

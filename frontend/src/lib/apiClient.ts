@@ -287,6 +287,26 @@ export function syncDataSources(): Promise<any> {
   return request('/settings/data-sources/sync', { method: 'POST' });
 }
 
+// --- Session Edit/Delete ---
+export interface SessionUpdate {
+  date?: string;
+  energy_kwh?: number | null;
+  cost_eur?: number | null;
+  cost_per_kwh?: number | null;
+  location?: string | null;
+  odometer_km?: number | null;
+  distance_km?: number | null;
+  note?: string | null;
+}
+
+export function updateSession(id: number, data: SessionUpdate): Promise<any> {
+  return request(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function deleteSession(id: number): Promise<any> {
+  return request(`/sessions/${id}`, { method: 'DELETE' });
+}
+
 // --- Vehicle Records ---
 export function getVehicleRecords(): Promise<VehicleRecordsResponse> {
   return request('/vehicle/records');

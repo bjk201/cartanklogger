@@ -424,3 +424,136 @@ async def remove_session_match(
         "session_id": session_id,
         "tm_charge_id": tm_charge_id,
     }
+
+# ---------------------------------------------------------------------------
+# Edit + Delete (Session-Detailpflege; Quelle bleibt EVCC/TM, hier nur CTL)
+# ---------------------------------------------------------------------------
+from fastapi import HTTPException as _HTTPException
+from pydantic import BaseModel as _BaseModel
+from typing import Optional as _Optional
+
+
+class _SessionUpdate(_BaseModel):
+    date: _Optional[str] = None
+    energy_kwh: _Optional[float] = None
+    cost_eur: _Optional[float] = None
+    cost_per_kwh: _Optional[float] = None
+    location: _Optional[str] = None
+    odometer_km: _Optional[float] = None
+    distance_km: _Optional[float] = None
+    note: _Optional[str] = None
+
+
+from app.models.session import SessionModel as _SessionModel
+
+
+def _get_session_or_404(db: Session, session_id: int) -> _SessionModel:
+    s = db.query(_SessionModel).filter(_SessionModel.id == session_id).first()
+    if not s:
+        raise _HTTPException(status_code=404, detail=f"Session {session_id} nicht gefunden")
+    return s
+
+
+@router.put("/{session_id}")
+async def update_session(
+    session_id: int,
+    body: _SessionUpdate,
+    db: Session = Depends(get_db),
+):
+    """Session-Felder direkt in CTL korrigieren (z. B. falsche kWh/Kosten).
+
+    Nur gesetzte Felder werden ueberschrieben; cost_per_kwh_source wird auf
+    'manual' gesetzt, wenn der Preis uebersteuert wurde.
+    """
+    from datetime import datetime as _dt
+
+    s = _get_session_or_404(db, session_id)
+    data = body.dict(exclude_unset=True)
+
+    if "date" in data and data["date"]:
+        raw = data["date"].replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                s.date = _dt.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            raise _HTTPException(status_code=422, detail=f"Ungueltiges Datum: {data['date']}")
+
+    if "energy_kwh" in data:
+        s.energy_kwh = data["energy_kwh"]
+    if "cost_eur" in data:
+        s.cost_eur = data["cost_eur"]
+    if "cost_per_kwh" in data:
+        s.cost_per_kwh = data["cost_per_kwh"]
+        s.cost_per_kwh_source = "api" if data["cost_per_kwh"] is not None else "derived"
+    if "location" in data:
+        s.location = data["location"]
+    if "odometer_km" in data:
+        s.odometer_km = data["odometer_km"]
+    if "distance_km" in data:
+        s.distance_km = data["distance_km"]
+    if "note" in data:
+        s.note = data["note"]
+
+    # Konsistenz: wenn Energie+Kosten vorhanden, Kosten/kWh neu ableiten
+    # (nur wenn Preis-Feld selbst nicht explizit im Request war)
+    if "cost_per_kwh" not in data and s.energy_kwh and s.cost_eur and s.energy_kwh > 0:
+        s.cost_per_kwh = round(s.cost_eur / s.energy_kwh, 4)
+        s.cost_per_kwh_source = "derived"
+
+    db.commit()
+    db.refresh(s)
+    return {
+        "ok": True,
+        "message": "Session aktualisiert",
+        "session_id": s.id,
+        "updated": {
+            "date": s.date.isoformat() if s.date else None,
+            "energy_kwh": s.energy_kwh,
+            "cost_eur": s.cost_eur,
+            "cost_per_kwh": s.cost_per_kwh,
+            "location": s.location,
+            "odometer_km": s.odometer_km,
+            "distance_km": s.distance_km,
+            "note": s.note,
+        },
+    }
+
+
+@router.delete("/{session_id}")
+async def delete_session(session_id: int, db: Session = Depends(get_db)):
+    """Session aus CTL loeschen (mit Referenz-Schutz).
+
+    Blockiert, wenn Allokationen, Exporte oder Overrides an der Session
+    haengen — diese Referenzen halten die TM-Kostenexport-Historie fest.
+    """
+    from app.models.tm_cost_export import SessionCostAllocation, TMCostExport
+    from app.models.matching_override import MatchingOverride
+
+    s = _get_session_or_404(db, session_id)
+
+    refs = []
+    alloc_n = db.query(SessionCostAllocation).filter_by(evcc_session_id=s.id).count()
+    exp_n = db.query(TMCostExport).filter_by(evcc_session_id=s.id).count()
+    ov_n = db.query(MatchingOverride).filter_by(evcc_session_id=s.id).count()
+    if alloc_n:
+        refs.append(f"{alloc_n} Allokation(en)")
+    if exp_n:
+        refs.append(f"{exp_n} Export-Eintraege")
+    if ov_n:
+        refs.append(f"{ov_n} Override(s)")
+
+    if refs:
+        raise _HTTPException(
+            status_code=409,
+            detail="Session kann nicht geloescht werden — Referenzen vorhanden: "
+            + ", ".join(refs)
+            + ". Erst Matching/Export-Verweise entfernen.",
+        )
+
+    info = {"id": s.id, "source_id": s.source_id, "date": s.date.isoformat() if s.date else None}
+    db.delete(s)
+    db.commit()
+    return {"ok": True, "message": "Session geloescht", "deleted": info}
