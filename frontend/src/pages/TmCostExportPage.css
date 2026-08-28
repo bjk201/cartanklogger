@@ -269,6 +269,68 @@ html[data-theme='dark'] .tmexp-confirm-check { background: rgba(255,255,255,0.06
   .tmexp-modal { padding: 0.75rem; }
 }
 
+/* ===== Mobile-Optimierung TM-Export ===== */
+@media (max-width: 700px) {
+  .tmexp-kpis { gap: 0.5rem; }
+  .tmexp-kpi { padding: 0.45rem 0.5rem; }
+  .tmexp-kpi__value { font-size: 1.1rem; }
+  .tmexp-kpi__label { font-size: 0.5625rem; }
+
+  .tmexp-toolbar {
+    flex-wrap: wrap;
+  }
+  .tmexp-toolbar select {
+    flex: 1;
+    min-width: 0;
+    padding: 0.55rem 0.6rem;
+    font-size: 0.9375rem; /* >=16px verhindert iOS-Zoom */
+  }
+
+  /* Tabelle: horizontales Scrollen mit Anfassern */
+  .tmexp-table-wrap {
+    margin: 0 -0.75rem;
+    padding: 0 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tmexp-table-wrap::after {
+    content: '← seitlich wischbar →';
+    display: block;
+    text-align: center;
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    padding: 0.4rem 0 0.5rem;
+  }
+  .tmexp-table { min-width: 640px; }
+
+  /* Action-Buttons in Zeilen: nebeneinander statt gestapelt */
+  .tmexp-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .tmexp-btn--sm { padding: 0.45rem 0.7rem; font-size: 0.8125rem; }
+
+  /* Header-Buttons volle Breite, gleich hoch */
+  .tmexp-header__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .tmexp-header__actions .tmexp-btn {
+    justify-content: center;
+    padding: 0.55rem 0.7rem;
+  }
+
+  /* Modal: Vollbild-Feeling auf kleinen Screens */
+  .tmexp-modal-backdrop { padding: 0.5rem; align-items: stretch; }
+  .tmexp-modal {
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 12px;
+  }
+  .tmexp-facts { grid-template-columns: 1fr; }
+}
+
 /* Aktions-Gruppe im Kopfbereich (Berechnen + Neu laden) */
 .tmexp-header__actions {
   display: flex;

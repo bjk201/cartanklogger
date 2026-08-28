@@ -26,15 +26,18 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [mobileRangeOpen, setMobileRangeOpen] = useState(false);
 
   const handleRangeChange = (value: RangeValue) => {
     setSelectedRange(value);
+    setMobileRangeOpen(false);
   };
 
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customFrom && customTo) {
       setShowCustomPicker(false);
+      setMobileRangeOpen(false);
     }
   };
 
@@ -126,6 +129,74 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         </div>
       </div>
       <div className="topbar__right">
+        {/* Mobile/Tablet (<=1024px): Zeitraum als Kalender-Icon mit Overlay */}
+        <div className="topbar__range-mobile" style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className={`topbar__btn topbar__btn--icon topbar__range-btn ${mobileRangeOpen ? 'topbar__range-btn--active' : ''}`}
+            onClick={() => setMobileRangeOpen(o => !o)}
+            aria-label={`Zeitraum wählen (aktuell: ${getRangeLabel(selectedRange)})`}
+            aria-expanded={mobileRangeOpen}
+            title={`Zeitraum: ${getRangeLabel(selectedRange)}`}
+          >
+            <Calendar size={20} />
+            <span className="topbar__range-btn-badge" aria-hidden="true">
+              {selectedRange === 'custom' ? '✓' : selectedRange === 'all' ? '∞' : selectedRange.replace('d', '')}
+            </span>
+          </button>
+          {mobileRangeOpen && (
+            <div className="topbar__range-overlay" role="dialog" aria-label="Zeitraum wählen">
+              <div className="topbar__range-selector">
+                <div className="topbar__range-wrapper">
+                  <select
+                    value={selectedRange}
+                    onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
+                    className="topbar__range-select"
+                    aria-label="Zeitraum"
+                  >
+                    {RANGE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedRange === 'custom' && (
+                  <div className="topbar__custom-range" style={{ position: 'static', animation: 'none' }}>
+                    <div className="topbar__date-inputs">
+                      <div className="topbar__date-input-group">
+                        <label htmlFor="custom-from-m" className="topbar__date-label">Von</label>
+                        <input
+                          id="custom-from-m"
+                          type="date"
+                          value={customFrom}
+                          onChange={(e) => setCustomFrom(e.target.value)}
+                          className="topbar__date-input"
+                          max={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                      <div className="topbar__date-input-group">
+                        <label htmlFor="custom-to-m" className="topbar__date-label">Bis</label>
+                        <input
+                          id="custom-to-m"
+                          type="date"
+                          value={customTo}
+                          onChange={(e) => setCustomTo(e.target.value)}
+                          className="topbar__date-input"
+                          max={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="topbar__custom-actions">
+                      <button type="button" className="topbar__apply-btn" onClick={handleCustomRangeSubmit}>Anwenden</button>
+                      <button type="button" onClick={() => setSelectedRange('30d')} className="topbar__cancel-btn">
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <button
           className={`topbar__btn topbar__btn--icon ${syncing ? 'topbar__btn--syncing' : ''} ${syncSuccess ? 'topbar__btn--sync-success' : ''}`}
           onClick={handleSync}

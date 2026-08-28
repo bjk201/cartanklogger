@@ -7,7 +7,6 @@ import { TopBar } from './components/TopBar';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { StatisticsPage } from './pages/StatisticsPage';
-import { ImportReviewPlaceholderPage } from './pages/ImportReviewPlaceholderPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
 import { TmCostExportPage } from './pages/TmCostExportPage';
 import VehiclePage from './pages/VehiclePage';
@@ -30,7 +29,7 @@ function App() {
                   <Route path="/" element={<OverviewPage />} />
                   <Route path="/sessions" element={<SessionsPage />} />
                   <Route path="/statistics" element={<StatisticsPage />} />
-                  <Route path="/import-review" element={<ImportReviewPlaceholderPage />} />
+
                   <Route path="/settings" element={<DataSourcesPage />} />
                   <Route path="/tm-cost-export" element={<TmCostExportPage />} />
                   <Route path="/vehicle" element={<VehiclePage />} />

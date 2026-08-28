@@ -16,7 +16,6 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/statistics', label: 'Statistik', icon: BarChart2 },
   { path: '/vehicle', label: 'Fahrzeug', icon: Car },
   { path: '/sessions', label: 'Sessions', icon: FileText },
-  { path: '/import-review', label: 'Import/Review', icon: ExternalLink },
   { path: '/tm-cost-export', label: 'TM-Kostenexport', icon: ArrowRightLeft },
   { path: '/settings', label: 'Einstellungen', icon: Settings },
 ];
