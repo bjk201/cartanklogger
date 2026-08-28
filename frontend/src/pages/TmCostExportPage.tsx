@@ -467,7 +467,16 @@ function DetailModal({ id, onClose, onAction, list }: {
                   </thead>
                   <tbody>
                     {detail.fragments.map((f) => {
-                      const isWeak = f.match_quality === 'weak' && f.export_status === 'blocked' && !f.exclusion_reason?.includes('superseded');
+                      // Bestätigen für ALLE nicht-manuellen Fragmente:
+                      // weak, blocked und auch superseded (durch eine frühere
+                      // Bestätigung derselben Session ersetzte Auto-Zeilen).
+                      // Jede Bestätigung erzeugt einen manual_assign-Override;
+                      // die Override-Injektion gruppiert ALLE Overrides der
+                      // Session neu. Nach Export: keine Bestätigung mehr.
+                      const canConfirm =
+                        f.match_quality !== 'manual_override' &&
+                        detail.state !== 'exported';
+                      const wasSuperseded = f.exclusion_reason?.includes('superseded');
                       return (
                       <tr key={f.allocation_id}>
                         <td>{f.tm_charge_id}</td>
@@ -478,12 +487,14 @@ function DetailModal({ id, onClose, onAction, list }: {
                         <td>{f.cost_source}</td>
                         <td><span className={`tmexp-matchq tmexp-matchq--${f.match_quality}`}>{f.match_quality}</span></td>
                         <td>
-                          {isWeak && (
+                          {canConfirm && (
                             <button
                               className="tmexp-btn tmexp-btn--sm"
                               disabled={assigningId !== null}
                               onClick={() => confirmFragment(f.tm_charge_id)}
-                              title="Diese Zuordnung manuell bestätigen (Override) — danach ist die Session exportfähig"
+                              title={wasSuperseded
+                                ? 'Diese Zuordnung erneut bestätigen (Override) — alle bestätigten Zuordnungen dieser Session werden zusammen neu allokiert'
+                                : 'Diese Zuordnung manuell bestätigen (Override) — alle bestätigten Zuordnungen dieser Session werden zusammen neu allokiert'}
                             >
                               <BadgeCheck size={13} aria-hidden />
                               {assigningId === f.tm_charge_id ? '…' : 'Bestätigen'}
