@@ -810,14 +810,26 @@ class TMCostExportService:
 
         batch_id = uuid.uuid4().hex[:12]
 
-        # previous Werte lesen (vor dem Schreiben sichern!)
+        # previous Werte lesen (vor dem Schreiben sichern!). Fehler hier = es
+        # wurde noch NICHTS geschrieben -> sauber als Export-Fehler melden.
         cp_ids = [e.tm_charging_process_id for e in pending]
-        previous = tm_db.read_costs(cp_ids)
+        try:
+            previous = tm_db.read_costs(cp_ids)
+        except Exception as exc:
+            raise TMCostExportError(
+                "TeslaMate-Kosten konnten nicht gelesen werden (ABGEBROCHEN, "
+                "es wurde nichts geschrieben): %s: %s" % (type(exc).__name__, exc)
+            ) from exc
 
         updates = {}
         for e in pending:
             e.previous_tm_cost_eur = previous.get(e.tm_charging_process_id)
             e.export_batch_id = batch_id
+            if e.new_tm_cost_eur is None:
+                raise TMCostExportError(
+                    "Export-Eintrag %d hat keinen geplanten Kostenwert "
+                    "(new_tm_cost_eur ist leer) — erst neu freigeben" % e.id
+                )
             updates[e.tm_charging_process_id] = float(e.new_tm_cost_eur)
 
         try:
@@ -830,8 +842,14 @@ class TMCostExportService:
             self.db.commit()
             return {"status": "failed", "error": err, "batch_id": batch_id}
 
-        # Post-Commit-Verifikation
-        verify = tm_db.verify_written_costs(updates)
+        # Post-Commit-Verifikation (Fehler hier: Write ist durch, Einträge
+        # markieren, aber NIE als nackter 500 enden)
+        try:
+            verify = tm_db.verify_written_costs(updates)
+        except Exception as exc:
+            logger.error("verify_written_costs fehlgeschlagen: %s", exc)
+            verify = {k: False for k in updates}
+
         all_ok = all(verify.values())
 
         exported_at = datetime.now(timezone.utc)
@@ -897,7 +915,11 @@ class TMCostExportService:
             self.db.commit()
             return {"status": "failed", "error": err}
 
-        verify = tm_db.verify_written_costs(updates)
+        try:
+            verify = tm_db.verify_written_costs(updates)
+        except Exception as exc:
+            logger.error("Rollback-Verifikation fehlgeschlagen: %s", exc)
+            verify = {k: False for k in updates}
         rolled_at = datetime.now(timezone.utc)
         n_rolled = 0
         for e in exports:

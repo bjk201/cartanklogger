@@ -104,6 +104,12 @@ def execute_session(
         return _svc(db).execute(evcc_session_id, confirm=True)
     except (TMCostExportError, TeslaMateDBConfigError) as exc:
         raise HTTPException(status_code=503, detail=f"TeslaMate-Writeback fehlgeschlagen: {exc}")
+    except Exception as exc:
+        logger.exception("execute: unbehandelter Fehler bei Session %d", evcc_session_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"TeslaMate-Export-Interner Fehler ({type(exc).__name__}): {exc}",
+        )
 
 
 @router.post("/{evcc_session_id}/rollback")
@@ -120,5 +126,11 @@ def rollback_session(
         )
     try:
         return _svc(db).rollback(evcc_session_id, confirm=True)
-    except TMCostExportError as exc:
+    except (TMCostExportError, TeslaMateDBConfigError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("rollback: unbehandelter Fehler bei Session %d", evcc_session_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Rollback-Interner Fehler ({type(exc).__name__}): {exc}",
+        )

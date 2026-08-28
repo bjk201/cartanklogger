@@ -170,11 +170,19 @@ export function TmCostExportPage() {
         // Nach Approve direkt ins Exportieren springen? Nein: bewusst zwei Schritte.
         closeAndReload();
       } else if (dialog.kind === 'execute') {
-        await req(`/api/tm-cost-export/${id}/execute`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
-        closeAndReload();
+        const res = await req<{ status?: string; error?: string; exported?: number }>(`/api/tm-cost-export/${id}/execute`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        if (res?.status === 'exported') {
+          closeAndReload();
+        } else {
+          setActionError(res?.error || `Export nicht durchgefuehrt (Status: ${res?.status ?? 'unbekannt'})`);
+        }
       } else {
-        await req(`/api/tm-cost-export/${id}/rollback`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
-        closeAndReload();
+        const res = await req<{ status?: string; error?: string; rolled_back?: number }>(`/api/tm-cost-export/${id}/rollback`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        if (res?.status === 'rolled_back') {
+          closeAndReload();
+        } else {
+          setActionError(res?.error || `Rollback nicht durchgefuehrt (Status: ${res?.status ?? 'unbekannt'})`);
+        }
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e));
@@ -344,10 +352,42 @@ function DetailModal({ id, onClose, onAction, list }: {
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [openTmTable, setOpenTmTable] = useState(true);
+  const [assigningId, setAssigningId] = useState<number | null>(null);
+  const [assignMsg, setAssignMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const reloadDetail = useCallback(async () => {
+    try {
+      setDetail(await req<DetailResponse>(`/api/tm-cost-export/${id}`));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }, [id]);
 
   useEffect(() => {
-    req<DetailResponse>(`/api/tm-cost-export/${id}`).then(setDetail).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, [id]);
+    reloadDetail();
+  }, [reloadDetail]);
+
+  // Manuelle Bestätigung einer weak-Zuordnung:
+  // 1) Override anlegen (POST /api/sessions/{id}/match)
+  // 2) Allokationen neu berechnen (nur CTL — niemals TeslaMate)
+  // 3) Detail neu laden
+  const confirmFragment = async (tmChargeId: number) => {
+    setAssigningId(tmChargeId);
+    setAssignMsg(null);
+    try {
+      await req(`/api/sessions/${id}/match`, {
+        method: 'POST',
+        body: JSON.stringify({ tm_charge_id: tmChargeId }),
+      });
+      await req('/api/tm-cost-export/refresh', { method: 'POST' });
+      await reloadDetail();
+      setAssignMsg({ ok: true, text: `TM-Charge ${tmChargeId} als manual_override bestätigt — Session ist jetzt exportfähig (nach Freigabe).` });
+    } catch (e) {
+      setAssignMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setAssigningId(null);
+    }
+  };
 
   const itemForActions = useMemo(
     () => list?.data.find((i) => i.evcc_session_id === id),
@@ -374,8 +414,23 @@ function DetailModal({ id, onClose, onAction, list }: {
             {detail.block_reasons.length > 0 && (
               <div className="tmexp-alert tmexp-alert--warn">
                 <Ban size={15} aria-hidden />
-                <strong>Blockiert:</strong>&nbsp;
-                {detail.block_reasons.map((r) => REASON_LABELS[r] ?? r).join(' · ')}
+                <span>
+                  <strong>Blockiert:</strong>&nbsp;
+                  {detail.block_reasons.map((r) => REASON_LABELS[r] ?? r).join(' · ')}
+                  {detail.block_reasons.includes('weak_or_rejected_match') && (
+                    <>
+                      {' '}— Du kannst fragliche Zuordnungen unten <strong>manuell bestätigen</strong> („Bestätigen“-Button je Zeile).
+                      Bestätigte Ladungen werden als <em>manual_override</em> geführt und sind dann exportfähig.
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {assignMsg && (
+              <div className={`tmexp-alert ${assignMsg.ok ? 'tmexp-alert--ok' : 'tmexp-alert--error'}`}>
+                {assignMsg.ok ? <CheckCircle2 size={15} aria-hidden /> : <Ban size={15} aria-hidden />}
+                {assignMsg.text}
               </div>
             )}
 
@@ -407,10 +462,13 @@ function DetailModal({ id, onClose, onAction, list }: {
                       <th>Neuer geplanter Wert</th>
                       <th>Kostenquelle</th>
                       <th>Match</th>
+                      <th>Aktion</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detail.fragments.map((f) => (
+                    {detail.fragments.map((f) => {
+                      const isWeak = f.match_quality === 'weak' && f.export_status === 'blocked' && !f.exclusion_reason?.includes('superseded');
+                      return (
                       <tr key={f.allocation_id}>
                         <td>{f.tm_charge_id}</td>
                         <td>{f.tm_charging_process_id}</td>
@@ -419,8 +477,22 @@ function DetailModal({ id, onClose, onAction, list }: {
                         <td className="tmexp-strong">{fmtEur(f.new_planned_tm_cost_eur)}</td>
                         <td>{f.cost_source}</td>
                         <td><span className={`tmexp-matchq tmexp-matchq--${f.match_quality}`}>{f.match_quality}</span></td>
+                        <td>
+                          {isWeak && (
+                            <button
+                              className="tmexp-btn tmexp-btn--sm"
+                              disabled={assigningId !== null}
+                              onClick={() => confirmFragment(f.tm_charge_id)}
+                              title="Diese Zuordnung manuell bestätigen (Override) — danach ist die Session exportfähig"
+                            >
+                              <BadgeCheck size={13} aria-hidden />
+                              {assigningId === f.tm_charge_id ? '…' : 'Bestätigen'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr>
@@ -430,7 +502,7 @@ function DetailModal({ id, onClose, onAction, list }: {
                       <td className={detail.sum_equals_evcc ? 'tmexp-ok' : 'tmexp-mismatch'}>
                         <strong>{fmtEur(detail.sum_planned_eur)}</strong>
                       </td>
-                      <td colSpan={2} className={detail.sum_equals_evcc ? 'tmexp-ok' : 'tmexp-mismatch'}>
+                      <td colSpan={3} className={detail.sum_equals_evcc ? 'tmexp-ok' : 'tmexp-mismatch'}>
                         {detail.sum_equals_evcc ? '= EVCC-Gesamtkosten ✓' : '⚠ weicht von EVCC-Gesamtkosten ab!'}
                       </td>
                     </tr>
