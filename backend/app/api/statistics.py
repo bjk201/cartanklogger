@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -8,6 +10,8 @@ from app.services.matching import run_matching_dry_run
 from app.schemas.overview import StatisticsResponse, ErrorDetail
 from app.models.datasource import DataSourceConfig
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
 
@@ -530,6 +534,83 @@ async def get_statistics(
         stats['kpis']['monthly_pv'] = monthly_pv
     except Exception:
         stats['kpis']['monthly_pv'] = []
+
+    # ------------------------------------------------------------------
+    # Prognose (wird bei JEDEM Aufruf frisch berechnet — dauerhaft aktuell)
+    # Basis: komplette Fahrhistorie (ohne Zeitraum-Filter):
+    #   - Fahrzeugalter seit Kaufdatum (ENV CTL_CAR_FIRST_REG, Default 23.06.2026)
+    #   - Gefahrene km = max(odometer aus TM-Drives/Sessions/Records) − Start-km (ENV CTL_CAR_START_KM, Default 2)
+    #   - Jährliche Fahrleistung = km / Alter in Jahren (linear)
+    # Kosten je Jahr (hochgerechnet):
+    #   - Ladekosten: home+external im Zeitraum "alles", linear auf 365 Tage
+    #   - Extra-Kosten: extra_costs auf 365 Tage (einmalige Käufe zählen voll)
+    # ------------------------------------------------------------------
+    try:
+        from sqlalchemy import func as _func
+        from app.models.session import SessionModel as _S
+        from app.models.vehicle import VehicleRecordModel as _V
+        from app.models.extra_costs import ExtraCostModel as _E
+        from datetime import datetime as _dt, timezone as _tz
+        import os as _os
+
+        now = datetime.now(_tz.utc)
+        first_reg_str = _os.environ.get('CTL_CAR_FIRST_REG', '2026-06-23')
+        start_km = float(_os.environ.get('CTL_CAR_START_KM', '2'))
+        try:
+            first_reg = _dt.strptime(first_reg_str, '%Y-%m-%d').replace(tzinfo=_tz.utc)
+        except ValueError:
+            first_reg = _dt(2026, 6, 23, tzinfo=_tz.utc)
+
+        age_days = max((now - first_reg).total_seconds() / 86400.0, 1.0)
+        age_years = age_days / 365.25
+
+        # Gefahrene km: Maximum über alle Quellen
+        max_sess_km = db.query(_func.max(_S.odometer_km)).scalar()
+        max_rec_km = db.query(_func.max(_V.odometer_km)).scalar()
+        candidates = [v for v in (max_sess_km, max_rec_km) if v is not None]
+        current_km = max(candidates) if candidates else None
+        km_total = (current_km - start_km) if current_km is not None else None
+
+        # Jährliche Fahrleistung (linear)
+        km_per_year = round(km_total / age_years) if km_total and km_total > 0 else None
+
+        # Ladekosten gesamt (alle Zeiten, beide Quellen) + Tagesrate
+        charge_cost_total = db.query(_func.coalesce(_func.sum(_S.cost_eur), 0.0)).filter(
+            _S.source_type.in_(['home', 'external'])
+        ).scalar() or 0.0
+        first_day = db.query(_func.min(_func.date(_S.date))).filter(
+            _S.source_type.in_(['home', 'external'])
+        ).scalar()
+        if first_day:
+            fd = _dt.strptime(str(first_day), '%Y-%m-%d').replace(tzinfo=_tz.utc)
+            charge_days = max((now - fd).total_seconds() / 86400.0, 1.0)
+        else:
+            charge_days = age_days
+        charge_cost_per_year = round(charge_cost_total / charge_days * 365.25) if charge_cost_total > 0 else 0.0
+
+        # Extra-Kosten (alle Zeiten)
+        extra_total = db.query(_func.coalesce(_func.sum(_E.cost_eur), 0.0)).scalar() or 0.0
+        extra_per_year = round(extra_total / charge_days * 365.25) if extra_total > 0 else 0.0
+
+        stats['kpis']['forecast'] = {
+            'current_km': round(current_km) if current_km is not None else None,
+            'km_total': round(km_total) if km_total is not None else None,
+            'age_days': round(age_days),
+            'km_per_year': km_per_year,
+            'charge_cost_total_eur': round(charge_cost_total, 2),
+            'charge_cost_per_year_eur': charge_cost_per_year,
+            'extra_cost_total_eur': round(extra_total, 2),
+            'extra_cost_per_year_eur': extra_per_year,
+            'total_cost_per_year_eur': charge_cost_per_year + extra_per_year,
+            'cost_per_km_eur': (
+                round((charge_cost_total + extra_total) / km_total, 4)
+                if km_total and km_total > 0 and (charge_cost_total + extra_total) > 0
+                else None
+            ),
+        }
+    except Exception as _exc:  # pragma: no cover
+        logger.warning("forecast failed: %s", _exc)
+        stats['kpis']['forecast'] = None
 
     return StatisticsResponse(
         ok=True,

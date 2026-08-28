@@ -169,6 +169,9 @@ class StatisticsKPIs(BaseModel):
     # NEW: Daily odometer values for cumulative km chart
     daily_odometer: Optional[List[Optional[float]]] = None
 
+    # NEW: Prognose (jährliche Fahrleistung + jährliche Kosten, immer aktuell)
+    forecast: Optional[dict] = None
+
     # NEW: PV share of all charging sessions
     pv_share_pct: Optional[float] = None
     pv_kwh: Optional[float] = None

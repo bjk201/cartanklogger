@@ -807,6 +807,59 @@ export function StatisticsPage() {
           </div>
         </section>
 
+        {/* Prognose (immer aktuell — frisch bei jedem Laden berechnet) */}
+        {(() => {
+          const f: any = (kpis as any).forecast;
+          if (!f) return null;
+          return (
+            <section className="statistics-page__section" aria-labelledby="forecast-heading">
+              <h2 id="forecast-heading" className="statistics-page__section-title">
+                Prognose (dauerhaft aktuell)
+              </h2>
+              <div className="statistics-page__session-stats-grid">
+                <article className="session-stat-card">
+                  <span className="session-stat-card__label">Aktueller km-Stand</span>
+                  <span className="session-stat-card__value">
+                    {f.current_km != null ? f.current_km.toLocaleString('de-DE') + ' km' : '—'}
+                  </span>
+                  <span className="session-stat-card__id">
+                    {f.km_total != null ? `${f.km_total.toLocaleString('de-DE')} km gefahren · ${f.age_days} Tage` : ''}
+                  </span>
+                </article>
+
+                <article className="session-stat-card">
+                  <span className="session-stat-card__label">Prognose jährliche Fahrleistung</span>
+                  <span className="session-stat-card__value">
+                    {f.km_per_year != null ? f.km_per_year.toLocaleString('de-DE') + ' km/Jahr' : '—'}
+                  </span>
+                  <span className="session-stat-card__id">linear aus Fahrhistorie</span>
+                </article>
+
+                <article className="session-stat-card">
+                  <span className="session-stat-card__label">Ladekosten / Jahr</span>
+                  <span className="session-stat-card__value">
+                    {formatEur(f.charge_cost_per_year_eur)}
+                  </span>
+                  <span className="session-stat-card__id">
+                    bis heute: {formatEur(f.charge_cost_total_eur)}
+                  </span>
+                </article>
+
+                <article className="session-stat-card">
+                  <span className="session-stat-card__label">Ladekosten + Extra / Jahr</span>
+                  <span className="session-stat-card__value">
+                    {formatEur(f.total_cost_per_year_eur)}
+                  </span>
+                  <span className="session-stat-card__id">
+                    Extra bis heute: {formatEur(f.extra_cost_total_eur)}
+                    {f.cost_per_km_eur != null && ` · ${(f.cost_per_km_eur * 100).toFixed(1)} ct/km`}
+                  </span>
+                </article>
+              </div>
+            </section>
+          );
+        })()}
+
         {/* Daily Charts Grid - Side by Side */}
         {(kpis.daily_dates && kpis.daily_dates.length > 0) || (kpis.daily_charged_dates && kpis.daily_charged_dates.length > 0) ? (
           <section className="statistics-page__section" aria-labelledby="daily-charts-heading">
