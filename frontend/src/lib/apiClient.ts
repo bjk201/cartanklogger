@@ -104,7 +104,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    // Backend-Detailmeldung bevorzugen (z. B. Lösch-Schutz-Begründung)
+    let detail: string | null = null;
+    try {
+      const body = await res.json();
+      if (body?.detail) {
+        detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+      }
+    } catch {
+      /* kein JSON-Body — Statustext fällt zurück */
+    }
+    throw new Error(detail || `HTTP ${res.status}: ${res.statusText}`);
   }
   return res.json();
 }

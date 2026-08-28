@@ -349,10 +349,10 @@ export function SessionsPage() {
       } else {
         const evcc = result.result?.evcc || {};
         const deleted = evcc.deleted || 0;
-        const kept = (evcc.errors || []).filter((e: string) => e.includes('behalten')).length;
+        const kept = evcc.kept || 0;
         let msg = `Sync OK: ${evcc.synced ?? 0} EVCC-Sessions`;
         if (deleted) msg += `, ${deleted} in EVCC gelöschte entfernt`;
-        if (kept) msg += `, ${kept} mit Export-Historie behalten`;
+        if (kept) msg += `, ${kept} mit TeslaMate-Export-Historie behalten`;
         setSyncMessage(msg);
       }
       await fetchSessions();

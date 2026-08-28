@@ -524,36 +524,43 @@ async def update_session(
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: int, db: Session = Depends(get_db)):
-    """Session aus CTL loeschen (mit Referenz-Schutz).
+    """Session aus CTL loeschen.
 
-    Blockiert, wenn Allokationen, Exporte oder Overrides an der Session
-    haengen — diese Referenzen halten die TM-Kostenexport-Historie fest.
+    Referenz-Schutz NUR noch fuer wirklich exportierte Eintraege
+    (status='exported' — diese Werte wurden nach TeslaMate geschrieben,
+    ihre Historie muss erhalten bleiben). Alles andere (Allokationen,
+    draft/approved Export-Eintraege, Overrides) wird kaskadierend
+    mitgeloescht — es ist jederzeit neu berechenbar.
     """
     from app.models.tm_cost_export import SessionCostAllocation, TMCostExport
     from app.models.matching_override import MatchingOverride
 
     s = _get_session_or_404(db, session_id)
 
-    refs = []
-    alloc_n = db.query(SessionCostAllocation).filter_by(evcc_session_id=s.id).count()
-    exp_n = db.query(TMCostExport).filter_by(evcc_session_id=s.id).count()
-    ov_n = db.query(MatchingOverride).filter_by(evcc_session_id=s.id).count()
-    if alloc_n:
-        refs.append(f"{alloc_n} Allokation(en)")
-    if exp_n:
-        refs.append(f"{exp_n} Export-Eintraege")
-    if ov_n:
-        refs.append(f"{ov_n} Override(s)")
-
-    if refs:
+    exported_n = (
+        db.query(TMCostExport)
+        .filter_by(evcc_session_id=s.id, status="exported")
+        .count()
+    )
+    if exported_n:
         raise _HTTPException(
             status_code=409,
-            detail="Session kann nicht geloescht werden — Referenzen vorhanden: "
-            + ", ".join(refs)
-            + ". Erst Matching/Export-Verweise entfernen.",
+            detail="Session kann nicht geloescht werden — es existieren "
+            f"{exported_n} bereits in TeslaMate exportierte Eintraege. "
+            "Diese Export-Historie bleibt erhalten (Rollback dort moeglich).",
         )
+
+    # Kaskade: berechenbare/audit-neutrale Referenzen mitloeschen
+    alloc_n = db.query(SessionCostAllocation).filter_by(evcc_session_id=s.id).delete()
+    exp_n = db.query(TMCostExport).filter_by(evcc_session_id=s.id).delete()
+    ov_n = db.query(MatchingOverride).filter_by(evcc_session_id=s.id).delete()
 
     info = {"id": s.id, "source_id": s.source_id, "date": s.date.isoformat() if s.date else None}
     db.delete(s)
     db.commit()
-    return {"ok": True, "message": "Session geloescht", "deleted": info}
+    return {
+        "ok": True,
+        "message": "Session geloescht",
+        "deleted": info,
+        "cascade": {"allocations": alloc_n, "exports": exp_n, "overrides": ov_n},
+    }

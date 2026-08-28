@@ -136,31 +136,42 @@ class SyncService:
             for row in home_rows:
                 if row.source_id in live_source_ids:
                     continue  # existiert weiter in EVCC
+                # Nur wirklich exportierte Eintraege (status='exported')
+                # blockieren die Loeschung — sie wurden nach TeslaMate
+                # geschrieben und ihre Historie muss erhalten bleiben.
+                # Alles andere (Allokationen, draft/approved, Overrides)
+                # ist jederzeit neu berechenbar -> kaskadierend mitloeschen.
+                exported_n = (
+                    self.db.query(TMCostExport)
+                    .filter_by(evcc_session_id=row.id, status="exported")
+                    .count()
+                )
+                if exported_n:
+                    kept_by_ref.append(f"#{row.id} ({exported_n} bereits in TeslaMate exportierte Eintraege)")
+                    continue
                 alloc_n = (
                     self.db.query(SessionCostAllocation)
                     .filter_by(evcc_session_id=row.id)
-                    .count()
+                    .delete()
                 )
                 exp_n = (
                     self.db.query(TMCostExport)
                     .filter_by(evcc_session_id=row.id)
-                    .count()
+                    .delete()
                 )
                 ov_n = (
                     self.db.query(MatchingOverride)
                     .filter_by(evcc_session_id=row.id)
-                    .count()
+                    .delete()
                 )
-                if alloc_n or exp_n or ov_n:
-                    kept_by_ref.append(f"#{row.id} (Allokation/Export/Override vorhanden)")
-                    continue
                 self.db.delete(row)
                 deleted_n += 1
             self.db.commit()
             if deleted_n:
                 result["deleted"] = deleted_n
-            for k in kept_by_ref:
-                result["errors"].append(f"Session {k} in EVCC geloescht, aber in CTL behalten (Export-Historie)")
+            if kept_by_ref:
+                result["kept"] = len(kept_by_ref)
+                result["kept_details"] = kept_by_ref
 
         except Exception as e:
             self.db.rollback()
