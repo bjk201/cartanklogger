@@ -340,6 +340,31 @@ export function deleteVehicleRecord(id: number): Promise<any> {
   return request(`/vehicle/records/${id}`, { method: 'DELETE' });
 }
 
+// Reifensatz-Wechsel: alter Satz wird archiviert, neuer Satz angelegt.
+// odometer_km leer lassen → Backend leitet den KM-Stand automatisch ab.
+export interface TireSetReplace {
+  date: string;
+  odometer_km?: number | null;
+  title: string;
+  note?: string | null;
+  shop?: string | null;
+  tire_brand?: string | null;
+  tire_season?: string | null;
+  cost_eur?: number | null;
+}
+
+export function replaceTireSet(oldRecordId: number, data: TireSetReplace): Promise<any> {
+  return request(`/vehicle/records/${oldRecordId}/replace-tire`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+// KM-Stand automatisch ableiten für Eintrag ohne km (Zubehör etc.)
+export function syncRecordOdometer(id: number): Promise<any> {
+  return request(`/vehicle/records/${id}/sync-odometer`, { method: 'POST' });
+}
+
 // --- Extra Costs ---
 export function getExtraCosts(): Promise<ExtraCostListResponse> {
   return request('/extra-costs');
@@ -453,6 +478,8 @@ export const api = {
   createVehicleRecord,
   updateVehicleRecord,
   deleteVehicleRecord,
+  replaceTireSet,
+  syncRecordOdometer,
   getExtraCosts,
   createExtraCost,
   updateExtraCost,

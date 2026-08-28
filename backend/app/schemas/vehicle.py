@@ -53,16 +53,16 @@ class VehicleRecordRead(BaseModel):
 
 
 class TireReplaceRequest(BaseModel):
-    """Replace an existing tire with a new one."""
+    """Replace an active tire set with a new one."""
     date: datetime
-    odometer_km: Optional[float] = None
+    odometer_km: Optional[float] = None  # km-Stand beim Wechsel (leer = Auto-Ableitung)
     title: str = Field(..., min_length=1, max_length=255)
     note: Optional[str] = None
     shop: Optional[str] = None
     tire_brand: Optional[str] = None
     tire_season: Optional[str] = None
     tire_position: Optional[str] = None
-    replaces_tire_id: int
+    cost_eur: Optional[float] = None  # Kosten des NEUEN Satzes
 
 
 class VehicleInfo(BaseModel):

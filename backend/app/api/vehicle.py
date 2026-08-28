@@ -81,6 +81,9 @@ def create_vehicle_record(payload: VehicleRecordCreate, db: Session = Depends(ge
         tire_brand=payload.tire_brand,
         tire_season=payload.tire_season,
     )
+    # Reifensatz: Start-km = km-Stand beim Anlegen → gefahrene km bilanzierbar
+    if rec.record_type == VehicleRecordType.TIRE and payload.odometer_km is not None:
+        rec.start_odometer_km = payload.odometer_km
     db.add(rec)
     db.commit()
     db.refresh(rec)
@@ -102,47 +105,101 @@ def update_vehicle_record(record_id: int, payload: VehicleRecordUpdate, db: Sess
     return VehicleSingleResponse(ok=True, data=_to_read(rec), errors=[])
 
 
-@router.put("/records/{record_id}/replace-tire", response_model=VehicleSingleResponse, summary="Replace a tire with a new one")
+@router.put("/records/{record_id}/replace-tire", response_model=VehicleSingleResponse, summary="Replace the active tire set with a new one")
 def replace_tire(record_id: int, payload: TireReplaceRequest, db: Session = Depends(get_db)) -> VehicleSingleResponse:
+    """Wechselt den AKTIVEN Reifensatz gegen einen neuen (EIN Eintrag pro Satz).
+
+    - Der alte Satz wird archiviert (is_active=False, replaced_by=neue ID)
+      und behält seinen letzten bekannten km-Stand → gefahrene km je Satz
+      bleiben in der Historie sichtbar.
+    - Der neue Satz bekommt start_odometer_km = km-Stand beim Wechsel.
+    - Wenn odometer_km leer gelassen wird, wird der km-Stand automatisch
+      abgeleitet (aktuellster TM-Drives-Wert, sonst max. Vehicle-Record).
     """
-    Replace an existing tire record with a new one.
-    Creates a NEW tire record linked via replaces_tire_id and marks the old
-    tire as 'replaced' (is_active=False, replaced_by=new_id).
-    The old tire keeps its odometer_km, the new one gets a start_odometer_km.
-    """
-    # Find the old tire
     old_rec = db.query(VehicleRecordModel).filter(
         VehicleRecordModel.id == record_id,
         VehicleRecordModel.record_type == VehicleRecordType.TIRE
     ).first()
     if not old_rec:
         raise HTTPException(status_code=404, detail="Reifen-Eintrag nicht gefunden")
+    if not old_rec.is_active:
+        raise HTTPException(status_code=409, detail="Nur der aktive Reifensatz kann getauscht werden")
 
-    # Create the new tire record (replaces the old one)
+    # KM-Stand bestimmen: übergeben > letzter Wert des alten Satzes > TM-Drives > max. Record
+    odometer = payload.odometer_km
+    if odometer is None:
+        odometer = old_rec.odometer_km
+    if odometer is None:
+        # Auto-Ableitung: 1) max. odometer aus Vehicle-Records (Fallback),
+        # 2) TM-Drives werden client-seitig in get_vehicle_info genutzt —
+        #    hier synchron per max() aus Sessions/Records ableitbar.
+        from app.models.session import SessionModel
+        max_rec = db.query(func.max(VehicleRecordModel.odometer_km)).scalar()
+        max_sess = db.query(func.max(SessionModel.odometer_km)).scalar()
+        candidates = [v for v in (max_rec, max_sess) if v is not None]
+        odometer = max(candidates) if candidates else None
+
     new_rec = VehicleRecordModel(
         record_type=VehicleRecordType.TIRE,
         date=payload.date,
         title=payload.title,
-        odometer_km=payload.odometer_km,          # new tire's current odometer
-        cost_eur=old_rec.cost_eur,                 # keep cost from old (or None)
+        odometer_km=odometer,
+        cost_eur=payload.cost_eur,
         note=payload.note,
         shop=payload.shop,
         tire_position=payload.tire_position or old_rec.tire_position,
         tire_brand=payload.tire_brand or old_rec.tire_brand,
         tire_season=payload.tire_season or old_rec.tire_season,
-        start_odometer_km=payload.odometer_km,    # mark start km for the new tire
+        start_odometer_km=odometer,  # km-Stand beim Anlegen des neuen Satzes
+        is_active=True,
     )
     db.add(new_rec)
-    db.flush()  # get the new ID
+    db.flush()  # neue ID holen
 
-    # Mark the old tire as replaced
+    # Alten Satz archivieren — End-km = Wechsel-km → gefahrene km bleiben erhalten
     old_rec.is_active = False
     old_rec.replaced_by = new_rec.id
+    if odometer is not None:
+        old_rec.odometer_km = odometer
+    if old_rec.start_odometer_km is None and odometer is not None:
+        old_rec.start_odometer_km = odometer  # Legacy-Satz ohne Start: Bilanz startet hier
     old_rec.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(new_rec)
     return VehicleSingleResponse(ok=True, data=_to_read(new_rec), errors=[])
+
+
+@router.post("/records/{record_id}/sync-odometer", response_model=VehicleSingleResponse, summary="Derive missing odometer from latest known km")
+def sync_record_odometer(record_id: int, db: Session = Depends(get_db)) -> VehicleSingleResponse:
+    """Leitet den km-Stand eines Eintrags ohne km aus dem aktuellen Fahrzeug-km ab.
+
+    Quelle (in dieser Reihenfolge): aktuellster TM-Drives-Wert (via /vehicle/info-Logik,
+    hier synchron: max. Session-odometer + max. Record-odometer), sonst 409.
+    Setzt odometer_km auf den ermittelten Stand. Idempotent.
+    """
+    rec = db.query(VehicleRecordModel).filter(VehicleRecordModel.id == record_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+
+    if rec.odometer_km is not None:
+        return VehicleSingleResponse(ok=True, data=_to_read(rec), errors=[])
+
+    from app.models.session import SessionModel
+    max_rec = db.query(func.max(VehicleRecordModel.odometer_km)).scalar()
+    max_sess = db.query(func.max(SessionModel.odometer_km)).scalar()
+    candidates = [v for v in (max_rec, max_sess) if v is not None]
+    # WICHTIG: der eigene Eintrag hat odometer_km=None und fällt nicht ins Maximum.
+    if not candidates:
+        raise HTTPException(
+            status_code=409,
+            detail="Kein km-Stand ableitbar — weder TeslaMate- noch Record-Kilometerstände vorhanden",
+        )
+    rec.odometer_km = max(candidates)
+    rec.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rec)
+    return VehicleSingleResponse(ok=True, data=_to_read(rec), errors=[])
 
 
 @router.delete("/records/{record_id}", response_model=VehicleSingleResponse, summary="Delete service/tire record")

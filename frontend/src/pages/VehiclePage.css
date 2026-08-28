@@ -236,7 +236,7 @@
   grid-template-columns: 100px 1fr 100px 120px 100px 60px;
 }
 .tire-table-header {
-  grid-template-columns: 70px 1fr 90px 120px 100px 80px 60px;
+  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
 }
 .table-body { display: flex; flex-direction: column; }
 .table-row {
@@ -484,13 +484,27 @@
   grid-template-columns: 1.2fr 1fr 1fr 2fr 1.2fr;
 }
 
-/* Tire columns */
+/* Tire columns — Reifensatz-Ansicht (1 Satz = 1 Zeile, keine Position mehr) */
 .tire-table-header {
-  grid-template-columns: 80px 1.2fr 1fr 1.2fr 1fr 1fr 90px;
+  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
 }
 
 .tire-row {
-  grid-template-columns: 80px 1.2fr 1fr 1.2fr 1fr 1fr 90px;
+  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
+}
+
+/* Satz-Details unter Marke + km-Bereich */
+.tire-set-title { font-weight: 600; }
+.tire-set-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 2px;
+}
+.tire-km-detail {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
 
 /* Column general */

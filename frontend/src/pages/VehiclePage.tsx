@@ -24,11 +24,13 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
   const [note, setNote] = useState(record?.note || '');
   const [tireBrand, setTireBrand] = useState(record?.tire_brand || '');
   const [tireSeason, setTireSeason] = useState(record?.tire_season || 'Sommer');
+  const [tireTitle, setTireTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const isTireSet = mode === 'new-tireset';
   const isService = mode === 'new-service' || (mode === 'edit' && record?.record_type === 'service');
+  const isAccessory = mode === 'edit' || mode === 'new-service';
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -58,23 +60,21 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
         const res = await api.updateVehicleRecord(record.id, payload);
         if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
       } else if (isTireSet) {
-        // Reifensatz: 4 Reifen anlegen (VL, VR, HL, HR)
-        for (const pos of ['VL', 'VR', 'HL', 'HR']) {
-          const payload: VehicleRecordCreate = {
-            record_type: 'tire',
-            date,
-            title: `${tireBrand.trim()} Satz (${pos}, ${tireSeason})`,
-            odometer_km: odometer ? Number(odometer) : undefined,
-            cost_eur: cost ? Number(cost) : undefined,
-            note: note.trim() || undefined,
-            tire_brand: tireBrand.trim(),
-            tire_position: pos,
-            tire_season: tireSeason,
-          };
-          const res = await api.createVehicleRecord(payload);
-          if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
-        }
-      } else {
+        // Reifensatz: EIN Eintrag für den ganzen Satz (kein 4-fach-Loop).
+        // Titel = Marke + Saison (Beschreibung Feld für Frei-Text).
+        const payload: VehicleRecordCreate = {
+          record_type: 'tire',
+          date,
+          title: tireTitle.trim() || `${tireBrand.trim()} ${tireSeason}`,
+          odometer_km: odometer ? Number(odometer) : undefined,
+          cost_eur: cost ? Number(cost) : undefined,
+          note: note.trim() || undefined,
+          tire_brand: tireBrand.trim(),
+          tire_season: tireSeason,
+        };
+        const res = await api.createVehicleRecord(payload);
+        if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
+      } else if (isAccessory) {
         // Neuer Service-Eintrag
         const payload: VehicleRecordCreate = {
           record_type: 'service',
@@ -132,7 +132,11 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
                     <option value="Ganzjahres">Ganzjahres</option>
                   </select>
                 </div>
-                <p className="form-hint">Es werden 4 Reifen (VL, VR, HL, HR) angelegt.</p>
+                <div className="form-field">
+                  <label className="form-label">Beschreibung (optional)</label>
+                  <input type="text" placeholder="z.B. Michelin Primacy 4, 19 Zoll" value={tireTitle} onChange={e => setTireTitle(e.target.value)} />
+                </div>
+                <p className="form-hint">Ein Satz = ein Eintrag. Beim nächsten Wechsel wird dieser Satz archiviert und die gefahrenen km bleiben erhalten.</p>
               </>
             ) : (
               <div className="form-field">
@@ -187,6 +191,8 @@ export default function VehiclePage() {
   const [error, setError] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'new-service' | 'new-tireset' | null>(null);
   const [editRecord, setEditRecord] = useState<VehicleRecordRead | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<VehicleRecordRead | null>(null);
+  const [currentOdometer, setCurrentOdometer] = useState<number | null>(null);
 
   async function fetchRecords() {
     setLoading(true);
@@ -207,8 +213,18 @@ export default function VehiclePage() {
 
   useEffect(() => { fetchRecords(); }, []);
 
+  // Aktuellen km-Stand aus /vehicle/info holen (TM-Drives, sonst max. Record)
+  useEffect(() => {
+    api.getVehicleInfo()
+      .then((res: any) => {
+        const odo = res?.data?.current_odometer_km;
+        if (typeof odo === 'number') setCurrentOdometer(odo);
+      })
+      .catch(() => { /* Info bleibt dann null */ });
+  }, []);
+
   const handleDelete = async (record: VehicleRecordRead) => {
-    const label = record.record_type === 'service' ? record.title : `${record.tire_brand} ${record.tire_position}`;
+    const label = record.record_type === 'service' ? record.title : `${record.tire_brand || 'Reifensatz'}`;
     if (!window.confirm(`"${label}" wirklich löschen?`)) return;
     try {
       await api.deleteVehicleRecord(record.id);
@@ -218,8 +234,27 @@ export default function VehiclePage() {
     }
   };
 
+  // KM-Stand automatisch ableiten für Einträge ohne km (Zubehör etc.)
+  const handleSyncOdometer = async (record: VehicleRecordRead) => {
+    try {
+      await api.syncRecordOdometer(record.id);
+      fetchRecords();
+    } catch (e) {
+      alert('KM-Ableitung fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
+    }
+  };
+
   const services = (records || []).filter(r => r.record_type === 'service');
   const tires = (records || []).filter(r => r.record_type === 'tire');
+  const activeTire = tires.find(t => t.is_active) || null;
+
+  const openReplaceDialog = (rec: VehicleRecordRead) => {
+    // Vorbefüllung: aktueller TM-Stand, sonst letzter Stand des alten Satzes
+    if (currentOdometer == null && rec.odometer_km != null) {
+      setCurrentOdometer(rec.odometer_km);
+    }
+    setReplaceTarget(rec);
+  };
 
   return (
     <div className="page-container">
@@ -268,23 +303,22 @@ export default function VehiclePage() {
         )}
       </section>
 
-      {/* Reifen */}
+      {/* Reifen: EIN Satz = EIN Eintrag */}
       <section className="overview-page__section">
         <div className="overview-page__section-header">
           <h2 className="overview-page__section-title">Reifen</h2>
-          <button className="btn-add" onClick={() => setModalMode('new-tireset')}>+ Reifensatz wechseln</button>
+          <button className="btn-add" onClick={() => setModalMode('new-tireset')}>+ Neuer Reifensatz</button>
         </div>
         {loading ? (
           <p className="vehicle-page__loading">Lädt…</p>
         ) : tires.length === 0 ? (
-          <p className="vehicle-page__empty">Keine Reifen erfasst.</p>
+          <p className="vehicle-page__empty">Keine Reifensätze erfasst.</p>
         ) : (
           <div className="vehicle-records-section">
             <div className="table-header tire-table-header">
-              <div className="col col-pos">Position</div>
-              <div className="col col-brand">Marke</div>
+              <div className="col col-brand">Reifensatz</div>
               <div className="col col-season">Saison</div>
-              <div className="col col-km">km-Stand</div>
+              <div className="col col-km">Gefahren (km)</div>
               <div className="col col-cost">Kosten</div>
               <div className="col col-status">Status</div>
               <div className="col col-actions">Aktion</div>
@@ -293,32 +327,46 @@ export default function VehiclePage() {
               {tires.sort((a, b) => {
                 if (a.is_active && !b.is_active) return -1;
                 if (!a.is_active && b.is_active) return 1;
-                return 0;
+                const da = a.date || '';
+                const db_ = b.date || '';
+                return db_.localeCompare(da);
               }).map(rec => {
+                // Gefahrene km je Satz:
+                // - Aktiv: aktueller km-Stand − Start-km des Satzes
+                // - Archiv: Endstand − Start-km
                 const kmDriven = (rec.odometer_km != null && rec.start_odometer_km != null)
-                  ? rec.odometer_km - rec.start_odometer_km : null;
+                  ? Math.round(rec.odometer_km - rec.start_odometer_km) : null;
                 return (
                   <div key={rec.id} className={`table-row tire-row ${rec.is_active ? 'tire-active' : 'tire-replaced'}`}>
-                    <div className="col col-pos">
-                      {rec.tire_position ? (
-                        <span className={`tire-badge tire-badge--${rec.tire_position.toLowerCase()}`}>{rec.tire_position}</span>
-                      ) : '—'}
+                    <div className="col col-brand">
+                      <div className="tire-set-title">{rec.tire_brand || rec.title || '—'}</div>
+                      {rec.title && rec.tire_brand && rec.title !== rec.tire_brand && (
+                        <div className="tire-set-subtitle">{rec.title}</div>
+                      )}
                     </div>
-                    <div className="col col-brand">{rec.tire_brand || '—'}</div>
                     <div className="col col-season">
                       {rec.tire_season && (
                         <span className={`tire-season-label tire-season--${rec.tire_season.toLowerCase()}`}>{rec.tire_season}</span>
                       ) || '—'}
                     </div>
                     <div className="col col-km">
-                      <div>{rec.odometer_km != null ? rec.odometer_km.toLocaleString('de-DE') + ' km' : '—'}</div>
-                      {kmDriven != null && kmDriven > 0 && <div className="tire-km-driven">+{kmDriven.toLocaleString('de-DE')} km</div>}
+                      {kmDriven != null && kmDriven >= 0
+                        ? <><strong>{kmDriven.toLocaleString('de-DE')}</strong> km</>
+                        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                      <div className="tire-km-detail">
+                        {rec.start_odometer_km != null && `${Math.round(rec.start_odometer_km).toLocaleString('de-DE')} → ${rec.odometer_km != null ? Math.round(rec.odometer_km).toLocaleString('de-DE') : '…'}`}
+                      </div>
                     </div>
                     <div className="col col-cost">{rec.cost_eur != null ? rec.cost_eur.toFixed(2) + ' €' : '—'}</div>
                     <div className="col col-status">
-                      {rec.is_active ? <span className="status-active">● Aktiv</span> : <span className="status-replaced">● Ersetzt</span>}
+                      {rec.is_active
+                        ? <span className="status-active">● Aktiv</span>
+                        : <span className="status-replaced">● Archiv ({rec.date?.slice(0, 10) || '—'})</span>}
                     </div>
                     <div className="col col-actions">
+                      {rec.is_active && (
+                        <button className="btn-icon" title="Diesen Satz tauschen (archiviert ihn)" onClick={() => openReplaceDialog(rec)}>⇄</button>
+                      )}
                       <button className="btn-icon" onClick={() => setEditRecord(rec)} title="Bearbeiten">✎</button>
                       <button className="btn-icon btn-icon--danger" onClick={() => handleDelete(rec)} title="Löschen">✕</button>
                     </div>
@@ -337,6 +385,122 @@ export default function VehiclePage() {
       {editRecord && (
         <EditModal mode="edit" record={editRecord} onClose={() => setEditRecord(null)} onSaved={fetchRecords} />
       )}
+      {replaceTarget && (
+        <ReplaceTireModal
+          oldRecord={replaceTarget}
+          currentOdometer={currentOdometer}
+          onClose={() => setReplaceTarget(null)}
+          onSaved={fetchRecords}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===== Replace-Modal: aktiven Satz tauschen ===== */
+interface ReplaceModalProps {
+  oldRecord: VehicleRecordRead;
+  currentOdometer: number | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function ReplaceTireModal({ oldRecord, currentOdometer, onClose, onSaved }: ReplaceModalProps) {
+  const [date, setDate] = useState(todayStr());
+  const [brand, setBrand] = useState(oldRecord.tire_brand || '');
+  const [season, setSeason] = useState(oldRecord.tire_season || 'Sommer');
+  const [desc, setDesc] = useState('');
+  const [odometer, setOdometer] = useState(currentOdometer != null ? String(Math.round(currentOdometer)) : '');
+  const [cost, setCost] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const kmAuto = odometer === '';
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await api.replaceTireSet(oldRecord.id, {
+        date: `${date}T12:00:00`,
+        odometer_km: odometer ? Number(odometer) : null,  // leer → Backend leitet ab
+        title: desc.trim() || `${brand.trim()} ${season}`,
+        tire_brand: brand.trim() || null,
+        tire_season: season,
+        cost_eur: cost ? Number(cost) : null,
+        note: note.trim() || null,
+      });
+      if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-container" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Reifensatz wechseln</h3>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Schließen">&times;</button>
+        </div>
+        <div className="modal-body">
+          <p className="form-hint">
+            Archiviert <strong>{oldRecord.tire_brand || 'aktuellen Satz'}</strong> (gefahrenen km bleiben erhalten)
+            und legt den neuen Satz an.
+          </p>
+          <form onSubmit={handleSubmit} className="record-form">
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">Datum *</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} required />
+              </div>
+              <div className="form-field">
+                <label className="form-label">Saison</label>
+                <select value={season} onChange={e => setSeason(e.target.value)}>
+                  <option value="Sommer">Sommer</option>
+                  <option value="Winter">Winter</option>
+                  <option value="Ganzjahres">Ganzjahres</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Reifenmarke *</label>
+              <input type="text" placeholder="z.B. Michelin Primacy 4" value={brand} onChange={e => setBrand(e.target.value)} required />
+            </div>
+            <div className="form-field">
+              <label className="form-label">Beschreibung (optional)</label>
+              <input type="text" placeholder="z.B. 19 Zoll, 255/45 R19" value={desc} onChange={e => setDesc(e.target.value)} />
+            </div>
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">km-Stand beim Wechsel</label>
+                <input type="number" min="0" placeholder={currentOdometer != null ? `z.B. ${Math.round(currentOdometer)}` : 'leer = automatisch'} value={odometer} onChange={e => setOdometer(e.target.value)} />
+                {kmAuto && <span className="form-hint">{currentOdometer != null ? `Leer gelassen → aktueller Stand ${Math.round(currentOdometer).toLocaleString('de-DE')} km wird eingetragen.` : 'Leer gelassen → Stand wird automatisch abgeleitet.'}</span>}
+              </div>
+              <div className="form-field">
+                <label className="form-label">Kosten neuer Satz (€)</label>
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={cost} onChange={e => setCost(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Notiz</label>
+              <textarea placeholder="Optionale Notiz…" value={note} onChange={e => setNote(e.target.value)} rows={2} />
+            </div>
+            {error && <div className="form-submit-error">{error}</div>}
+            <div className="form-actions">
+              <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Abbrechen</button>
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? 'Wird gewechselt…' : 'Satz wechseln'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
