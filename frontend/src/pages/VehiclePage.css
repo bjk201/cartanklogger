@@ -287,7 +287,12 @@
 .tire-km-driven { font-size: 0.6875rem; color: var(--color-text-muted); }
 .tire-row.tire-active { background: transparent; }
 .tire-row.tire-replaced { opacity: 0.6; }
+.tire-row.tire-archived { opacity: 0.55; }
+.tire-row.tire-stored { opacity: 0.75; }
+.tire-mount-count { font-size: 0.6875rem; color: var(--color-text-muted); }
 .status-active { color: var(--color-home); font-size: 0.75rem; font-weight: 600; }
+.status-storage { color: #b45309; font-size: 0.75rem; font-weight: 600; }
+.status-archived { color: var(--color-text-muted); font-size: 0.75rem; }
 .status-replaced { color: var(--color-text-muted); font-size: 0.75rem; }
 .tire-purchase-info {
   grid-column: 1 / -1;
@@ -579,9 +584,19 @@
   font-size: 0.85rem;
 }
 
-/* Tire row active vs replaced */
+/* Tire row states: montiert / im Lager / archiviert */
 .tire-active {
   border-left: 3px solid #28a745;
+}
+
+.tire-stored {
+  opacity: 0.8;
+  border-left: 3px solid #b45309;
+}
+
+.tire-archived {
+  opacity: 0.55;
+  border-left: 3px solid #dee2e6;
 }
 
 .tire-replaced {

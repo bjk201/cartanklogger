@@ -51,6 +51,44 @@ def _migrate_sessions_columns(conn) -> None:
         logger.warning("Sessions-Migration übersprungen: %s", e)
 
 
+def _migrate_vehicle_columns(conn) -> None:
+    """Idempotente Migration: tire_mounts-Tabelle + is_archived-Spalte.
+
+    create_all() legt die tire_mounts-Tabelle neu an, ändert aber bestehende
+    vehicle_records-Tabellen nicht → is_archived per ALTER TABLE sichern.
+    Zusätzlich: Legacy-Reifenstatus (nur is_active) auf Mounts abbilden.
+    """
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+    try:
+        rows = conn.execute(text("PRAGMA table_info(vehicle_records)")).fetchall()
+        existing = {row[1] for row in rows}
+        if "is_archived" not in existing:
+            conn.execute(text(
+                "ALTER TABLE vehicle_records ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            logger.info("vehicle_records: Spalte is_archived hinzugefügt")
+
+        # Legacy-DatenÜbernahme: Für bestehende aktive Reifensätze ohne Mount-Historie
+        # eine offene Montage anlegen (Start: start_odometer_km, sonst NULL).
+        # HINWEIS: SQLAlchemy speichert SQLEnum als MEMBER-NAMEN ('TIRE'), nicht als
+        # Wert ('tire') → name-agnostisch filtern.
+        count = conn.execute(text("SELECT COUNT(*) FROM tire_mounts")).scalar() or 0
+        if count == 0:
+            conn.execute(text(
+                """
+                INSERT INTO tire_mounts (tire_record_id, mounted_at, demounted_at, km_on, km_off)
+                SELECT id, date, NULL, start_odometer_km, NULL
+                FROM vehicle_records
+                WHERE UPPER(record_type) = 'TIRE' AND is_active = 1
+                """
+            ))
+            logger.info("tire_mounts: Legacy-Montagen aus aktiven Reifensätzen erzeugt")
+    except Exception as e:  # pragma: no cover
+        logger.warning("Vehicle-Migration übersprungen: %s", e)
+
+
 def init_db() -> None:
     """Initialisiert die Datenbank-Tabellen."""
     from app.models import session as session_model  # noqa: F401
@@ -59,9 +97,11 @@ def init_db() -> None:
     from app.models import vehicle  # noqa: F401
     from app.models import extra_costs  # noqa: F401
     from app.models import tm_cost_export  # noqa: F401
+    from app.models import tire_mount  # noqa: F401
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
         _migrate_sessions_columns(conn)
+        _migrate_vehicle_columns(conn)
     logger.info("Database tables created/verified")
 
 

@@ -371,7 +371,8 @@ export interface VehicleRecordRead {
   tire_position?: string;
   tire_brand?: string;
   tire_season?: string;
-  is_active?: boolean;
+  is_active?: boolean;          // Satz aktuell montiert?
+  is_archived?: boolean;        // Satz archiviert (separater Endzustand)
   start_odometer_km?: number;
   odometer_km?: number;
   cost_eur?: number;
@@ -380,6 +381,17 @@ export interface VehicleRecordRead {
   shop?: string;
   note?: string;
   record_type?: 'service' | 'tire';
+  mounts?: TireMountRead[];     // Montage-Historie (nur Reifensätze)
+}
+
+export interface TireMountRead {
+  id: number;
+  tire_record_id: number;
+  mounted_at: string;
+  demounted_at?: string | null;  // NULL = aktuell montiert
+  km_on?: number | null;
+  km_off?: number | null;
+  note?: string | null;
 }
 
 export interface VehicleRecordCreate {

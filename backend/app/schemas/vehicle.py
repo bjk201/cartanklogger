@@ -46,10 +46,40 @@ class VehicleRecordRead(BaseModel):
     tire_season: Optional[str] = None
     start_odometer_km: Optional[float] = None
     replaced_by: Optional[int] = None
-    is_active: bool = True
+    is_active: bool = True          # Satz aktuell montiert?
+    is_archived: bool = False       # Satz archiviert (separater Endzustand)
+    mounts: List["TireMountRead"] = []  # Montage-Historie (nur Reifen)
 
     class Config:
         from_attributes = True
+
+
+class TireMountRead(BaseModel):
+    """Eine Montage-Periode eines Reifensatzes am Fahrzeug."""
+    id: int
+    tire_record_id: int
+    mounted_at: datetime
+    demounted_at: Optional[datetime] = None  # NULL = aktuell montiert
+    km_on: Optional[float] = None
+    km_off: Optional[float] = None
+    note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TireDemountRequest(BaseModel):
+    """Satz abmontieren (kommt ins Lager, NICHT archiviert)."""
+    date: datetime
+    odometer_km: Optional[float] = None  # km-Stand bei Demontage (leer = Auto-Ableitung)
+    note: Optional[str] = None
+
+
+class TireMountRequest(BaseModel):
+    """Satz aus dem Lager wieder montieren."""
+    date: datetime
+    odometer_km: Optional[float] = None  # km-Stand bei Montage (leer = Auto-Ableitung)
+    note: Optional[str] = None
 
 
 class TireReplaceRequest(BaseModel):

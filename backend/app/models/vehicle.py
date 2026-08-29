@@ -39,7 +39,8 @@ class VehicleRecordModel(Base):
     # Tire chain / replacement tracking
     start_odometer_km = Column(Float, nullable=True, default=None)  # km-Stand bei neuer Reifengarnitur
     replaced_by = Column(Integer, ForeignKey('vehicle_records.id'), nullable=True, default=None)  # FK to replacement tire record
-    is_active = Column(Boolean, nullable=False, default=True)       # whether this tire is still in use
+    is_active = Column(Boolean, nullable=False, default=True)       # SATZ: gerade montiert? (Legacy-Feld, wird von tire_mounts abgelöst)
+    is_archived = Column(Boolean, nullable=False, default=False)    # SATZ: archiviert = aus dem Umlauf, kein erneutes Montieren
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

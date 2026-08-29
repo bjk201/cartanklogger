@@ -7,6 +7,68 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/* ===== Gefahrene km je Satz aus der Montage-Historie =====
+   - Geschlossene Montagen: km_off − km_on
+   - Offene Montage (aktiv): aktueller TM-Drives-Stand − km_on
+     → die km des montierten Satzes wachsen automatisch mit jedem
+     TM-Drive („täglich angepasst"), ohne dass ein Eintrag geändert wird. */
+interface TireKmInfo {
+  km: number | null;
+  detail: string;
+  mountCount: number;
+  open: boolean;
+}
+
+function computeTireKm(
+  rec: VehicleRecordRead,
+  currentOdometer: number | null,
+): TireKmInfo {
+  const mounts = rec.mounts || [];
+
+  if (mounts.length === 0) {
+    // Legacy ohne Mount-Historie: alte Statische Bilanz verwenden
+    if (rec.odometer_km != null && rec.start_odometer_km != null) {
+      return {
+        km: Math.max(0, Math.round(rec.odometer_km - rec.start_odometer_km)),
+        detail: `${Math.round(rec.start_odometer_km).toLocaleString('de-DE')} → ${Math.round(rec.odometer_km).toLocaleString('de-DE')}`,
+        mountCount: 0,
+        open: rec.is_active === true,
+      };
+    }
+    return { km: null, detail: '', mountCount: 0, open: rec.is_active === true };
+  }
+
+  let total = 0;
+  let hasAny = false;
+  let open = false;
+  for (const m of mounts) {
+    const on = m.km_on;
+    const off = m.demounted_at == null ? (currentOdometer ?? m.km_off) : m.km_off;
+    if (m.demounted_at == null) open = true;
+    if (on != null && off != null) {
+      total += Math.max(0, off - on);
+      hasAny = true;
+    }
+  }
+  // Detail: letzte Montage-Periode
+  const last = mounts[mounts.length - 1];
+  const lastOn = last.km_on != null ? Math.round(last.km_on).toLocaleString('de-DE') : '—';
+  let lastOff: string;
+  if (last.demounted_at == null) {
+    lastOff = currentOdometer != null
+      ? `${Math.round(currentOdometer).toLocaleString('de-DE')} (live)`
+      : '…';
+  } else {
+    lastOff = last.km_off != null ? Math.round(last.km_off).toLocaleString('de-DE') : '…';
+  }
+  return {
+    km: hasAny ? Math.round(total) : null,
+    detail: `${lastOn} → ${lastOff}`,
+    mountCount: mounts.length,
+    open,
+  };
+}
+
 /* ===== Edit-Modal (Service + Reifen) ===== */
 interface EditModalProps {
   record: VehicleRecordRead | null;
@@ -104,7 +166,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
         <div className="modal-header">
           <h3>
             {mode === 'edit' ? 'Eintrag bearbeiten' :
-             mode === 'new-tireset' ? 'Reifensatz wechseln' :
+             mode === 'new-tireset' ? 'Neuer Reifensatz' :
              'Service eintragen'}
           </h3>
           <button className="modal-close-btn" onClick={onClose} aria-label="Schließen">&times;</button>
@@ -136,7 +198,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
                   <label className="form-label">Beschreibung (optional)</label>
                   <input type="text" placeholder="z.B. Michelin Primacy 4, 19 Zoll" value={tireTitle} onChange={e => setTireTitle(e.target.value)} />
                 </div>
-                <p className="form-hint">Ein Satz = ein Eintrag. Beim nächsten Wechsel wird dieser Satz archiviert und die gefahrenen km bleiben erhalten.</p>
+                <p className="form-hint">Ein Satz = ein Eintrag. Der Satz gilt als montiert (solange kein anderer montiert ist) — abmontierte Sätze kommen ins Lager und können mehrfach wieder montiert werden. Archivieren ist eine separate Aktion.</p>
               </>
             ) : (
               <div className="form-field">
@@ -192,6 +254,8 @@ export default function VehiclePage() {
   const [modalMode, setModalMode] = useState<'new-service' | 'new-tireset' | null>(null);
   const [editRecord, setEditRecord] = useState<VehicleRecordRead | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<VehicleRecordRead | null>(null);
+  const [demountTarget, setDemountTarget] = useState<VehicleRecordRead | null>(null);
+  const [mountTarget, setMountTarget] = useState<VehicleRecordRead | null>(null);
   const [currentOdometer, setCurrentOdometer] = useState<number | null>(null);
 
   async function fetchRecords() {
@@ -244,9 +308,29 @@ export default function VehiclePage() {
     }
   };
 
+  // Archivieren = SEPARATE Aktion (bewusst, mit Rückfrage)
+  const handleArchive = async (rec: VehicleRecordRead) => {
+    const label = rec.tire_brand || rec.title || 'Reifensatz';
+    if (!window.confirm(`"${label}" archivieren?\n\nArchivierte Sätze behalten ihre km-Bilanz, können aber nicht wieder montiert werden (Rückgängig möglich).`)) return;
+    try {
+      await api.archiveTireSet(rec.id);
+      fetchRecords();
+    } catch (e) {
+      alert('Archivieren fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
+    }
+  };
+
+  const handleUnarchive = async (rec: VehicleRecordRead) => {
+    try {
+      await api.unarchiveTireSet(rec.id);
+      fetchRecords();
+    } catch (e) {
+      alert('Reaktivieren fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
+    }
+  };
+
   const services = (records || []).filter(r => r.record_type === 'service');
   const tires = (records || []).filter(r => r.record_type === 'tire');
-  const activeTire = tires.find(t => t.is_active) || null;
 
   const openReplaceDialog = (rec: VehicleRecordRead) => {
     // Vorbefüllung: aktueller TM-Stand, sonst letzter Stand des alten Satzes
@@ -303,7 +387,7 @@ export default function VehiclePage() {
         )}
       </section>
 
-      {/* Reifen: EIN Satz = EIN Eintrag */}
+      {/* Reifen: EIN Satz = EIN Eintrag — Montiert / Im Lager / Archiviert */}
       <section className="overview-page__section">
         <div className="overview-page__section-header">
           <h2 className="overview-page__section-title">Reifen</h2>
@@ -325,47 +409,61 @@ export default function VehiclePage() {
             </div>
             <div className="table-body">
               {tires.sort((a, b) => {
-                if (a.is_active && !b.is_active) return -1;
-                if (!a.is_active && b.is_active) return 1;
+                // montiert → Lager → Archiv
+                const rank = (r: VehicleRecordRead) => (r.is_active ? 0 : (r.is_archived ? 2 : 1));
+                if (rank(a) !== rank(b)) return rank(a) - rank(b);
                 const da = a.date || '';
                 const db_ = b.date || '';
                 return db_.localeCompare(da);
               }).map(rec => {
-                // Gefahrene km je Satz:
-                // - Aktiv: aktueller km-Stand − Start-km des Satzes
-                // - Archiv: Endstand − Start-km
-                const kmDriven = (rec.odometer_km != null && rec.start_odometer_km != null)
-                  ? Math.round(rec.odometer_km - rec.start_odometer_km) : null;
+                // Gefahrene km je Satz aus der Montage-Historie:
+                // - Geschlossene Montagen: km_off − km_on (Summe)
+                // - Aktuell montiert: aktueller Tacho (TM-Drives, täglich aktuell) − km_on
+                const km = computeTireKm(rec, currentOdometer);
                 return (
-                  <div key={rec.id} className={`table-row tire-row ${rec.is_active ? 'tire-active' : 'tire-replaced'}`}>
-                    <div className="col col-brand">
+                  <div key={rec.id} className={`table-row tire-row ${rec.is_active ? 'tire-active' : ''} ${rec.is_archived ? 'tire-archived' : ''}`}>
+                    <div className="col col-brand" data-label="Reifensatz">
                       <div className="tire-set-title">{rec.tire_brand || rec.title || '—'}</div>
                       {rec.title && rec.tire_brand && rec.title !== rec.tire_brand && (
                         <div className="tire-set-subtitle">{rec.title}</div>
                       )}
+                      {km.mountCount > 1 && (
+                        <div className="tire-mount-count">{km.mountCount} Montagen</div>
+                      )}
                     </div>
-                    <div className="col col-season">
+                    <div className="col col-season" data-label="Saison">
                       {rec.tire_season && (
                         <span className={`tire-season-label tire-season--${rec.tire_season.toLowerCase()}`}>{rec.tire_season}</span>
                       ) || '—'}
                     </div>
-                    <div className="col col-km">
-                      {kmDriven != null && kmDriven >= 0
-                        ? <><strong>{kmDriven.toLocaleString('de-DE')}</strong> km</>
+                    <div className="col col-km" data-label="Gefahren">
+                      {km.km != null
+                        ? <><strong>{km.km.toLocaleString('de-DE')}</strong> km</>
                         : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                      <div className="tire-km-detail">
-                        {rec.start_odometer_km != null && `${Math.round(rec.start_odometer_km).toLocaleString('de-DE')} → ${rec.odometer_km != null ? Math.round(rec.odometer_km).toLocaleString('de-DE') : '…'}`}
-                      </div>
+                      <div className="tire-km-detail">{km.detail}</div>
                     </div>
-                    <div className="col col-cost">{rec.cost_eur != null ? rec.cost_eur.toFixed(2) + ' €' : '—'}</div>
-                    <div className="col col-status">
+                    <div className="col col-cost" data-label="Kosten">{rec.cost_eur != null ? rec.cost_eur.toFixed(2) + ' €' : '—'}</div>
+                    <div className="col col-status" data-label="Status">
                       {rec.is_active
-                        ? <span className="status-active">● Aktiv</span>
-                        : <span className="status-replaced">● Archiv ({rec.date?.slice(0, 10) || '—'})</span>}
+                        ? <span className="status-active">● Montiert</span>
+                        : rec.is_archived
+                          ? <span className="status-archived">● Archiviert</span>
+                          : <span className="status-storage">● Im Lager</span>}
                     </div>
-                    <div className="col col-actions">
+                    <div className="col col-actions" data-label="Aktion">
                       {rec.is_active && (
-                        <button className="btn-icon" title="Diesen Satz tauschen (archiviert ihn)" onClick={() => openReplaceDialog(rec)}>⇄</button>
+                        <>
+                          <button className="btn-icon" title="Anderen Satz montieren (dieser kommt ins Lager, NICHT ins Archiv)" onClick={() => setReplaceTarget(rec)}>⇄</button>
+                          <button className="btn-icon" title="Abmontieren — Satz kommt ins Lager (kann wieder montiert werden)" onClick={() => setDemountTarget(rec)}>⤓</button>
+                        </>
+                      )}
+                      {!rec.is_active && !rec.is_archived && (
+                        <button className="btn-icon" title="Diesen Satz wieder montieren" onClick={() => setMountTarget(rec)}>⤒</button>
+                      )}
+                      {rec.is_archived ? (
+                        <button className="btn-icon" title="Archivierung aufheben — Satz ist wieder im Lager" onClick={() => handleUnarchive(rec)}>↩</button>
+                      ) : (
+                        <button className="btn-icon" title="Archivieren (separater Endzustand)" onClick={() => handleArchive(rec)} disabled={rec.is_active}>⌫</button>
                       )}
                       <button className="btn-icon" onClick={() => setEditRecord(rec)} title="Bearbeiten">✎</button>
                       <button className="btn-icon btn-icon--danger" onClick={() => handleDelete(rec)} title="Löschen">✕</button>
@@ -393,11 +491,125 @@ export default function VehiclePage() {
           onSaved={fetchRecords}
         />
       )}
+      {demountTarget && (
+        <MountActionModal
+          mode="demount"
+          target={demountTarget}
+          currentOdometer={currentOdometer}
+          onClose={() => setDemountTarget(null)}
+          onSaved={fetchRecords}
+        />
+      )}
+      {mountTarget && (
+        <MountActionModal
+          mode="mount"
+          target={mountTarget}
+          currentOdometer={currentOdometer}
+          onClose={() => setMountTarget(null)}
+          onSaved={fetchRecords}
+        />
+      )}
     </div>
   );
 }
 
-/* ===== Replace-Modal: aktiven Satz tauschen ===== */
+/* ===== Mount-Action-Modal: montieren / abmontieren ===== */
+interface MountActionModalProps {
+  mode: 'mount' | 'demount';
+  target: VehicleRecordRead;
+  currentOdometer: number | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function MountActionModal({ mode, target, currentOdometer, onClose, onSaved }: MountActionModalProps) {
+  const [date, setDate] = useState(todayStr());
+  const [odometer, setOdometer] = useState(
+    mode === 'mount' && currentOdometer != null ? String(Math.round(currentOdometer)) : '',
+  );
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const kmAuto = odometer === '';
+  const label = target.tire_brand || target.title || 'Reifensatz';
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const data = {
+        date: `${date}T12:00:00`,
+        odometer_km: odometer ? Number(odometer) : null,  // leer → Backend leitet ab
+        note: note.trim() || null,
+      };
+      const res = mode === 'demount'
+        ? await api.demountTireSet(target.id, data)
+        : await api.mountTireSet(target.id, data);
+      if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-container" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{mode === 'demount' ? 'Reifensatz abmontieren' : 'Reifensatz montieren'}</h3>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Schließen">&times;</button>
+        </div>
+        <div className="modal-body">
+          <p className="form-hint">
+            {mode === 'demount'
+              ? <>Demontiert <strong>{label}</strong> — der Satz kommt ins <strong>Lager</strong> (nicht ins Archiv) und kann jederzeit wieder montiert werden.</>
+              : <>Montiert <strong>{label}</strong> wieder am Fahrzeug. Die gefahrenen km werden über alle Montagen summiert.</>}
+          </p>
+          <form onSubmit={handleSubmit} className="record-form">
+            <div className="form-field">
+              <label className="form-label">Datum *</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} required />
+            </div>
+            <div className="form-field">
+              <label className="form-label">km-Stand {mode === 'demount' ? 'bei Demontage' : 'bei Montage'}</label>
+              <input
+                type="number"
+                min="0"
+                placeholder={currentOdometer != null ? `z.B. ${Math.round(currentOdometer)}` : 'leer = automatisch'}
+                value={odometer}
+                onChange={e => setOdometer(e.target.value)}
+              />
+              {kmAuto && (
+                <span className="form-hint">
+                  {currentOdometer != null
+                    ? `Leer gelassen → aktueller Stand ${Math.round(currentOdometer).toLocaleString('de-DE')} km wird eingetragen.`
+                    : 'Leer gelassen → Stand wird automatisch abgeleitet.'}
+                </span>
+              )}
+            </div>
+            <div className="form-field">
+              <label className="form-label">Notiz</label>
+              <textarea placeholder="Optionale Notiz…" value={note} onChange={e => setNote(e.target.value)} rows={2} />
+            </div>
+            {error && <div className="form-submit-error">{error}</div>}
+            <div className="form-actions">
+              <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Abbrechen</button>
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? 'Wird gespeichert…' : (mode === 'demount' ? 'Abmontieren' : 'Montieren')}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Replace-Modal: montierten Satz tauschen ===== */
 interface ReplaceModalProps {
   oldRecord: VehicleRecordRead;
   currentOdometer: number | null;
@@ -450,8 +662,8 @@ function ReplaceTireModal({ oldRecord, currentOdometer, onClose, onSaved }: Repl
         </div>
         <div className="modal-body">
           <p className="form-hint">
-            Archiviert <strong>{oldRecord.tire_brand || 'aktuellen Satz'}</strong> (gefahrenen km bleiben erhalten)
-            und legt den neuen Satz an.
+            Legt einen neuen Satz an und montiert ihn. <strong>{oldRecord.tire_brand || 'Der aktuelle Satz'}</strong> kommt
+            ins <strong>Lager</strong> (nicht ins Archiv!) und kann jederzeit wieder montiert werden.
           </p>
           <form onSubmit={handleSubmit} className="record-form">
             <div className="form-row">
@@ -504,3 +716,4 @@ function ReplaceTireModal({ oldRecord, currentOdometer, onClose, onSaved }: Repl
     </div>
   );
 }
+

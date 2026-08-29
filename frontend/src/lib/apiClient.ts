@@ -340,8 +340,8 @@ export function deleteVehicleRecord(id: number): Promise<any> {
   return request(`/vehicle/records/${id}`, { method: 'DELETE' });
 }
 
-// Reifensatz-Wechsel: alter Satz wird archiviert, neuer Satz angelegt.
-// odometer_km leer lassen → Backend leitet den KM-Stand automatisch ab.
+// Reifensatz-Wechsel: montierter Satz kommt ins LAGER (NICHT archiviert!),
+// neuer Satz wird angelegt und montiert. odometer_km leer → Auto-Ableitung.
 export interface TireSetReplace {
   date: string;
   odometer_km?: number | null;
@@ -358,6 +358,41 @@ export function replaceTireSet(oldRecordId: number, data: TireSetReplace): Promi
     method: 'PUT',
     body: JSON.stringify(data),
   });
+}
+
+// Satz abmontieren (ins Lager — NICHT archiviert; kann wieder montiert werden)
+export interface TireMountAction {
+  date: string;
+  odometer_km?: number | null;  // leer → Backend leitet automatisch ab
+  note?: string | null;
+}
+
+export function demountTireSet(id: number, data: TireMountAction): Promise<any> {
+  return request(`/vehicle/records/${id}/demount`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// Lager-Satz (wieder) montieren — Mehrfach-Montage möglich
+export function mountTireSet(id: number, data: TireMountAction): Promise<any> {
+  return request(`/vehicle/records/${id}/mount`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// Archivieren = SEPARATER Endzustand (nicht durch Wechsel!)
+export function archiveTireSet(id: number): Promise<any> {
+  return request(`/vehicle/records/${id}/archive`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+// Archivierung aufheben → wieder im Lager
+export function unarchiveTireSet(id: number): Promise<any> {
+  return request(`/vehicle/records/${id}/unarchive`, { method: 'POST' });
 }
 
 // KM-Stand automatisch ableiten für Eintrag ohne km (Zubehör etc.)
@@ -479,6 +514,10 @@ export const api = {
   updateVehicleRecord,
   deleteVehicleRecord,
   replaceTireSet,
+  demountTireSet,
+  mountTireSet,
+  archiveTireSet,
+  unarchiveTireSet,
   syncRecordOdometer,
   getExtraCosts,
   createExtraCost,
