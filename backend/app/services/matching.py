@@ -14,6 +14,7 @@ from sqlalchemy import and_, or_
 
 from app.models.session import SessionModel
 from app.models.matching_override import MatchingOverride, OverrideType
+from app.services.override_target import get_effective_manual_overrides
 from app.database import get_db
 
 
@@ -247,9 +248,6 @@ class MatchingService:
         evcc_sessions = self._get_evcc_sessions(limit, days, from_date, to_date)
         tm_charges = self._get_teslamate_charges(days, from_date, to_date)
         
-        # Load manual overrides
-        overrides = self._get_active_overrides()
-        
         matches: List[EVCCSessionMatch] = []
         total_evcc_energy = 0.0
         total_tm_energy = 0.0
@@ -261,21 +259,23 @@ class MatchingService:
         rejected_wrong_location = 0
         
         # Track which TM charges are already assigned via override
-        overridden_tm_charge_ids = set()
-        for ov in overrides:
-            if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id:
-                overridden_tm_charge_ids.add(ov.teslamate_charge_id)
+        # (SHARED Resolver: Ziele zentral auf CTL-PK aufgelöst — identische
+        # Semantik wie Live-Matcher, TM-Kostenexport und API-Schicht)
+        effective_overrides = get_effective_manual_overrides(self.db)
+        overridden_tm_charge_ids = {
+            ov["tm_charge_id"] for ov in effective_overrides
+        }
         
         # Build override lookup: tm_charge_id -> override info
+        # ('evcc_session_id' ist hier BEREITS der aufgelöste CTL-PK)
         override_map = {}
-        for ov in overrides:
-            if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id:
-                override_map[ov.teslamate_charge_id] = {
-                    'evcc_session_id': ov.evcc_session_id,
-                    'override_id': ov.id,
-                    'reason': ov.reason,
-                    'replaced_auto_match': ov.replaced_auto_match
-                }
+        for ov in effective_overrides:
+            override_map[ov["tm_charge_id"]] = {
+                'evcc_session_id': ov["ctl_session_id"],
+                'override_id': ov["override_id"],
+                'reason': ov["reason"],
+                'replaced_auto_match': ov.get("replaced_auto_match"),
+            }
         
         for evcc in evcc_sessions:
             evcc_start = self._parse_datetime(evcc.date.isoformat() if evcc.date else '')

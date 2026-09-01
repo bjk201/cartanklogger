@@ -12,6 +12,7 @@ from dataclasses import dataclass, asdict
 from sqlalchemy.orm import Session
 
 from app.models.matching_override import MatchingOverride, OverrideType
+from app.services.override_target import get_effective_manual_overrides
 from app.services.evcc_client import EVCCClient, EVCCLiveSession, create_evcc_client_from_config
 from app.services.teslamateapi_client import TeslaMateAPIClient, TeslaMateAPICharge, create_teslamateapi_client_from_config
 from app.database import SessionLocal
@@ -94,6 +95,24 @@ class LiveMatchingService:
         self.evcc_client = evcc_client
         self.teslamateapi_client = teslamateapi_client
         self.db = db
+        self._ctl_pk_cache: Dict[str, Optional[int]] = {}
+
+    def _ctl_pk_for_source(self, source_id) -> Optional[int]:
+        """CTL-Primary-Key zur EVCC-API-ID (source_id), gecacht.
+
+        Override-Ziele sind auf CTL-PK normiert (Shared Resolver) — der
+        Live-Matcher vergleicht daher die CTL-PKs, nicht API-IDs.
+        """
+        key = str(source_id)
+        if key not in self._ctl_pk_cache:
+            row = (
+                self.db.query(SessionModel)
+                .filter(SessionModel.source_type == "home")
+                .filter(SessionModel.source_id == key)
+                .first()
+            )
+            self._ctl_pk_cache[key] = int(row.id) if row is not None else None
+        return self._ctl_pk_cache[key]
 
     def _parse_datetime(self, dt_str: str) -> Optional[datetime]:
         """Parse ISO datetime string."""
@@ -237,8 +256,11 @@ class LiveMatchingService:
         evcc_sessions = self._filter_by_date_range(evcc_sessions, days, from_date, to_date)
         tm_charges = self._filter_tm_by_date_range(tm_charges, days, from_date, to_date)
 
-        # Load manual overrides from DB
-        overrides = self._get_active_overrides()
+        # Load manual overrides — SHARED Resolver: Override-Ziele werden
+        # zentral auf CTL-PK aufgelöst (tolerant CTL-PK oder EVCC-API-ID),
+        # identisch zu Legacy-Matcher, TM-Kostenexport und API-Schicht.
+        effective_overrides = get_effective_manual_overrides(self.db)
+        overrides = effective_overrides
 
         matches: List[LiveEVCCSessionMatch] = []
         total_evcc_energy = 0.0
@@ -252,15 +274,18 @@ class LiveMatchingService:
         candidate_checks_total = 0
 
         # Build override lookup: tm_charge_id -> override info
+        # ('ctl_session_id' = aufgelöster CTL-PK des Override-Ziels).
+        # Verglichen wird gegen den CTL-PK der aktuellen EVCC-Session
+        # (via source_id übersetzt) — identische Semantik wie im
+        # Legacy-Matcher (dort ist evcc.id bereits der CTL-PK).
         override_map = {}
         for ov in overrides:
-            if ov.override_type == OverrideType.manual_assign and ov.evcc_session_id:
-                override_map[ov.teslamate_charge_id] = {
-                    'evcc_session_id': ov.evcc_session_id,
-                    'override_id': ov.id,
-                    'reason': ov.reason,
-                    'replaced_auto_match': ov.replaced_auto_match
-                }
+            override_map[ov["tm_charge_id"]] = {
+                "ctl_session_id": ov["ctl_session_id"],
+                "override_id": ov["override_id"],
+                "reason": ov["reason"],
+                "replaced_auto_match": ov.get("replaced_auto_match"),
+            }
 
         for evcc in evcc_sessions:
             evcc_start = evcc.created
@@ -315,8 +340,11 @@ class LiveMatchingService:
                 override_info = override_map.get(tm.id)
 
                 if override_info:
-                    # Manual override exists
-                    if override_info['evcc_session_id'] == evcc.id:
+                    # Manual override exists — Ziel-CTL-PK gegen CTL-PK
+                    # DIESER EVCC-Session vergleichen (nicht gegen die
+                    # EVCC-API-ID; siehe override_target.py).
+                    evcc_ctl_pk = self._ctl_pk_for_source(evcc.source_id)
+                    if evcc_ctl_pk is not None and override_info['ctl_session_id'] == evcc_ctl_pk:
                         manual_matches += 1
                         matched_charges.append(LiveMatchedCharge(
                             charge_id=tm.id,

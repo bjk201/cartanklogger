@@ -22,6 +22,7 @@ from typing import Optional
 from sqlalchemy.orm import Session as DBSession
 
 from app.models.tm_cost_export import SessionCostAllocation, TMCostExport
+from app.services.override_target import get_effective_manual_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +170,10 @@ class TMCostExportService:
             tm_client = TeslaMateAPIClient(tm_url, token_tm)
             svc = LiveMatchingService(evcc_client, tm_client, self.db)
             matches, _summary = await svc.match_all_live(limit=limit)
-            # Bestaetigte manuelle Overrides direkt aus der autoritativen Tabelle
-            # laden (Pflichtenheft §3). Deren Chargen-Daten kommen vom TM-API-Client.
+            # Bestätigte manuelle Overrides über den SHARED Resolver laden
+            # (Pflichtenheft §3). Ziele sind bereits auf CTL-PK aufgelöst —
+            # identische Semantik wie in beiden Matchern und der API-Schicht.
+            # Deren Chargen-Daten kommen vom TM-API-Client.
             overrides = self._load_active_overrides()
             tm_charges = {}
             if overrides:
@@ -206,53 +209,22 @@ class TMCostExportService:
     def _load_active_overrides(self) -> dict:
         """Aktive manual_assign-Overrides: tm_charge_id -> evcc CTL-PK.
 
-        Liest NUR die autoritative Tabelle matching_overrides (keine
-        Regeländerung). Der Live-Matcher verwirft Overrides, die ausserhalb
-        seines ±1-Tage-Zeitfensters liegen — fuer den Kostenexport zaehlt
-        aber der bestätigte manuelle Override (Pflichtenheft §3:
-        'bestaetigter manueller Override' ist exportfaehig).
+        Delegiert an den SHARED Resolver (app/services/override_target.py),
+        damit Kostenexport und beide Matcher (Legacy + Live) exakt dieselbe
+        Override-Semantik verwenden (Manual > Auto, Pflichtenheft §3).
+        Bestands-Overrides werden tolerant aufgelöst: die gespeicherte
+        Ziel-ID darf CTL-PK oder EVCC-API-ID (source_id) sein — beides
+        wird auf den CTL-PK übersetzt. Overrides mit unaufloesbarem Ziel
+        werden ignoriert (Warnlog im Resolver).
         """
-        from app.models.matching_override import MatchingOverride
-
-        overrides = (
-            self.db.query(MatchingOverride)
-            .filter(MatchingOverride.override_type == "manual_assign")
-            .order_by(MatchingOverride.id.desc())
-            .all()
-        )
-        # Neuester Override je TM-Charge gewinnt
-        out: dict = {}
-        for ov in overrides:
-            cid = int(ov.teslamate_charge_id)
-            if cid not in out:
-                ctl_id = self._resolve_ctl_session_id(ov.evcc_session_id)
-                if ctl_id is not None:
-                    out[cid] = {
-                        "ctl_evcc_session_id": ctl_id,
-                        "override_id": int(ov.id),
-                    }
-        return out
-
-    def _resolve_ctl_session_id(self, source_or_pk):
-        """Übersetzt EVCC-API-ID (source_id) ODER CTL-PK in den CTL-PK."""
-        from app.models.session import SessionModel
-        if source_or_pk is None:
-            return None
-        s = (
-            self.db.query(SessionModel)
-            .filter(SessionModel.source_type == "home")
-            .filter(SessionModel.source_id == str(source_or_pk))
-            .first()
-        )
-        if s is not None:
-            return int(s.id)
-        s = (
-            self.db.query(SessionModel)
-            .filter(SessionModel.source_type == "home")
-            .filter(SessionModel.id == int(source_or_pk))
-            .first()
-        )
-        return int(s.id) if s is not None else None
+        effective = get_effective_manual_overrides(self.db)
+        return {
+            ov["tm_charge_id"]: {
+                "ctl_evcc_session_id": ov["ctl_session_id"],
+                "override_id": ov["override_id"],
+            }
+            for ov in effective
+        }
 
     def _other_exported(self, tm_charge_ids, evcc_session_id):
         return (
@@ -548,6 +520,38 @@ class TMCostExportService:
                     if changed:
                         updated += 1
 
+        # ------------------------------------------------------------------
+        # Safety-Net NACH der Override-Injektion: Sessions, die Ziel von
+        # Overrides sind, aber KEINE exportierbare Zeile haben (Injektion
+        # fehlgeschlagen — z. B. Charge nicht im TM-Datenbestand). Ohne
+        # Netz würde approve() hier 0,00 EUR exportieren. Ehrlich
+        # blockieren statt leise falsch exportieren.
+        # ------------------------------------------------------------------
+        if ov_target:
+            # Pending Inserts (superseded-Markierungen) sichtbar machen
+            self.db.flush()
+            # Session-IDs, die mindestens EINE exportierbare Zeile haben
+            injected = {
+                int(row.evcc_session_id)
+                for row in self.db.query(SessionCostAllocation)
+                .filter(SessionCostAllocation.evcc_session_id.in_(list(ov_target.values())))
+                .filter(SessionCostAllocation.exclusion_reason.is_(None))
+                .all()
+            }
+            for target_id in ov_target.values():
+                if int(target_id) in injected:
+                    continue
+                rows = (
+                    self.db.query(SessionCostAllocation)
+                    .filter_by(evcc_session_id=int(target_id))
+                    .all()
+                )
+                if rows and not any(_row_blocks(r.exclusion_reason) for r in rows):
+                    for r in rows:
+                        r.exclusion_reason = "override_injection_failed"
+                        r.calculation_version = CALC_VERSION
+                        updated += 1
+
         self.db.commit()
         return {"created": created, "updated": updated, "sessions_seen": len(matches)}
 
@@ -634,6 +638,11 @@ class TMCostExportService:
             return "draft"
         if any(_row_blocks(a.exclusion_reason) for a in allocs):
             return "blocked"
+        # Nur-superseded (alle Auto-Fragmente durch manuelle Overrides
+        # ersetzt): KEIN Blockierungszustand. Wenn die Override-Fragmente
+        # fehlen (Injektion fehlgeschlagen), greift der safety-net in
+        # approve() — die Liste zeigt den Zustand ehrlich als draft ohne
+        # geplanten Exportbetrag statt als falschen "Blockiert".
         return "draft"
 
     def detail(self, evcc_session_id: int) -> dict:
@@ -753,6 +762,16 @@ class TMCostExportService:
         blocked = [a for a in allocs if _row_blocks(a.exclusion_reason)]
         if blocked:
             raise TMCostExportError("Session ist blockiert: %s" % blocked[0].exclusion_reason)
+        # Sicherheitsnetz: mindestens EINE exportierbare Zeile (exclusion_reason
+        # leer). Rein superseded-Zustände duerfen niemals freigegeben werden —
+        # sonst wuerde 0,00 EUR nach TeslaMate geschrieben.
+        exportable = [a for a in allocs if _is_exportable_row(a.exclusion_reason)]
+        if not exportable:
+            raise TMCostExportError(
+                "Keine exportierbaren Allokationen (nur ersetzte/superseded "
+                "Zeilen) — bitte 'Berechnen' ausfuehren und Blockierungsgruende "
+                "pruefen"
+            )
 
         now = datetime.now(timezone.utc)
         approved_n = 0

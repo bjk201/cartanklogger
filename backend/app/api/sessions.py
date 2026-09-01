@@ -366,18 +366,19 @@ async def create_session_match(
     if not session:
         return {"ok": False, "error": "Session not found"}
 
-    # Check if override already exists
-    existing = db.query(MatchingOverride).filter(
-        MatchingOverride.evcc_session_id == session_id,
-        MatchingOverride.teslamate_charge_id == tm_charge_id
-    ).first()
+    # Bereits bestätigt? (Neuester Override je TM-Charge via Shared Resolver —
+    # toleriert Bestands-Zeilen in beiden ID-Räumen)
+    from app.services.override_target import get_effective_manual_overrides
+    for ov in get_effective_manual_overrides(db):
+        if ov["tm_charge_id"] == int(tm_charge_id) and ov["ctl_session_id"] == int(session.id):
+            return {"ok": True, "message": "Match already exists", "override_id": ov["override_id"]}
 
-    if existing:
-        return {"ok": True, "message": "Match already exists", "override_id": existing.id}
-
-    # Create new override
+    # Override-Ziel NORMIERT speichern: immer der CTL-Primary-Key der
+    # Home-Session. Damit interpretieren alle Consumer (Legacy-Matcher,
+    # Live-Matcher, TM-Kostenexport) dieselbe ID — siehe
+    # app/services/override_target.py.
     override = MatchingOverride(
-        evcc_session_id=session_id,
+        evcc_session_id=int(session.id),
         teslamate_charge_id=tm_charge_id,
         override_type=OverrideType.manual_assign,
         reason="Manual match via UI",

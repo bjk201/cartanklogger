@@ -76,6 +76,7 @@ const REASON_LABELS: Record<string, string> = {
   tm_used_zero: 'TM-used-Summe ist 0',
   missing_charging_process_id: 'TM charging_process-ID fehlt',
   tm_charge_already_allocated_elsewhere: 'TM-Charge bereits anderweitig zugeordnet',
+  override_injection_failed: 'Bestätigung konnte nicht angewendet werden — bitte erneut berechnen',
 };
 
 function fmtEur(v: number | null | undefined, digits = 2): string {
@@ -322,7 +323,7 @@ export function TmCostExportPage() {
       </section>
 
       {detailId !== null && (
-        <DetailModal id={detailId} onClose={() => { setDetailId(null); loadList(); }} onAction={(kind, item) => { setDetailId(null); openDialog(kind, item); }} list={list} />
+        <DetailModal id={detailId} onClose={() => { setDetailId(null); loadList(); }} onAction={(kind, item) => { setDetailId(null); openDialog(kind, item); }} list={list} refreshList={loadList} />
       )}
 
       {dialog && (
@@ -343,11 +344,12 @@ export function TmCostExportPage() {
 /* ------------------------------------------------------------------ */
 /* Detailansicht                                                      */
 /* ------------------------------------------------------------------ */
-function DetailModal({ id, onClose, onAction, list }: {
+function DetailModal({ id, onClose, onAction, list, refreshList }: {
   id: number;
   onClose: () => void;
   onAction: (kind: DialogKind, item: ListItem) => void;
   list: ListResponse | null;
+  refreshList?: () => void;
 }) {
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -375,13 +377,22 @@ function DetailModal({ id, onClose, onAction, list }: {
     setAssigningId(tmChargeId);
     setAssignMsg(null);
     try {
-      await req(`/api/sessions/${id}/match`, {
+      const res = await req<{ ok?: boolean; error?: string; message?: string }>(`/api/sessions/${id}/match`, {
         method: 'POST',
         body: JSON.stringify({ tm_charge_id: tmChargeId }),
       });
+      if (res && res.ok === false) {
+        // Backend hat die Bestätigung NICHT angelegt (z. B. Charge nicht gefunden)
+        setAssignMsg({ ok: false, text: res.error || res.message || 'Bestätigung nicht angelegt' });
+        return;
+      }
       await req('/api/tm-cost-export/refresh', { method: 'POST' });
+      // Liste parallel mitladen: KPIs + Status der Session ändern sich
+      // durch die Bestätigung (z. B. blocked -> draft) — sonst steht im
+      // Hintergrund noch der alte Zustand.
+      refreshList?.();
       await reloadDetail();
-      setAssignMsg({ ok: true, text: `TM-Charge ${tmChargeId} als manual_override bestätigt — Session ist jetzt exportfähig (nach Freigabe).` });
+      setAssignMsg({ ok: true, text: `TM-Charge ${tmChargeId} als manual_override bestätigt — Berechnung aktualisiert. Freigabe ist jetzt möglich, wenn keine Blockierungsgründe mehr angezeigt werden.` });
     } catch (e) {
       setAssignMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {
