@@ -758,3 +758,29 @@ html[data-theme='dark'] .btn-danger {
 .session-delete-confirm input[type='checkbox'] {
   accent-color: #dc2626;
 }
+
+/* ===== TM-Export-Spalte (Badge = Deep-Link in den TM-Kostenexport) ===== */
+.sessions-table__export {
+  white-space: nowrap;
+}
+.sessions-table__export-link {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.sessions-table__export-link:hover {
+  filter: brightness(0.94);
+}
+.sessions-table__export-none {
+  color: var(--ctl-text-muted, #64748b);
+}
+/* Mobile: Spalte entfällt (Karten-Layout) — Badge-Zellen ausblenden */
+@media (max-width: 1024px) {
+  .sessions-table__export {
+    display: none;
+  }
+}

@@ -4,7 +4,8 @@ import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge } from '../lib/apiClient';
+import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge, type SessionExportStatesResponse } from '../lib/apiClient';
+import { useNavigate } from 'react-router-dom';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
@@ -176,6 +177,9 @@ export function SessionsPage() {
   const [activeTab, setActiveTab] = useState<SessionsTab>('all');
   // TM-Summen pro EVCC-Session (für Anzeige in der zugeklappten Zeile)
   const [tmSums, setTmSums] = useState<Map<number, { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number }>>(new Map());
+  // TM-Kostenexport-Status je Home-Session (Badge in der TM-Export-Spalte,
+  // gleiche Datenquelle wie die Export-Seite -> garantiert identische Zustände)
+  const [exportStates, setExportStates] = useState<Map<number, NonNullable<SessionExportStatesResponse['data']>[number]>>(new Map());
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1, page_size: PAGE_SIZE, total: 0, total_pages: 0, has_next: false, has_prev: false,
   });
@@ -298,6 +302,18 @@ export function SessionsPage() {
               setTmSums(map);
             } catch {
               setTmSums(new Map());
+            }
+            // TM-Kostenexport-Status (ein Batch-Call, DB-only — identische
+            // Quelle wie die Export-Seite)
+            try {
+              const esResponse = await api.getSessionExportStates(days, from_date, to_date);
+              const esMap = new Map<number, NonNullable<SessionExportStatesResponse['data']>[number]>();
+              for (const item of esResponse.data || []) {
+                if (item.export_state) esMap.set(item.evcc_session_id, item);
+              }
+              setExportStates(esMap);
+            } catch {
+              setExportStates(new Map());
             }
           }
         } catch (err) {
@@ -491,12 +507,13 @@ export function SessionsPage() {
                       <th scope="col" className="text-end">TM Added</th>
                       <th scope="col" className="text-end">TM Used</th>
                       <th scope="col">Ort</th>
+                      <th scope="col">TM-Export</th>
                       <th scope="col" style={{ width: '50px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {sessions.map(session => (
-                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} tmSum={tmSums.get(session.id)} />
+                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} tmSum={tmSums.get(session.id)} exportState={exportStates.get(session.id)} />
                     ))}
                   </tbody>
                 </table>
@@ -566,7 +583,22 @@ export function SessionsPage() {
 }
 
 /* ===== Session Row with Expand ===== */
-function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () => void; tmSum?: { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number } }) {
+const EXPORT_BADGE_LABELS: Record<string, string> = {
+  draft: 'Bereit zur Prüfung',
+  blocked: 'Blockiert',
+  approved: 'Freigegeben',
+  exported: 'Exportiert',
+  failed: 'Fehlgeschlagen',
+  rolled_back: 'Zurückgerollt',
+};
+
+function SessionRow({ session, onEdit, tmSum, exportState }: {
+  session: Session;
+  onEdit: () => void;
+  tmSum?: { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number };
+  exportState?: NonNullable<SessionExportStatesResponse['data']>[number];
+}) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [matchData, setMatchData] = useState<any[] | null>(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
@@ -620,6 +652,27 @@ function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () =
             : (session.charge_energy_used != null ? session.charge_energy_used.toFixed(1) : '—')}
         </td>
         <td className="sessions-table__location">{session.location || '—'}</td>
+        <td className="sessions-table__export">
+          {isHome && exportState ? (() => {
+            const es = exportState;
+            const stateKey = es.export_state ?? '';
+            return (
+              <button
+                type="button"
+                className={`tmexp-badge tmexp-badge--${stateKey} sessions-table__export-link`}
+                title={`TM-Kostenexport: ${EXPORT_BADGE_LABELS[stateKey] ?? stateKey} — Detail öffnen`}
+                onClick={() => navigate(`/tm-cost-export?session=${session.id}`)}
+              >
+                {EXPORT_BADGE_LABELS[stateKey] ?? stateKey}
+                {es.planned_export_eur != null && stateKey !== 'blocked'
+                  ? ` · ${es.planned_export_eur.toFixed(2)} €`
+                  : ''}
+              </button>
+            );
+          })() : (
+            <span className="sessions-table__export-none">—</span>
+          )}
+        </td>
         <td>
           <button className="btn-icon btn-icon--sm" onClick={onEdit} title="Bearbeiten">
             <Edit2 size={14} />
@@ -628,7 +681,7 @@ function SessionRow({ session, onEdit, tmSum }: { session: Session; onEdit: () =
       </tr>
       {expanded && (
         <tr className="sessions-table__match-row">
-          <td colSpan={11}>
+          <td colSpan={12}>
             <div className="match-detail">
               <h4 className="match-detail__title">
                 <ExternalLink size={14} /> TM-Charges zu dieser EVCC-Session

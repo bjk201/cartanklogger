@@ -293,6 +293,32 @@ export function getSessionTmSums(
   return request(`/sessions/tm-sums${qs ? `?${qs}` : ''}`);
 }
 
+// --- TM-Kostenexport: Batch-Status je Home-Session (ein Call, DB-only) ---
+export interface SessionExportStatesResponse {
+  ok: boolean;
+  data?: {
+    evcc_session_id: number;
+    export_state: 'draft' | 'blocked' | 'approved' | 'exported' | 'failed' | 'rolled_back' | null;
+    export_state_label: string | null;
+    planned_export_eur: number | null;
+    has_blocked: boolean;
+  }[];
+  counts?: Record<string, number>;
+}
+
+export function getSessionExportStates(
+  days?: number,
+  from_date?: string,
+  to_date?: string
+): Promise<SessionExportStatesResponse> {
+  const p = new URLSearchParams();
+  if (days !== undefined) p.set('days', String(days));
+  if (from_date) p.set('from_date', from_date);
+  if (to_date) p.set('to_date', to_date);
+  const qs = p.toString();
+  return request(`/sessions/export-states${qs ? `?${qs}` : ''}`);
+}
+
 export function syncDataSources(): Promise<any> {
   return request('/settings/data-sources/sync', { method: 'POST' });
 }
@@ -508,6 +534,7 @@ export const api = {
   getMatchingRawData,
   getUnmatchedCharges,
   getSessionTmSums,
+  getSessionExportStates,
   syncDataSources,
   getVehicleRecords,
   createVehicleRecord,

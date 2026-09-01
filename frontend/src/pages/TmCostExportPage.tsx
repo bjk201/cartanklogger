@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRightLeft, BadgeCheck, Ban, CheckCircle2, ChevronDown,
   Clock, Download, Eye, RefreshCw, RotateCcw, Send, ShieldAlert, X,
@@ -118,7 +119,13 @@ export function TmCostExportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
-  const [detailId, setDetailId] = useState<number | null>(null);
+  // Deep-Link-Unterstützung: /tm-cost-export?session=93 öffnet das Detail
+  // der Session 93 direkt (Einstieg aus der Sessions-Ansicht).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionParam = searchParams.get('session');
+  const [detailId, setDetailId] = useState<number | null>(
+    sessionParam && !Number.isNaN(Number(sessionParam)) ? Number(sessionParam) : null,
+  );
   const [dialog, setDialog] = useState<{ kind: DialogKind; item: ListItem } | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -139,6 +146,17 @@ export function TmCostExportPage() {
   }, [statusFilter]);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  // Deep-Link konsumieren: ?session= aus der URL entfernen, sobald das
+  // Detail geschlossen wird (sonst öffnet ein Reload das Modal wieder).
+  const closeDetail = useCallback(() => {
+    setDetailId(null);
+    if (sessionParam) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('session');
+      setSearchParams(next, { replace: true });
+    }
+  }, [sessionParam, searchParams, setSearchParams]);
 
   // Allokationen NEU BERECHNEN (POST /refresh): holt EVCC+TM live, matched,
   // schreibt session_cost_allocations. Schreibt NIE in TeslaMate.
@@ -323,7 +341,7 @@ export function TmCostExportPage() {
       </section>
 
       {detailId !== null && (
-        <DetailModal id={detailId} onClose={() => { setDetailId(null); loadList(); }} onAction={(kind, item) => { setDetailId(null); openDialog(kind, item); }} list={list} refreshList={loadList} />
+        <DetailModal id={detailId} onClose={() => { closeDetail(); loadList(); }} onAction={(kind, item) => { closeDetail(); openDialog(kind, item); }} list={list} refreshList={loadList} />
       )}
 
       {dialog && (
