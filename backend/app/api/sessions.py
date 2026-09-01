@@ -190,6 +190,88 @@ def get_sessions(
     )
 
 
+@router.get("/export-states")
+def get_session_export_states(
+    days: Optional[int] = Query(None, description="Zeitraum in Tagen (z.B. 30)"),
+    from_date: Optional[str] = Query(None, description="Startdatum YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="Enddatum YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """TM-Export-Status je Home-Session in EINEM Batch (kein Live-Matching).
+
+    Liest ausschließlich die gespeicherten Allokationen/Audit-Einträge des
+    TM-Kostenexports (gleiche Quelle wie die Export-Seite — dadurch
+    garantiert identische Zustände). Für Sessions ohne Export-Bezug
+    (kein Match, nicht berechnet) fehlt der Eintrag bzw. ist export_state=null.
+
+    Antwort: {ok, data: [{evcc_session_id, export_state, export_state_label,
+    planned_export_eur, has_blocked}], counts: {...}}
+    """
+    from app.services.tm_cost_export_service import TMCostExportService
+
+    # list_sessions liefert die export-Seite-Identische Sicht (state,
+    # block_reasons, planned_export_eur) — hier ohne Tage-Filter-Drift:
+    # Zeitraum-Filter entspricht dem der Sessions-Liste.
+    svc = TMCostExportService(db)
+
+    from datetime import datetime, timedelta, timezone
+    from app.models.session import SessionModel
+
+    if from_date and to_date:
+        try:
+            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            td = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return {"ok": False, "data": [], "counts": {}}
+    elif days:
+        td = datetime.now(timezone.utc)
+        fd = td - timedelta(days=days)
+    else:
+        td = datetime.now(timezone.utc)
+        fd = td - timedelta(days=36500)
+
+    home_sessions = db.query(SessionModel).filter(
+        SessionModel.source_type == "home",
+        SessionModel.date >= fd,
+        SessionModel.date <= td + timedelta(days=1)
+    ).all()
+
+    # Export-Zustände (aus derselben Quelle wie die Export-Seite)
+    export_items = svc.list_sessions()  # unlimitiert, dann per ID indizieren
+    by_id = {i["evcc_session_id"]: i for i in export_items.get("data", [])}
+
+    def _label(state: Optional[str]) -> Optional[str]:
+        return {
+            "draft": "Bereit zur Prüfung",
+            "blocked": "Blockiert",
+            "approved": "Freigegeben",
+            "exported": "Exportiert",
+            "failed": "Fehlgeschlagen",
+            "rolled_back": "Zurückgerollt",
+        }.get(state or "", state)
+
+    out = []
+    counts: dict = {}
+    for s in home_sessions:
+        info = by_id.get(int(s.id))
+        state = info["state"] if info else None
+        # Ohne Allokationen KEIN Export-Bezug -> null (kein Badge in der UI)
+        if state is None or state == "draft" and not info.get("fragment_count"):
+            state = None
+        lbl = _label(state)
+        if lbl:
+            counts[lbl] = counts.get(lbl, 0) + 1
+        out.append({
+            "evcc_session_id": int(s.id),
+            "export_state": state,
+            "export_state_label": lbl if state else None,
+            "planned_export_eur": round(info["planned_export_eur"], 2) if info else None,
+            "has_blocked": bool(info and info.get("block_reasons")),
+        })
+
+    return {"ok": True, "data": out, "counts": counts}
+
+
 @router.get("/tm-sums")
 async def get_session_tm_sums(
     days: Optional[int] = Query(None, description="Zeitraum in Tagen (z.B. 30)"),
