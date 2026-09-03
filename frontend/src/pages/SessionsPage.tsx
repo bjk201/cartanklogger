@@ -5,12 +5,12 @@ import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
 import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge, type SessionExportStatesResponse } from '../lib/apiClient';
-import { useNavigate } from 'react-router-dom';
+import { TmCostExportPanel } from '../components/TmCostExportPanel';
 import './SessionsPage.css';
 
 const PAGE_SIZE = 25;
 
-type SessionsTab = 'all' | 'home' | 'external' | 'unmatched';
+type SessionsTab = 'all' | 'home' | 'external' | 'unmatched' | 'tmexport';
 
 type TabConfig = { key: SessionsTab; label: string; icon?: string };
 
@@ -19,6 +19,7 @@ const TABS: TabConfig[] = [
   { key: 'home', label: 'Zuhause (EVCC)' },
   { key: 'external', label: 'Extern (TM)' },
   { key: 'unmatched', label: 'Ungematchte TM' },
+  { key: 'tmexport', label: 'TM-Export' },
 ];
 
 /* ===== Edit Modal ===== */
@@ -199,6 +200,18 @@ export function SessionsPage() {
   const [rawData, setRawData] = useState<MatchingRawDataResponse | null>(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
 
+  // TM-Export-Tab: Deep-Link ?session=ID öffnet das Detail der Session direkt
+  // im eingebetteten Export-Panel (vorher: Navigation zu /tm-cost-export).
+  // nonce = Remount-Zähler: jeder Badge-Klick mountet das Panel neu, damit
+  // auch DENSSELBEN Session-Detail erneut geöffnet werden kann.
+  const initialTmSession = (() => {
+    if (typeof window === 'undefined') return null;
+    const p = new URLSearchParams(window.location.search).get('session');
+    return p && !Number.isNaN(Number(p)) ? Number(p) : null;
+  })();
+  const [tmExportSeed, setTmExportSeed] = useState<number | null>(initialTmSession);
+  const [tmExportNonce, setTmExportNonce] = useState(initialTmSession !== null ? 1 : 0);
+
   // Match dialog (unmatched TM → EVCC session)
   const [matchTarget, setMatchTarget] = useState<any | null>(null);
   const [homeSessions, setHomeSessions] = useState<Session[]>([]);
@@ -326,6 +339,28 @@ export function SessionsPage() {
 
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
 
+  // Deep-Link: ?session=ID -> TM-Export-Tab aktivieren. Danach den Parameter
+  // aus der URL entfernen (sonst öffnet ein Reload das Detail wieder) —
+  // ohne Re-Render via history.replaceState.
+  useEffect(() => {
+    if (tmExportSeed !== null) {
+      setActiveTab('tmexport');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('session');
+      window.history.replaceState({}, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handler für Badge-Klicks in der Session-Zeile: wechselt in den
+  // TM-Export-Tab und öffnet das Session-Detail (Panel remountet via Nonce).
+  const openTmExportDetail = useCallback((sessionId: number) => {
+    setTmExportSeed(sessionId);
+    setTmExportNonce(n => n + 1);
+    setActiveTab('tmexport');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   // Fetch raw data for unmatched tab
   useEffect(() => {
     if (activeTab !== 'unmatched') return;
@@ -409,7 +444,7 @@ export function SessionsPage() {
         </div>
 
         {/* Filter Bar */}
-        {activeTab !== 'unmatched' && (
+        {activeTab !== 'unmatched' && activeTab !== 'tmexport' && (
           <div className="sessions-page__filter-bar">
             <div className="sessions-page__search">
               <label htmlFor="sessions-search" className="sr-only">Suchen</label>
@@ -439,7 +474,10 @@ export function SessionsPage() {
         )}
 
         {/* Content */}
-        {activeTab === 'unmatched' ? (
+        {activeTab === 'tmexport' ? (
+          /* === TM-EXPORT TAB (eingebettetes Export-Panel) === */
+          <TmCostExportPanel key={`tmexp-${tmExportNonce}`} initialSessionId={tmExportSeed} />
+        ) : activeTab === 'unmatched' ? (
           /* === UNMATCHED TM TAB === */
           loadingRaw ? (
             <LoadingState message="Ungematchte TM-Daten werden geladen…" />
@@ -513,7 +551,7 @@ export function SessionsPage() {
                   </thead>
                   <tbody>
                     {sessions.map(session => (
-                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} tmSum={tmSums.get(session.id)} exportState={exportStates.get(session.id)} />
+                      <SessionRow key={session.id} session={session} onEdit={() => setEditSession(session)} tmSum={tmSums.get(session.id)} exportState={exportStates.get(session.id)} onOpenExport={openTmExportDetail} />
                     ))}
                   </tbody>
                 </table>
@@ -592,13 +630,13 @@ const EXPORT_BADGE_LABELS: Record<string, string> = {
   rolled_back: 'Zurückgerollt',
 };
 
-function SessionRow({ session, onEdit, tmSum, exportState }: {
+function SessionRow({ session, onEdit, tmSum, exportState, onOpenExport }: {
   session: Session;
   onEdit: () => void;
   tmSum?: { tm_sum_kwh: number | null; tm_used_kwh: number | null; tm_count: number };
   exportState?: NonNullable<SessionExportStatesResponse['data']>[number];
+  onOpenExport: (sessionId: number) => void;
 }) {
-  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [matchData, setMatchData] = useState<any[] | null>(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
@@ -661,7 +699,7 @@ function SessionRow({ session, onEdit, tmSum, exportState }: {
                 type="button"
                 className={`tmexp-badge tmexp-badge--${stateKey} sessions-table__export-link`}
                 title={`TM-Kostenexport: ${EXPORT_BADGE_LABELS[stateKey] ?? stateKey} — Detail öffnen`}
-                onClick={() => navigate(`/tm-cost-export?session=${session.id}`)}
+                onClick={() => onOpenExport(session.id)}
               >
                 {EXPORT_BADGE_LABELS[stateKey] ?? stateKey}
                 {es.planned_export_eur != null && stateKey !== 'blocked'

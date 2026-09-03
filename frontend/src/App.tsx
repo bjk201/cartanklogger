@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from './app/ThemeContext';
 import { TimeRangeProvider } from './app/TimeRangeContext';
 import { Sidebar } from './components/Sidebar';
@@ -8,7 +8,6 @@ import { OverviewPage } from './features/overview/OverviewPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
-import { TmCostExportPage } from './pages/TmCostExportPage';
 import VehiclePage from './pages/VehiclePage';
 import './styles/global.css';
 import './styles/layout.css';
@@ -31,7 +30,8 @@ function App() {
                   <Route path="/statistics" element={<StatisticsPage />} />
 
                   <Route path="/settings" element={<DataSourcesPage />} />
-                  <Route path="/tm-cost-export" element={<TmCostExportPage />} />
+                  {/* Alte TM-Export-URL -> Sessions-Tab (Funktion ist jetzt eingebettet) */}
+                  <Route path="/tm-cost-export" element={<Navigate to="/sessions" replace />} />
                   <Route path="/vehicle" element={<VehiclePage />} />
                 </Routes>
               </main>

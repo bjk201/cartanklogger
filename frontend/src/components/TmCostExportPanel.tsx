@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowRightLeft, BadgeCheck, Ban, CheckCircle2, ChevronDown,
+  AlertTriangle, BadgeCheck, Ban, CheckCircle2, ChevronDown,
   Clock, Download, Eye, RefreshCw, RotateCcw, Send, ShieldAlert, X,
 } from 'lucide-react';
-import './TmCostExportPage.css';
+import './TmCostExportPanel.css';
 
 /* ------------------------------------------------------------------ */
 /* Typen                                                              */
@@ -112,20 +111,16 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Seite                                                              */
+/* Panel — eingebettet in die Sessions-Seite (Tab "TM-Export")        */
 /* ------------------------------------------------------------------ */
-export function TmCostExportPage() {
+export function TmCostExportPanel({ initialSessionId }: { initialSessionId?: number | null }) {
   const [list, setList] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
-  // Deep-Link-Unterstützung: /tm-cost-export?session=93 öffnet das Detail
-  // der Session 93 direkt (Einstieg aus der Sessions-Ansicht).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const sessionParam = searchParams.get('session');
-  const [detailId, setDetailId] = useState<number | null>(
-    sessionParam && !Number.isNaN(Number(sessionParam)) ? Number(sessionParam) : null,
-  );
+  // Deep-Link-Unterstützung: Sessions-Seite übergibt ?session=ID ->
+  // öffnet das Detail dieser Session direkt im Panel.
+  const [detailId, setDetailId] = useState<number | null>(initialSessionId ?? null);
   const [dialog, setDialog] = useState<{ kind: DialogKind; item: ListItem } | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -147,16 +142,9 @@ export function TmCostExportPage() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
-  // Deep-Link konsumieren: ?session= aus der URL entfernen, sobald das
-  // Detail geschlossen wird (sonst öffnet ein Reload das Modal wieder).
   const closeDetail = useCallback(() => {
     setDetailId(null);
-    if (sessionParam) {
-      const next = new URLSearchParams(searchParams);
-      next.delete('session');
-      setSearchParams(next, { replace: true });
-    }
-  }, [sessionParam, searchParams, setSearchParams]);
+  }, []);
 
   // Allokationen NEU BERECHNEN (POST /refresh): holt EVCC+TM live, matched,
   // schreibt session_cost_allocations. Schreibt NIE in TeslaMate.
@@ -219,17 +207,12 @@ export function TmCostExportPage() {
 
   return (
     <div className="tmexp-page">
-      {/* Kopfbereich */}
+      {/* Panel-Kopf (kein Seitentitel — die Sessions-Seite liefert ihn) */}
       <header className="tmexp-header">
-        <div>
-          <h1 className="tmexp-title">
-            <ArrowRightLeft size={22} aria-hidden /> TM-Kostenexport
-          </h1>
-          <p className="tmexp-hint">
-            <ShieldAlert size={15} aria-hidden />
-            EVCC-Kosten werden nur nach Prüfung und expliziter Freigabe in TeslaMate geschrieben.
-          </p>
-        </div>
+        <p className="tmexp-hint">
+          <ShieldAlert size={15} aria-hidden />
+          EVCC-Kosten werden nur nach Prüfung und expliziter Freigabe in TeslaMate geschrieben.
+        </p>
         <div className="tmexp-header__actions">
           <button
             className="tmexp-btn"
