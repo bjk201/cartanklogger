@@ -36,6 +36,13 @@ class VehicleRecordModel(Base):
     tire_brand = Column(String(50), nullable=True)
     tire_season = Column(String(20), nullable=True)      # Sommer | Winter | Ganzjahres
 
+    # Kosten-Kategorie (nur sinnvoll für record_type='service')
+    # Freitext-String statt Enum: abwärtskompatibel (NULL = unsortiert),
+    # keine Schema-Migration nötig. Bekannte Werte:
+    # 'anschaffung' | 'anmeldung' | 'inspektion_wartung' | 'reparatur'
+    # 'zubehoer' | 'reinigung_pflege' | 'versicherung' | 'steuer' | 'sonstiges'
+    category = Column(String(40), nullable=True, index=True, default=None)
+
     # Tire chain / replacement tracking
     start_odometer_km = Column(Float, nullable=True, default=None)  # km-Stand bei neuer Reifengarnitur
     replaced_by = Column(Integer, ForeignKey('vehicle_records.id'), nullable=True, default=None)  # FK to replacement tire record

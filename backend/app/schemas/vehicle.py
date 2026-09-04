@@ -1,6 +1,20 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 from datetime import datetime
+
+
+# Bekannte Kosten-Kategorien (Freitext-String, kein Enum — abwärtskompatibel)
+VEHICLE_CATEGORIES = (
+    "anschaffung",
+    "anmeldung",
+    "inspektion_wartung",
+    "reparatur",
+    "zubehoer",
+    "reinigung_pflege",
+    "versicherung",
+    "steuer",
+    "sonstiges",
+)
 
 
 class VehicleRecordCreate(BaseModel):
@@ -12,6 +26,7 @@ class VehicleRecordCreate(BaseModel):
     cost_eur: Optional[float] = None
     note: Optional[str] = None
     shop: Optional[str] = None
+    category: Optional[str] = Field(default=None, max_length=40)  # s. VEHICLE_CATEGORIES
     # Tire-specific
     tire_position: Optional[str] = None
     tire_brand: Optional[str] = None
@@ -19,13 +34,14 @@ class VehicleRecordCreate(BaseModel):
 
 
 class VehicleRecordUpdate(BaseModel):
-    """Update a service or tire record (all fields optional)."""
+    """Update a service/tire record (all fields optional)."""
     date: Optional[datetime] = None
     title: Optional[str] = None
     odometer_km: Optional[float] = None
     cost_eur: Optional[float] = None
     note: Optional[str] = None
     shop: Optional[str] = None
+    category: Optional[str] = Field(default=None, max_length=40)  # s. VEHICLE_CATEGORIES
     tire_position: Optional[str] = None
     tire_brand: Optional[str] = None
     tire_season: Optional[str] = None
@@ -41,6 +57,7 @@ class VehicleRecordRead(BaseModel):
     cost_eur: Optional[float] = None
     note: Optional[str] = None
     shop: Optional[str] = None
+    category: Optional[str] = None
     tire_position: Optional[str] = None
     tire_brand: Optional[str] = None
     tire_season: Optional[str] = None
@@ -124,4 +141,37 @@ class VehicleInfoResponse(BaseModel):
     """Response for GET /vehicle/info."""
     ok: bool = True
     data: Optional[VehicleInfo] = None
+    errors: List = []
+
+
+class CategoryCost(BaseModel):
+    """Eine Kosten-Kategorie in der Auswertung."""
+    key: str                        # 'anschaffung' | ... | '_tires' | '_unsorted'
+    label: str                      # 'Anschaffung' | ... | 'Reifen' | 'Ohne Kategorie'
+    total_eur: float = 0.0
+    count: int = 0                  # Anzahl Einträge in dieser Kategorie
+
+
+class VehicleCostSummaryResponse(BaseModel):
+    """Antwort auf GET /api/vehicle/cost-summary — aggregierte Auswertung."""
+    ok: bool = True
+    total_eur: float = 0.0          # Summe ALLER Einträge (Service + Reifen)
+    tire_total_eur: float = 0.0     # nur Reifen
+    service_total_eur: float = 0.0  # nur Service-Einträge
+    categories: List[CategoryCost] = []
+
+    # km-Achse für €/km-Berechnung
+    odometer_start_km: Optional[float] = None     # frühester Record mit odometer_km
+    odometer_start_date: Optional[datetime] = None # dessen Datum
+    odometer_current_km: Optional[float] = None   # Live (TeslaMate, sonst max-Session)
+    km_driven: Optional[float] = None             # current - start
+
+    # Pro-km-Kosten
+    eur_per_km_with_purchase: float = 0.0         # alle Kosten / gefahrene km
+    eur_per_km_without_purchase: float = 0.0      # ohne Anschaffung
+
+    # Jahres-Hochrechnung
+    estimated_yearly_eur: float = 0.0
+    estimated_yearly_breakdown: Dict[str, float] = {}
+
     errors: List = []
