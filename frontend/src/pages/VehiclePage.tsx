@@ -1,6 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/apiClient';
-import type { VehicleRecordRead, VehicleRecordCreate, VehicleRecordUpdate } from '../types/api';
+import type {
+  VehicleRecordRead,
+  VehicleRecordCreate,
+  VehicleRecordUpdate,
+  VehicleCostSummaryResponse,
+} from '../types/api';
+
+// Kosten-Kategorien (gleiche Keys wie Backend, Reihenfolge = Anzeige-Reihenfolge)
+const CATEGORIES: { key: string; label: string }[] = [
+  { key: 'anschaffung', label: 'Anschaffung (einmalig)' },
+  { key: 'anmeldung', label: 'Anmeldung (einmalig)' },
+  { key: 'inspektion_wartung', label: 'Inspektion / Wartung' },
+  { key: 'reparatur', label: 'Reparatur' },
+  { key: 'zubehoer', label: 'Zubehör' },
+  { key: 'reinigung_pflege', label: 'Reinigung / Pflege' },
+  { key: 'versicherung', label: 'Versicherung' },
+  { key: 'steuer', label: 'Steuer' },
+  { key: 'sonstiges', label: 'Sonstiges' },
+];
+const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
+  CATEGORIES.map(c => [c.key, c.label])
+);
+
+function formatEur(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+function formatKm(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return n.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' km';
+}
 import './VehiclePage.css';
 
 function todayStr(): string {
@@ -87,6 +117,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
   const [tireBrand, setTireBrand] = useState(record?.tire_brand || '');
   const [tireSeason, setTireSeason] = useState(record?.tire_season || 'Sommer');
   const [tireTitle, setTireTitle] = useState('');
+  const [category, setCategory] = useState<string>(record?.category || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -118,6 +149,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
           cost_eur: cost ? Number(cost) : undefined,
           shop: shop.trim() || undefined,
           note: note.trim() || undefined,
+          category: category || undefined,
         };
         const res = await api.updateVehicleRecord(record.id, payload);
         if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
@@ -146,6 +178,7 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
           cost_eur: cost ? Number(cost) : undefined,
           shop: shop.trim() || undefined,
           note: note.trim() || undefined,
+          category: category || undefined,
         };
         const res = await api.createVehicleRecord(payload);
         if (!res.ok) { setError(res.errors?.[0]?.message || 'Fehler'); setSaving(false); return; }
@@ -220,10 +253,22 @@ function EditModal({ record, onClose, onSaved, mode }: EditModalProps) {
             </div>
 
             {!isTireSet && (
-              <div className="form-field">
-                <label className="form-label">Werkstatt</label>
-                <input type="text" placeholder="Name der Werkstatt" value={shop} onChange={e => setShop(e.target.value)} />
-              </div>
+              <>
+                <div className="form-field">
+                  <label className="form-label">Kategorie</label>
+                  <select value={category} onChange={e => setCategory(e.target.value)}>
+                    <option value="">— keine —</option>
+                    {CATEGORIES.map(c => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                  </select>
+                  <span className="form-hint">Für die Kosten-Auswertung (Gesamt, €/km, Jahres-Hochrechnung).</span>
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Werkstatt</label>
+                  <input type="text" placeholder="Name der Werkstatt" value={shop} onChange={e => setShop(e.target.value)} />
+                </div>
+              </>
             )}
 
             <div className="form-field">
@@ -251,6 +296,7 @@ export default function VehiclePage() {
   const [records, setRecords] = useState<VehicleRecordRead[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [costSummary, setCostSummary] = useState<VehicleCostSummaryResponse | null>(null);
   const [modalMode, setModalMode] = useState<'new-service' | 'new-tireset' | null>(null);
   const [editRecord, setEditRecord] = useState<VehicleRecordRead | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<VehicleRecordRead | null>(null);
@@ -275,7 +321,17 @@ export default function VehiclePage() {
     }
   }
 
-  useEffect(() => { fetchRecords(); }, []);
+  async function fetchCostSummary() {
+    try {
+      const sum = await api.getVehicleCostSummary();
+      setCostSummary(sum);
+    } catch (e) {
+      // Nicht-fatal — Tabelle funktioniert auch ohne
+      console.warn('cost-summary failed:', e);
+    }
+  }
+
+  useEffect(() => { fetchRecords(); fetchCostSummary(); }, []);
 
   // Aktuellen km-Stand aus /vehicle/info holen (TM-Drives, sonst max. Record)
   useEffect(() => {
@@ -293,6 +349,7 @@ export default function VehiclePage() {
     try {
       await api.deleteVehicleRecord(record.id);
       fetchRecords();
+      fetchCostSummary();
     } catch (e) {
       alert('Fehler beim Löschen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
     }
@@ -303,6 +360,7 @@ export default function VehiclePage() {
     try {
       await api.syncRecordOdometer(record.id);
       fetchRecords();
+      fetchCostSummary();
     } catch (e) {
       alert('KM-Ableitung fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
     }
@@ -315,6 +373,7 @@ export default function VehiclePage() {
     try {
       await api.archiveTireSet(rec.id);
       fetchRecords();
+      fetchCostSummary();
     } catch (e) {
       alert('Archivieren fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
     }
@@ -324,6 +383,7 @@ export default function VehiclePage() {
     try {
       await api.unarchiveTireSet(rec.id);
       fetchRecords();
+      fetchCostSummary();
     } catch (e) {
       alert('Reaktivieren fehlgeschlagen: ' + (e instanceof Error ? e.message : 'Unbekannt'));
     }
@@ -346,6 +406,74 @@ export default function VehiclePage() {
         <h1 className="page__title">Fahrzeug</h1>
       </header>
 
+      {/* KPI-Panel: Gesamtkosten + Pro-Kategorie-Summen + €/km + Hochrechnung */}
+      {costSummary && (
+        <section className="vehicle-cost-summary">
+          <h2 className="vehicle-cost-summary__title">Kosten-Auswertung</h2>
+          <div className="vehicle-cost-summary__totals">
+            <div className="vehicle-cost-summary__total-card vehicle-card-total">
+              <span className="vehicle-cost-summary__label">Gesamt</span>
+              <span className="vehicle-cost-summary__value">{formatEur(costSummary.total_eur)}</span>
+              <span className="vehicle-cost-summary__sub">{costSummary.service_total_eur > 0 && <>Service: {formatEur(costSummary.service_total_eur)}</>}{costSummary.tire_total_eur > 0 && <> · Reifen: {formatEur(costSummary.tire_total_eur)}</>}</span>
+            </div>
+            <div className="vehicle-cost-summary__total-card">
+              <span className="vehicle-cost-summary__label">Gefahren</span>
+              <span className="vehicle-cost-summary__value">{formatKm(costSummary.km_driven)}</span>
+              <span className="vehicle-cost-summary__sub">
+                {costSummary.odometer_start_km != null && <>von {formatKm(costSummary.odometer_start_km)}</>}
+                {costSummary.odometer_current_km != null && <> · aktuell {formatKm(costSummary.odometer_current_km)}</>}
+              </span>
+            </div>
+            <div className="vehicle-cost-summary__total-card">
+              <span className="vehicle-cost-summary__label">€ / km (mit Anschaffung)</span>
+              <span className="vehicle-cost-summary__value">{costSummary.eur_per_km_with_purchase ? costSummary.eur_per_km_with_purchase.toFixed(4) + ' €' : '—'}</span>
+              <span className="vehicle-cost-summary__sub">inkl. Kauf/Anmeldung</span>
+            </div>
+            <div className="vehicle-cost-summary__total-card">
+              <span className="vehicle-cost-summary__label">€ / km (laufend)</span>
+              <span className="vehicle-cost-summary__value">{costSummary.eur_per_km_without_purchase ? costSummary.eur_per_km_without_purchase.toFixed(4) + ' €' : '—'}</span>
+              <span className="vehicle-cost-summary__sub">ohne Anschaffung</span>
+            </div>
+            <div className="vehicle-cost-summary__total-card vehicle-card-forecast">
+              <span className="vehicle-cost-summary__label">Hochrechnung / Jahr</span>
+              <span className="vehicle-cost-summary__value">{formatEur(costSummary.estimated_yearly_eur)}</span>
+              <span className="vehicle-cost-summary__sub">
+                {costSummary.estimated_yearly_breakdown?.actual_km_per_day != null && (
+                  <>bei {costSummary.estimated_yearly_breakdown.actual_km_per_day.toFixed(1)} km/Tag · ~20.000 km/Jahr</>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {costSummary.categories.length > 0 && (
+            <table className="vehicle-cost-summary__table">
+              <thead>
+                <tr>
+                  <th>Kategorie</th>
+                  <th style={{ textAlign: 'right' }}>Anzahl</th>
+                  <th style={{ textAlign: 'right' }}>Summe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costSummary.categories.map(c => (
+                  <tr key={c.key}>
+                    <td>{c.label}</td>
+                    <td style={{ textAlign: 'right' }}>{c.count}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatEur(c.total_eur)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {(!costSummary.odometer_start_km || !costSummary.odometer_current_km) && (
+            <p className="vehicle-cost-summary__hint">
+              💡 Tipp: Trage beim <strong>Anschaffungs-Posten</strong> den km-Stand 2 ein — dann rechnet das System alle anderen km-Stände automatisch aus den TM-Drives (Tages-Endstand).
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Service & Wartung */}
       <section className="overview-page__section">
         <div className="overview-page__section-header">
@@ -362,6 +490,7 @@ export default function VehiclePage() {
           <div className="vehicle-records-section">
             <div className="table-header service-table-header">
               <div className="col col-date">Datum</div>
+              <div className="col col-cat">Kategorie</div>
               <div className="col col-desc">Beschreibung</div>
               <div className="col col-km">km-Stand</div>
               <div className="col col-shop">Werkstatt</div>
@@ -372,6 +501,11 @@ export default function VehiclePage() {
               {services.map(rec => (
                 <div key={rec.id} className="table-row service-row">
                   <div className="col col-date">{rec.date?.slice(0, 10) || '—'}</div>
+                  <div className="col col-cat">
+                    {rec.category
+                      ? <span className="category-pill">{CATEGORY_LABELS[rec.category] || rec.category}</span>
+                      : <span className="category-pill category-pill--empty">— keine —</span>}
+                  </div>
                   <div className="col col-desc">{rec.title || '—'}</div>
                   <div className="col col-km">{rec.odometer_km != null ? rec.odometer_km.toLocaleString('de-DE') : '—'}</div>
                   <div className="col col-shop">{rec.shop || '—'}</div>

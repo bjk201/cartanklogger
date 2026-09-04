@@ -1,998 +1,126 @@
-/* VehiclePage.css - Styling for VehiclePage components */
+grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
+  }
+}
 
-/* ── Main container ────────────────────────────────────────── */
-.vehicle-page {
-  padding: var(--container-padding, 24px);
-  background: var(--bg-primary, #ffffff);
+/* ===== Vehicle Cost Summary Panel ===== */
+
+.vehicle-cost-summary {
+  background: var(--color-bg-elevated, #fafafa);
+  border: 1px solid var(--color-border, #e0e0e0);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  min-height: 400px;
-}
-
-/* ── Zustände ──────────────────────────────────────────────── */
-.vehicle-page__loading,
-.vehicle-page__error,
-.vehicle-page__empty {
-  padding: 2rem;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
-
-.vehicle-page__error { color: #ef4444; }
-
-/* ── Sections (nutzt OverviewPage-CSS-Muster) ──────────────── */
-.vehicle-page .overview-page__section {
+  padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
 }
 
-.vehicle-page .overview-page__section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-/* ── Button: Hinzufügen ────────────────────────────────────── */
-.btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  background: var(--color-primary);
-  color: white;
-  font-size: 0.8125rem;
+.vehicle-cost-summary__title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-.btn-add:hover { background: var(--color-primary-hover); }
-
-/* ── Button: Icon (Edit) ───────────────────────────────────── */
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-size: 1rem;
-}
-.btn-icon:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
 }
 
-.btn-icon--danger:hover {
-  color: #ef4444;
-  border-color: #ef4444;
-}
-
-/* ── Modal (aus alter VehiclePage übernommen) ──────────────── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.modal-container {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--color-border);
-}
-.modal-header h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-.modal-close-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 1.25rem;
-  color: var(--color-text-muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.modal-close-btn:hover { background: var(--color-bg-hover); }
-.modal-body { padding: 1.25rem; }
-
-/* ── Formular ──────────────────────────────────────────────── */
-.record-form { display: flex; flex-direction: column; gap: 0.875rem; }
-.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
-.form-label { font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
-.form-label .form-required { color: #ef4444; margin-left: 0.125rem; }
-.form-field input,
-.form-field select,
-.form-field textarea {
-  padding: 0.5rem 0.75rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: 0.8125rem;
-  color: var(--color-text);
-  font-family: inherit;
-}
-.form-field input:focus,
-.form-field select:focus,
-.form-field textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-.form-error { font-size: 0.6875rem; color: #ef4444; }
-.form-submit-error { padding: 0.5rem 0.75rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-md); font-size: 0.75rem; color: #dc2626; }
-.form-hint { font-size: 0.6875rem; color: var(--color-text-muted); font-style: italic; }
-.form-row { display: flex; gap: 0.75rem; }
-.form-row .form-field { flex: 1; }
-.form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 0.5rem; border-top: 1px solid var(--color-border); }
-.btn-primary {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  background: var(--color-primary);
-  color: white;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.btn-secondary:hover { background: var(--color-bg-hover); }
-
-/* ── Fahrzeug-Identität (VehicleInfoCard) ──────────────────── */
-.vehicle-info-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-}
-.vehicle-info-card h3 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 1rem;
-}
-.vehicle-info-card.loading,
-.vehicle-info-card.error,
-.vehicle-info-card.empty {
-  text-align: center;
-  padding: 2rem;
-  color: var(--color-text-muted);
-}
-.vehicle-info-card.error { color: #ef4444; }
-.vehicle-info-grid { display: flex; flex-direction: column; gap: 0.625rem; }
-.vehicle-info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.375rem 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.vehicle-info-row:last-child { border-bottom: none; }
-.vehicle-info-row .label { font-size: 0.8125rem; color: var(--color-text-muted); font-weight: 500; }
-.vehicle-info-row .value { font-size: 0.875rem; color: var(--color-text); font-weight: 600; }
-
-/* ── Records Tabellen ──────────────────────────────────────── */
-.vehicle-records-section {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.table-header {
+.vehicle-cost-summary__totals {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.6875rem;
-  font-weight: 600;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vehicle-cost-summary__total-card {
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border-subtle, #eee);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vehicle-cost-summary__total-card.vehicle-card-total {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff;
+  border: none;
+}
+
+.vehicle-cost-summary__total-card.vehicle-card-forecast {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: #fff;
+  border: none;
+}
+
+.vehicle-cost-summary__label {
+  font-size: 0.75rem;
+  opacity: 0.85;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-.service-table-header {
-  grid-template-columns: 100px 1fr 100px 120px 100px 60px;
-}
-.tire-table-header {
-  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
-}
-.table-body { display: flex; flex-direction: column; }
-.table-row {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.8125rem;
-  align-items: center;
-}
-.table-row:last-child { border-bottom: none; }
-.table-row:hover { background: var(--color-bg-hover); }
-.col-date { white-space: nowrap; }
-.col-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-km, .col-cost, .col-pos, .col-brand, .col-season, .col-status, .col-actions {
-  white-space: nowrap;
-}
-.col-actions { display: flex; gap: 0.375rem; justify-content: flex-end; }
-.col-status { font-size: 0.75rem; }
-
-/* ── Tire Badges ───────────────────────────────────────────── */
-.tire-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  background: var(--color-bg-hover);
-  color: var(--color-text);
-}
-.tire-badge--vl { background: #dbeafe; color: #1d4ed8; }
-.tire-badge--vr { background: #fce7f3; color: #db2777; }
-.tire-badge--hl { background: #d1fae5; color: #047857; }
-.tire-badge--hr { background: #fef3c7; color: #b45309; }
-.tire-season-label {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-}
-.tire-season--sommer { background: #fef3c7; color: #b45309; }
-.tire-season--winter { background: #dbeafe; color: #1d4ed8; }
-.tire-season--ganzjahres { background: #d1fae5; color: #047857; }
-.tire-km-driven { font-size: 0.6875rem; color: var(--color-text-muted); }
-.tire-row.tire-active { background: transparent; }
-.tire-row.tire-replaced { opacity: 0.6; }
-.tire-row.tire-archived { opacity: 0.55; }
-.tire-row.tire-stored { opacity: 0.75; }
-.tire-mount-count { font-size: 0.6875rem; color: var(--color-text-muted); }
-.status-active { color: var(--color-home); font-size: 0.75rem; font-weight: 600; }
-.status-storage { color: #b45309; font-size: 0.75rem; font-weight: 600; }
-.status-archived { color: var(--color-text-muted); font-size: 0.75rem; }
-.status-replaced { color: var(--color-text-muted); font-size: 0.75rem; }
-.tire-purchase-info {
-  grid-column: 1 / -1;
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  padding: 0.25rem 0 0 0;
-  border-top: 1px dashed var(--color-border);
-  margin-top: 0.25rem;
-}
-
-/* Grid layout for the three main sections */
-.vehicle-page-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-  margin-top: 24px;
-}
-
-/* ── Vehicle Info Card ────────────────────────────────────── */
-.vehicle-info-card {
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 10px;
-  padding: 20px;
-  border: 1px solid var(--border-color, #e9ecef);
-}
-
-.vehicle-info-card h3 {
-  margin: 0 0 16px 0;
-  color: var(--text-primary, #2c3e50);
-  font-size: 1.2rem;
   font-weight: 600;
 }
 
-.vehicle-info-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.vehicle-info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-light, #f1f3f4);
-}
-
-.vehicle-info-row:last-child {
-  border-bottom: none;
-}
-
-.vehicle-info-row .label {
-  font-weight: 600;
-  color: var(--text-secondary, #6c757d);
-  font-size: 0.9rem;
-}
-
-.vehicle-info-row .value {
-  color: var(--text-primary, #2c3e50);
-  font-weight: 500;
-  text-align: right;
-}
-
-/* ── Loading / Error / Empty states ───────────────────────── */
-.vehicle-info-card.loading,
-.vehicle-records-section.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-  color: var(--text-secondary, #6c757d);
-  font-style: italic;
-}
-
-.vehicle-info-card.error,
-.vehicle-records-section.error {
-  color: #dc3545;
-  background-color: #fff5f5;
-  border-color: #fed7d7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-}
-
-.vehicle-info-card.empty {
-  color: var(--text-secondary, #6c757d);
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-  background-color: var(--bg-light, #fafbfc);
-}
-
-/* ── Vehicle Records Section ──────────────────────────────── */
-.vehicle-records-section {
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 10px;
-  padding: 20px;
-  border: 1px solid var(--border-color, #e9ecef);
-}
-
-.vehicle-records-section h3 {
-  margin: 0;
-  color: var(--text-primary, #2c3e50);
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-/* Section header with add button */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  gap: 12px;
-}
-
-.record-count {
-  font-weight: 400;
-  font-size: 0.9rem;
-  color: var(--text-secondary, #6c757d);
-}
-
-/* ── Add button ───────────────────────────────────────────── */
-.btn-add {
-  padding: 8px 16px;
-  background: var(--accent-color, #0d6efd);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  white-space: nowrap;
-}
-
-.btn-add:hover {
-  background: var(--accent-hover, #0b5ed7);
-}
-
-.btn-add:active {
-  background: var(--accent-active, #0a58ca);
-}
-
-/* ── Tables ───────────────────────────────────────────────── */
-.records-table {
-  width: 100%;
-}
-
-.table-header {
-  display: grid;
-  gap: 8px;
-  padding: 12px 8px;
-  border-bottom: 2px solid var(--border-color, #e9ecef);
-  font-weight: 600;
-  color: var(--text-secondary, #6c757d);
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.table-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.table-row {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  background: var(--bg-primary, #ffffff);
-  border: 1px solid var(--border-light, #f1f3f4);
-  border-radius: 6px;
-  align-items: center;
-  transition: box-shadow 0.15s ease;
-}
-
-.table-row:hover {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  background-color: var(--hover-bg, #f8f9ff);
-}
-
-/* Service columns */
-.service-table-header {
-  grid-template-columns: 1.2fr 1fr 1fr 2fr 1.2fr;
-}
-
-.service-row {
-  grid-template-columns: 1.2fr 1fr 1fr 2fr 1.2fr;
-}
-
-/* Tire columns — Reifensatz-Ansicht (1 Satz = 1 Zeile, keine Position mehr) */
-.tire-table-header {
-  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
-}
-
-.tire-row {
-  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
-}
-
-/* Satz-Details unter Marke + km-Bereich */
-.tire-set-title { font-weight: 600; }
-.tire-set-subtitle {
-  font-size: 0.78rem;
-  color: var(--color-text-muted, #64748b);
-  margin-top: 2px;
-}
-.tire-km-detail {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #64748b);
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-
-/* Column general */
-.col {
-  font-size: 0.9rem;
-  color: var(--text-primary, #2c3e50);
-}
-
-.col.col-date {
-  font-weight: 500;
-}
-
-.col.col-cost {
-  font-weight: 600;
-  color: var(--success-color, #28a745);
-}
-
-.col.col-shop {
-  font-style: italic;
-  color: var(--text-tertiary, #adb5bd);
-}
-
-/* ── Tire-specific styling ────────────────────────────────── */
-
-/* Tire brand */
-.tire-brand-name {
-  font-weight: 600;
-}
-
-/* Tire season label */
-.tire-season-label {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.tire-season--sommer {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.tire-season--winter {
-  background: #cce5ff;
-  color: #004085;
-}
-
-.tire-season--ganzjahres {
-  background: #d4edda;
-  color: #155724;
-}
-
-/* Driven km display */
-.tire-km-driven {
-  font-size: 0.8rem;
-  color: var(--text-secondary, #6c757d);
-  margin-top: 2px;
-  font-weight: 500;
-}
-
-/* STATUS indicators */
-.status-active {
-  color: #28a745;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.status-replaced {
-  color: #adb5bd;
-  font-weight: 400;
-  font-size: 0.85rem;
-}
-
-/* Tire row states: montiert / im Lager / archiviert */
-.tire-active {
-  border-left: 3px solid #28a745;
-}
-
-.tire-stored {
-  opacity: 0.8;
-  border-left: 3px solid #b45309;
-}
-
-.tire-archived {
-  opacity: 0.55;
-  border-left: 3px solid #dee2e6;
-}
-
-.tire-replaced {
-  opacity: 0.7;
-  border-left: 3px solid #dee2e6;
-}
-
-/* Tire position badge */
-.tire-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 32px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.tire-badge--vl {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.tire-badge--vr {
-  background: #e3f2fd;
-  color: #1565c0;
-}
-
-.tire-badge--hl {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-.tire-badge--hr {
-  background: #fce4ec;
-  color: #c62828;
-}
-
-/* ── Replace button ───────────────────────────────────────── */
-.btn-replace {
-  padding: 4px 12px;
-  background: transparent;
-  color: var(--accent-color, #0d6efd);
-  border: 1px solid var(--accent-color, #0d6efd);
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.btn-replace:hover {
-  background: var(--accent-color, #0d6efd);
-  color: #fff;
-}
-
-/* ── Tire purchase info (linked extra cost) ─────────────── */
-.tire-purchase-info {
-  grid-column: 1 / -1;
-  font-size: 0.85rem;
-  color: #17a2b8;
-  padding: 4px 0 0 0;
-  border-top: 1px dashed var(--border-light, #e9ecef);
-  margin-top: 4px;
-  font-weight: 500;
-}
-
-/* ── Modal Overlay & Container ────────────────────────────── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1050;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  animation: modalFadeIn 0.2s ease;
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.modal-container {
-  background: var(--bg-primary, #ffffff);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  animation: modalSlideIn 0.2s ease;
-}
-
-@keyframes modalSlideIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color, #e9ecef);
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: var(--text-primary, #2c3e50);
-  font-size: 1.15rem;
-  font-weight: 600;
-}
-
-.modal-close-btn {
-  background: none;
-  border: none;
+.vehicle-cost-summary__value {
   font-size: 1.5rem;
-  color: var(--text-secondary, #6c757d);
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  border-radius: 4px;
-  transition: background 0.15s;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
-.modal-close-btn:hover {
-  background: var(--bg-light, #f1f3f4);
-  color: var(--text-primary, #2c3e50);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-/* ── Form elements ─────────────────────────────────────────── */
-.record-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.form-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary, #2c3e50);
-}
-
-.form-required {
-  color: #dc3545;
-  margin-left: 2px;
-}
-
-.form-error {
+.vehicle-cost-summary__sub {
   font-size: 0.8rem;
-  color: #dc3545;
+  opacity: 0.85;
 }
 
-.form-field input[type="text"],
-.form-field input[type="number"],
-.form-field input[type="date"],
-.form-field select,
-.form-field textarea {
-  padding: 8px 12px;
-  border: 1px solid var(--border-color, #ced4da);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-family: inherit;
-  background: var(--bg-primary, #ffffff);
-  color: var(--text-primary, #2c3e50);
-  transition: border-color 0.15s ease;
+.vehicle-cost-summary__table {
   width: 100%;
-  box-sizing: border-box;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
 }
 
-.form-field input:focus,
-.form-field select:focus,
-.form-field textarea:focus {
-  outline: none;
-  border-color: var(--accent-color, #0d6efd);
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+.vehicle-cost-summary__table th,
+.vehicle-cost-summary__table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border-subtle, #eee);
+  text-align: left;
 }
 
-.form-field textarea {
-  resize: vertical;
-  min-height: 60px;
-}
-
-/* Tire position button group */
-.tire-position-select {
-  display: flex;
-  gap: 8px;
-}
-
-.tire-position-btn {
-  flex: 1;
-  padding: 8px 0;
-  background: var(--bg-primary, #ffffff);
-  border: 2px solid var(--border-color, #ced4da);
-  border-radius: 6px;
-  font-size: 0.85rem;
+.vehicle-cost-summary__table th {
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  color: var(--text-secondary, #6c757d);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
-.tire-position-btn:hover {
-  border-color: var(--accent-color, #0d6efd);
-  color: var(--accent-color, #0d6efd);
-}
-
-.tire-position-btn.active {
-  border-color: var(--accent-color, #0d6efd);
-  background: var(--accent-color, #0d6efd);
-  color: #fff;
-}
-
-/* Replace info banner */
-.replace-info {
-  padding: 10px 14px;
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  border-radius: 6px;
-  color: #856404;
-  font-size: 0.9rem;
-}
-
-/* Form submit error */
-.form-submit-error {
-  padding: 8px 12px;
-  background: #fff5f5;
-  border: 1px solid #fed7d7;
-  border-radius: 6px;
-  color: #dc3545;
+.vehicle-cost-summary__hint {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
   font-size: 0.85rem;
 }
 
-/* Form actions */
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 4px;
-}
+/* ===== Category Pill ===== */
 
-.btn-primary,
-.btn-secondary {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
+.category-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: var(--color-bg-elevated, #f0f0f5);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 999px;
+  font-size: 0.78rem;
   font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.btn-primary {
-  background: var(--accent-color, #0d6efd);
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover, #0b5ed7);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--bg-light, #e9ecef);
-  color: var(--text-primary, #2c3e50);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--border-color, #dee2e6);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* ── Empty state ───────────────────────────────────────────── */
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--text-secondary, #6c757d);
+.category-pill--empty {
+  opacity: 0.5;
   font-style: italic;
-  background: var(--bg-light, #fafbfc);
-  border-radius: 8px;
-  border: 1px dashed var(--border-color, #e9ecef);
 }
 
-/* ── Responsive ────────────────────────────────────────────── */
+/* Mobile: Stack cards more compactly */
 @media (max-width: 768px) {
-  .vehicle-page-grid {
-    grid-template-columns: 1fr;
+  .vehicle-cost-summary__totals {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
-
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .btn-add {
-    width: 100%;
-    text-align: center;
-  }
-
-  .service-table-header,
-  .service-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .tire-table-header {
-    display: none; /* hide header on mobile, use data-label instead */
-  }
-
-  .tire-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-    border-left-width: 4px;
-  }
-
-  .table-row {
-    padding: 14px;
-  }
-
-  .col {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 0;
-    border-bottom: 1px solid var(--border-light, #f1f3f4);
-  }
-
-  .col:last-child {
-    border-bottom: none;
-  }
-
-  .col::before {
-    content: attr(data-label);
-    font-weight: 600;
-    color: var(--text-secondary, #6c757d);
-    font-size: 0.8rem;
-    min-width: 90px;
-  }
-
-  .modal-container {
-    max-width: 100%;
-    max-height: 100vh;
-    border-radius: 0;
-    margin: 0;
-  }
-
-  .modal-overlay {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .tire-position-select {
-    flex-wrap: wrap;
-  }
-
-  .tire-position-btn {
-    flex: 1 1 40%;
-  }
-}
-
-@media (max-width: 480px) {
-  .tire-table-header,
-  .service-table-header {
-    display: none;
-  }
-
-  .tire-row {
-    grid-template-columns: 1fr;
-  }
-
-  .service-row {
-    grid-template-columns: 1fr;
+  .vehicle-cost-summary__value {
+    font-size: 1.2rem;
   }
 }
 
