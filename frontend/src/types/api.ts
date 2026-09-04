@@ -381,6 +381,7 @@ export interface VehicleRecordRead {
   shop?: string;
   note?: string;
   record_type?: 'service' | 'tire';
+  category?: string | null;     // Kosten-Kategorie (nur service sinnvoll)
   mounts?: TireMountRead[];     // Montage-Historie (nur Reifensätze)
 }
 
@@ -412,6 +413,7 @@ export interface VehicleRecordCreate {
   tire_season?: string;
   odometer_km?: number;
   cost_eur?: number;
+  category?: string | null;
 }
 
 export interface VehicleRecordUpdate {
@@ -428,6 +430,7 @@ export interface VehicleRecordUpdate {
   note?: string;
   odometer_km?: number;
   cost_eur?: number;
+  category?: string | null;
 }
 
 export interface VehicleRecordsResponse {
@@ -655,4 +658,38 @@ export interface ExtraCostCategory {
   id?: number;
   name: string;
   description?: string;
+}
+
+// =========================================================
+// Vehicle Cost Summary (Auswertung)
+// =========================================================
+export interface CategoryCost {
+  key: string;        // 'anschaffung' | ... | '_tires' | '_unsorted'
+  label: string;      // 'Anschaffung' | ... | 'Reifen' | 'Ohne Kategorie'
+  total_eur: number;
+  count: number;
+}
+
+export interface VehicleCostSummaryResponse {
+  ok: boolean;
+  total_eur: number;                // Summe ALLER Einträge
+  tire_total_eur: number;           // nur Reifen
+  service_total_eur: number;        // nur Service
+  categories: CategoryCost[];
+
+  // km-Achse
+  odometer_start_km: number | null;
+  odometer_start_date: string | null;
+  odometer_current_km: number | null;
+  km_driven: number | null;
+
+  // Pro-km
+  eur_per_km_with_purchase: number;     // alle Kosten / km
+  eur_per_km_without_purchase: number;  // ohne Anschaffung
+
+  // Jahres-Hochrechnung
+  estimated_yearly_eur: number;
+  estimated_yearly_breakdown: Record<string, number>;
+
+  errors?: { code: string; message: string }[];
 }

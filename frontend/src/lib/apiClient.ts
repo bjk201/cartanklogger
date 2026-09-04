@@ -45,6 +45,7 @@ import type {
   LiveMatchingStatusResponse,
   ExtraCostCategory,
   MonthlyPvPoint,
+  VehicleCostSummaryResponse,
 } from '../types/api';
 
 // Re-export all types for consumers
@@ -514,6 +515,11 @@ export function getVehicleInfo(): Promise<VehicleInfoResponse> {
   return request('/vehicle/info');
 }
 
+// --- Vehicle Cost Summary (Auswertung) ---
+export function getVehicleCostSummary(): Promise<VehicleCostSummaryResponse> {
+  return request('/vehicle/cost-summary');
+}
+
 // ===== API Object (convenience wrapper) =====
 export const api = {
   health,
@@ -559,4 +565,5 @@ export const api = {
   getMatchingDryRunLive,
   getMatchingLiveStatus,
   getVehicleInfo,
+  getVehicleCostSummary,
 };
