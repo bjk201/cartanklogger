@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import datetime, timezone, date as date_cls, timedelta
+from typing import List, Optional, Dict
 
 from app.database import get_db
 from app.models.vehicle import VehicleRecordModel, VehicleRecordType
 from app.models.tire_mount import TireMountModel
 from app.models.datasource import DataSourceConfig
+from app.services.teslamateapi_client import TeslaMateAPIClient
+from app.config import settings
 from app.schemas.vehicle import (
     VehicleRecordCreate,
     VehicleRecordUpdate,
@@ -20,7 +22,24 @@ from app.schemas.vehicle import (
     TireMountRequest,
     TireDemountRequest,
     TireMountRead,
+    VEHICLE_CATEGORIES,
+    VehicleCostSummaryResponse,
+    CategoryCost,
 )
+
+
+def _create_teslamateapi_client_from_config(config: Optional[DataSourceConfig]) -> Optional[TeslaMateAPIClient]:
+    """Factory: erstellt TeslaMateAPIClient aus DB-Config oder ENV-Fallback."""
+    tm_url = None
+    tm_token = None
+    if config is not None and getattr(config, "teslamateapi_base_url", None):
+        tm_url = config.teslamateapi_base_url
+        tm_token = getattr(config, "teslamateapi_token", None)
+    if not tm_url:
+        tm_url = getattr(settings, "TESLAMATEAPI_BASE_URL", None) or None
+    if not tm_url:
+        return None
+    return TeslaMateAPIClient(tm_url, tm_token)
 
 router = APIRouter(prefix="/vehicle", tags=["Vehicle"])
 
@@ -95,6 +114,7 @@ def _to_read(
         cost_eur=rec.cost_eur,
         note=rec.note,
         shop=rec.shop,
+        category=getattr(rec, "category", None),
         tire_position=rec.tire_position,
         tire_brand=rec.tire_brand,
         tire_season=rec.tire_season,
@@ -151,6 +171,7 @@ def create_vehicle_record(payload: VehicleRecordCreate, db: Session = Depends(ge
         cost_eur=payload.cost_eur,
         note=payload.note,
         shop=payload.shop,
+        category=payload.category,
         tire_position=payload.tire_position,
         tire_brand=payload.tire_brand,
         tire_season=payload.tire_season,
@@ -454,6 +475,236 @@ def sync_record_odometer(record_id: int, db: Session = Depends(get_db)) -> Vehic
     db.commit()
     db.refresh(rec)
     return VehicleSingleResponse(ok=True, data=_to_read(rec, _mounts_for(db, rec.id)), errors=[])
+
+
+# ============================================================
+# COST-SUMMARY (Auswertung)
+# ============================================================
+def _compute_daily_km_endings(drives: list) -> Dict[date_cls, float]:
+    """Berechnet pro Tag den Endstand (max odometer_end aller Drives dieses Tages).
+
+    drives: List von Objekten mit .end_date (datetime) und .odometer_end (Optional[float]).
+    Return: {date: km_end_of_day} — Tages-Endstand in lokaler Zeit (UTC-naive).
+    """
+    by_day: Dict[date_cls, float] = {}
+    for d in drives:
+        if d.end_date is None or d.odometer_end is None:
+            continue
+        day = d.end_date.date() if hasattr(d.end_date, "date") else d.end_date
+        cur = by_day.get(day)
+        if cur is None or d.odometer_end > cur:
+            by_day[day] = d.odometer_end
+    return by_day
+
+
+def _km_for_date(
+    target_date: datetime,
+    daily_km: Dict[date_cls, float],
+    fallback_km: Optional[float],
+) -> Optional[float]:
+    """Bestimmt den km-Stand zum target_date aus daily_km.
+
+    Strategie:
+      - Exakter Tag vorhanden → der Tages-Endstand
+      - Target-Datum liegt VOR dem ersten Drive → None (vor Anschaffung)
+      - Target-Datum liegt ZWISCHEN Tagen → exakter Wert vom letzten Drive-Tag davor
+      - Target-Datum liegt NACH dem letzten Drive → fallback_km (aktuell)
+    """
+    target_day = (target_date.date()
+                   if hasattr(target_date, "date") else target_date)
+    if target_day in daily_km:
+        return daily_km[target_day]
+    sorted_days = sorted(daily_km.keys())
+    if not sorted_days:
+        return fallback_km
+    last_day = sorted_days[-1]
+    if target_day > last_day:
+        return fallback_km
+    # Suche letzten Tag <= target_day
+    last_known = None
+    for day in sorted_days:
+        if day <= target_day:
+            last_known = day
+        else:
+            break
+    return daily_km.get(last_known) if last_known else None
+
+
+@router.get("/cost-summary", response_model=VehicleCostSummaryResponse, summary="Aggregierte Kosten-Auswertung pro Kategorie + Gesamt + €/km + Jahres-Hochrechnung")
+async def get_cost_summary(db: Session = Depends(get_db)) -> VehicleCostSummaryResponse:
+    """Summiert alle service+tire-Einträge nach Kategorie und liefert die wichtigsten KPIs.
+
+    km-Stand-Ableitung pro Datensatz:
+      1. Hat der Eintrag selbst odometer_km → der wird genommen (manuell erfasst)
+      2. Sonst: aus TM-Drives → Tages-Endstand (= max odometer_end aller Drives des Tages)
+         - Ist das Datum älter als der erste Drive (z.B. Anschaffung), None
+         - Liegt das Datum in der Zukunft oder nach dem letzten Drive → aktueller fallback_km
+      3. Wenn TM nicht erreichbar: nur die manuellen km werden genutzt
+    """
+    records = db.query(VehicleRecordModel).order_by(VehicleRecordModel.date.asc()).all()
+
+    # Aktuelle TM-Daten einmal holen (Tages-Endstände aller bisherigen Drives)
+    config = db.query(DataSourceConfig).filter(DataSourceConfig.is_active == True).first() \
+        if hasattr(DataSourceConfig, "is_active") else db.query(DataSourceConfig).first()
+    daily_km: Dict[date_cls, float] = {}
+    fallback_km = _max_known_odometer(db)
+    tm_client = _create_teslamateapi_client_from_config(config)
+    if tm_client is not None:
+        try:
+            drives = await tm_client.get_drives()
+            if drives:
+                daily_km = _compute_daily_km_endings(drives)
+        except Exception:
+            drives = None
+
+    if not records:
+        return VehicleCostSummaryResponse(
+            ok=True, total_eur=0.0, tire_total_eur=0.0, service_total_eur=0.0,
+            categories=[],
+            odometer_start_km=None, odometer_start_date=None,
+            odometer_current_km=fallback_km, km_driven=None,
+            eur_per_km_with_purchase=0.0, eur_per_km_without_purchase=0.0,
+            estimated_yearly_eur=0.0, estimated_yearly_breakdown={},
+            errors=[],
+        )
+
+    # Manuelle km aus Records (Ankerpunkte die der User selbst eingetragen hat)
+    known_km: Dict[datetime, float] = {}
+    for r in records:
+        if r.odometer_km is not None:
+            d = r.date if r.date.tzinfo is None else r.date.replace(tzinfo=None)
+            known_km[d] = r.odometer_km
+
+    # Pro-Kategorie Aggregation
+    by_cat: Dict[str, float] = {c: 0.0 for c in VEHICLE_CATEGORIES}
+    by_cat["_tires"] = 0.0
+    by_cat["_unsorted"] = 0.0
+    by_cat_count: Dict[str, int] = {}
+
+    tire_total = 0.0
+    service_total = 0.0
+    total_eur = 0.0
+    earliest_date = None
+    earliest_km = None
+
+    for r in records:
+        cost = float(r.cost_eur or 0.0)
+        if r.record_type == VehicleRecordType.TIRE:
+            tire_total += cost
+            by_cat["_tires"] += cost
+            by_cat_count["_tires"] = by_cat_count.get("_tires", 0) + 1
+            total_eur += cost
+            continue
+        service_total += cost
+        cat = r.category if r.category in VEHICLE_CATEGORIES else None
+        if cat:
+            by_cat[cat] += cost
+            by_cat_count[cat] = by_cat_count.get(cat, 0) + 1
+        else:
+            by_cat["_unsorted"] += cost
+            by_cat_count["_unsorted"] = by_cat_count.get("_unsorted", 0) + 1
+        total_eur += cost
+
+        # Frühester Service-Eintrag als Anker für die km-Berechnung
+        # Hat er selbst odometer_km → nimm das; sonst TM-Tages-Endstand
+        rec_km = None
+        if r.odometer_km is not None:
+            rec_km = r.odometer_km
+        else:
+            rec_km = _km_for_date(r.date, daily_km, fallback_km)
+        if rec_km is not None:
+            if earliest_date is None or r.date < earliest_date:
+                earliest_date = r.date
+                earliest_km = rec_km
+
+    categories = []
+    for c in VEHICLE_CATEGORIES:
+        if by_cat[c] > 0 or by_cat_count.get(c, 0) > 0:
+            categories.append(CategoryCost(
+                key=c, label=_CATEGORY_LABELS.get(c, c),
+                total_eur=round(by_cat[c], 2),
+                count=by_cat_count.get(c, 0),
+            ))
+    if by_cat["_tires"] > 0:
+        categories.append(CategoryCost(
+            key="_tires", label="Reifen",
+            total_eur=round(by_cat["_tires"], 2),
+            count=by_cat_count.get("_tires", 0),
+        ))
+    if by_cat["_unsorted"] > 0:
+        categories.append(CategoryCost(
+            key="_unsorted", label="Ohne Kategorie",
+            total_eur=round(by_cat["_unsorted"], 2),
+            count=by_cat_count["_unsorted"],
+        ))
+
+    odo_start_km = earliest_km
+    odo_start_date = earliest_date
+    odo_current_km = fallback_km
+
+    km_driven = None
+    eur_per_km_with = 0.0
+    eur_per_km_without = 0.0
+    estimated_yearly = 0.0
+    yearly_breakdown: Dict[str, float] = {}
+
+    if odo_start_km is not None and odo_current_km is not None and odo_current_km > odo_start_km:
+        km_driven = round(odo_current_km - odo_start_km, 1)
+        if km_driven > 0:
+            eur_per_km_with = round(total_eur / km_driven, 4)
+            ohne_anschaffung = total_eur - by_cat.get("anschaffung", 0.0)
+            eur_per_km_without = round(ohne_anschaffung / km_driven, 4)
+
+    if odo_start_date and odo_current_km and odo_current_km > odo_start_km:
+        days = max(1.0, (datetime.utcnow() - odo_start_date).total_seconds() / 86400)
+        km_per_day = km_driven / days if km_driven else 0
+        annual_target_km = 20000.0
+        if km_per_day > 0:
+            variable_per_km = eur_per_km_without
+            variable_annual = variable_per_km * annual_target_km
+            amort_anschaffung = by_cat.get("anschaffung", 0.0) / 5.0
+            amort_anmeldung = by_cat.get("anmeldung", 0.0) / 5.0
+            fixed_yearly = amort_anschaffung + amort_anmeldung
+            yearly_breakdown = {
+                "variable_km_annual": round(variable_annual, 2),
+                "fix_anschaffung_amortisiert_5y": round(amort_anschaffung, 2),
+                "fix_anmeldung_amortisiert_5y": round(amort_anmeldung, 2),
+                "assumption_km_per_year": annual_target_km,
+                "assumption_amort_years": 5,
+                "actual_km_per_day": round(km_per_day, 2),
+            }
+            estimated_yearly = round(variable_annual + fixed_yearly, 2)
+
+    return VehicleCostSummaryResponse(
+        ok=True,
+        total_eur=round(total_eur, 2),
+        tire_total_eur=round(tire_total, 2),
+        service_total_eur=round(service_total, 2),
+        categories=categories,
+        odometer_start_km=odo_start_km,
+        odometer_start_date=odo_start_date,
+        odometer_current_km=odo_current_km,
+        km_driven=km_driven,
+        eur_per_km_with_purchase=eur_per_km_with,
+        eur_per_km_without_purchase=eur_per_km_without,
+        estimated_yearly_eur=estimated_yearly,
+        estimated_yearly_breakdown=yearly_breakdown,
+        errors=[],
+    )
+
+
+# Anzeige-Labels für die JSON-API (Frontend braucht sie nicht, aber für Doku hilfreich)
+_CATEGORY_LABELS = {
+    "anschaffung": "Anschaffung",
+    "anmeldung": "Anmeldung",
+    "inspektion_wartung": "Inspektion / Wartung",
+    "reparatur": "Reparatur",
+    "zubehoer": "Zubehör",
+    "reinigung_pflege": "Reinigung / Pflege",
+    "versicherung": "Versicherung",
+    "steuer": "Steuer",
+    "sonstiges": "Sonstiges",
+}
 
 
 @router.delete("/records/{record_id}", response_model=VehicleSingleResponse, summary="Delete service/tire record")
