@@ -9,6 +9,7 @@ import { SessionsPage } from './pages/SessionsPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
 import VehiclePage from './pages/VehiclePage';
+import { TestPage } from './pages/TestPage';
 import './styles/global.css';
 import './styles/layout.css';
 
@@ -33,6 +34,7 @@ function App() {
                   {/* Alte TM-Export-URL -> Sessions-Tab (Funktion ist jetzt eingebettet) */}
                   <Route path="/tm-cost-export" element={<Navigate to="/sessions" replace />} />
                   <Route path="/vehicle" element={<VehiclePage />} />
+                  <Route path="/test" element={<TestPage />} />
                 </Routes>
               </main>
             </div>

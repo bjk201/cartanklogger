@@ -1,0 +1,546 @@
+/* ================================================================
+   TestPage — Side-by-side Design-Vergleich
+   ================================================================ */
+
+.test-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-bottom: 4rem;
+}
+
+.test-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.test-page__subtitle {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  max-width: 700px;
+}
+
+.test-page__badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  color: #fff;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.test-variant {
+  margin-bottom: 3rem;
+}
+
+.test-variant__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.test-variant__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.test-variant__desc {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  max-width: 600px;
+}
+
+.test-variant__tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.tag {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag--a { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
+.tag--b { background: rgba(34, 197, 94, 0.1); color: #16a34a; }
+.tag--c { background: rgba(245, 158, 11, 0.1); color: #b45309; }
+
+/* ================================================================
+   VARIANTE A — Modern Minimal (Apple/Linear)
+   ================================================================ */
+
+.variant-a__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.variant-a__kpi {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-subtle, #f1f5f9);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.variant-a__kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+}
+
+.variant-a__kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.variant-a__kpi-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.variant-a__trend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+.variant-a__trend--up { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
+.variant-a__trend--down { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+
+.variant-a__kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+}
+
+.variant-a__kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+.variant-a__kpi-unit {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.variant-a__kpi-sparkline {
+  margin: 0 -0.5rem -0.5rem;
+}
+
+.variant-a__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.variant-a__chart {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-subtle, #f1f5f9);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.variant-a__chart-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.75rem;
+}
+
+/* ================================================================
+   VARIANTE B — Data-Dense Dashboard (Vercel/Stripe)
+   ================================================================ */
+
+.variant-b__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.variant-b__kpi {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 0.75rem;
+  align-items: center;
+  transition: all 150ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.variant-b__kpi::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-border);
+  transition: background 150ms ease;
+}
+
+.variant-b__kpi--good::before { background: #16a34a; }
+.variant-b__kpi--neutral::before { background: #4f46e5; }
+.variant-b__kpi--warn::before { background: #f59e0b; }
+
+.variant-b__kpi:hover {
+  border-color: var(--color-border-strong, #cbd5e1);
+  background: var(--color-bg-hover, #f8fafc);
+}
+
+.variant-b__kpi-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.variant-b__kpi-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.variant-b__kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.variant-b__kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.variant-b__kpi-unit {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.variant-b__kpi-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}
+
+.variant-b__kpi-sparkline {
+  height: 56px;
+  min-width: 0;
+}
+
+.variant-b__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.variant-b__chart {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+
+.variant-b__chart-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
+/* ================================================================
+   VARIANTE C — Modern Glass (Material3 / iOS)
+   ================================================================ */
+
+.variant-c__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.variant-c__kpi {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.875rem;
+  row-gap: 0.75rem;
+  align-items: center;
+  transition: all 200ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.variant-c__kpi::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, var(--accent), transparent 70%);
+  opacity: 0.08;
+  transform: translate(40%, -40%);
+  pointer-events: none;
+}
+
+.variant-c__kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.variant-c__kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-row: 1 / 3;
+  grid-column: 1;
+}
+
+.variant-c__kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+}
+
+.variant-c__kpi-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.variant-c__kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.variant-c__kpi-value {
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.variant-c__kpi-unit {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.variant-c__kpi-sparkline {
+  grid-row: 2;
+  grid-column: 2;
+  margin: 0 -0.25rem;
+  min-width: 0;
+}
+
+.variant-c__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.variant-c__chart {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+}
+
+.variant-c__chart-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
+/* ================================================================
+   Side-by-side Charts
+   ================================================================ */
+
+.test-charts-compare {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.test-charts-compare__col {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+}
+
+.test-charts-compare__col h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.test-charts-compare__chart {
+  height: 180px;
+}
+
+/* ================================================================
+   Dark Mode Anpassungen
+   ================================================================ */
+
+html[data-theme="dark"] .variant-a__kpi {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="dark"] .variant-a__kpi:hover {
+  background: #273548;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .variant-a__chart {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .variant-b__kpi {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .variant-b__kpi:hover {
+  background: #273548;
+}
+
+html[data-theme="dark"] .variant-b__chart {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .variant-c__kpi {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .variant-c__kpi::after {
+  opacity: 0.15;
+}
+
+html[data-theme="dark"] .variant-c__chart {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .test-charts-compare__col {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ================================================================
+   Responsive
+   ================================================================ */
+
+@media (max-width: 1100px) {
+  .variant-a__grid,
+  .variant-b__grid,
+  .variant-c__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .variant-a__charts,
+  .variant-b__charts,
+  .variant-c__charts,
+  .test-charts-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .variant-a__grid,
+  .variant-b__grid,
+  .variant-c__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .test-variant__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .test-variant__tags {
+    flex-wrap: wrap;
+  }
+}
