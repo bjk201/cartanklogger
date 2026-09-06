@@ -1,9 +1,285 @@
-grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
-  }
+/* VehiclePage.css - Styling for VehiclePage components */
+
+/* ── Zustände (loading / error / empty) ─────────────────── */
+.vehicle-page__loading,
+.vehicle-page__error,
+.vehicle-page__empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+.vehicle-page__error { color: #ef4444; }
+
+/* ── Sections ─────────────────────────────────────────────── */
+.vehicle-page .overview-page__section {
+  margin-bottom: 1.5rem;
+}
+.vehicle-page .overview-page__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
 }
 
-/* ===== Vehicle Cost Summary Panel ===== */
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.btn-add:hover { background: var(--color-primary-hover); }
 
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 1rem;
+}
+.btn-icon:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.btn-icon--danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+.btn-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Modal ───────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-container {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 1.25rem;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.modal-close-btn:hover { background: var(--color-bg-hover); }
+.modal-body { padding: 1.25rem; }
+
+/* ── Form ─────────────────────────────────────────────────── */
+.record-form { display: flex; flex-direction: column; gap: 0.875rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  font-family: inherit;
+}
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+.form-error { font-size: 0.6875rem; color: #ef4444; }
+.form-submit-error {
+  padding: 0.5rem 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  color: #dc2626;
+}
+.form-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.form-row { display: flex; gap: 0.75rem; }
+.form-row .form-field { flex: 1; }
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+.btn-primary {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-secondary:hover { background: var(--color-bg-hover); }
+
+/* ── Records Tables (Grid-Layout) ───────────────────────── */
+.vehicle-records-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.table-header {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+/* Service: Datum, Kategorie, Beschreibung, km-Stand, Werkstatt, Kosten, Aktion */
+.service-table-header {
+  grid-template-columns: 100px 140px 1fr 100px 140px 100px 80px;
+}
+
+.tire-table-header {
+  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
+}
+
+.table-body { display: flex; flex-direction: column; }
+.table-row {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  align-items: center;
+}
+.service-row {
+  grid-template-columns: 100px 140px 1fr 100px 140px 100px 80px;
+}
+.tire-row {
+  grid-template-columns: 1.4fr 1fr 1.3fr 1fr 1.1fr 1.3fr;
+}
+.table-row:last-child { border-bottom: none; }
+.table-row:hover { background: var(--color-bg-hover); }
+
+/* ── Columns ─────────────────────────────────────────────── */
+.col-date { white-space: nowrap; }
+.col-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-km, .col-cost, .col-brand, .col-season, .col-status, .col-actions {
+  white-space: nowrap;
+}
+.col-actions { display: flex; gap: 0.25rem; justify-content: flex-end; flex-wrap: wrap; }
+.col-status { font-size: 0.75rem; }
+
+/* ── Tire status badges ──────────────────────────────────── */
+.tire-set-title { font-weight: 600; }
+.tire-set-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.tire-km-detail {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.tire-mount-count {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+.tire-season-label {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.tire-season--sommer { background: #fef3c7; color: #b45309; }
+.tire-season--winter { background: #dbeafe; color: #1d4ed8; }
+.tire-season--ganzjahres { background: #d1fae5; color: #047857; }
+.status-active { color: #16a34a; font-size: 0.75rem; font-weight: 600; }
+.status-storage { color: #b45309; font-size: 0.75rem; font-weight: 600; }
+.status-archived { color: var(--color-text-muted); font-size: 0.75rem; }
+.tire-row.tire-active { background: transparent; }
+.tire-row.tire-archived { opacity: 0.55; }
+
+/* ── Vehicle Cost Summary Panel (KPI panel) ──────────────── */
 .vehicle-cost-summary {
   background: var(--color-bg-elevated, #fafafa);
   border: 1px solid var(--color-border, #e0e0e0);
@@ -11,20 +287,17 @@ grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
 }
-
 .vehicle-cost-summary__title {
   margin: 0 0 1rem;
   font-size: 1.1rem;
   font-weight: 600;
 }
-
 .vehicle-cost-summary__totals {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
 }
-
 .vehicle-cost-summary__total-card {
   background: var(--color-bg-card, #fff);
   border: 1px solid var(--color-border-subtle, #eee);
@@ -34,19 +307,16 @@ grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
   flex-direction: column;
   gap: 0.25rem;
 }
-
 .vehicle-cost-summary__total-card.vehicle-card-total {
   background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   color: #fff;
   border: none;
 }
-
 .vehicle-cost-summary__total-card.vehicle-card-forecast {
   background: linear-gradient(135deg, #059669 0%, #10b981 100%);
   color: #fff;
   border: none;
 }
-
 .vehicle-cost-summary__label {
   font-size: 0.75rem;
   opacity: 0.85;
@@ -54,39 +324,33 @@ grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
   letter-spacing: 0.04em;
   font-weight: 600;
 }
-
 .vehicle-cost-summary__value {
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.1;
 }
-
 .vehicle-cost-summary__sub {
   font-size: 0.8rem;
   opacity: 0.85;
 }
-
 .vehicle-cost-summary__table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 0.5rem;
   font-size: 0.9rem;
 }
-
 .vehicle-cost-summary__table th,
 .vehicle-cost-summary__table td {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--color-border-subtle, #eee);
   text-align: left;
 }
-
 .vehicle-cost-summary__table th {
   font-weight: 600;
   font-size: 0.8rem;
   text-transform: uppercase;
   opacity: 0.7;
 }
-
 .vehicle-cost-summary__hint {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
@@ -96,8 +360,7 @@ grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
   font-size: 0.85rem;
 }
 
-/* ===== Category Pill ===== */
-
+/* ── Category Pill ───────────────────────────────────────── */
 .category-pill {
   display: inline-block;
   padding: 0.2rem 0.6rem;
@@ -108,26 +371,67 @@ grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
   font-weight: 500;
   white-space: nowrap;
 }
-
 .category-pill--empty {
   opacity: 0.5;
   font-style: italic;
 }
 
-/* Mobile: Stack cards more compactly */
+/* ── Mobile Responsive ───────────────────────────────────── */
+@media (max-width: 1100px) {
+  .vehicle-cost-summary__totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .service-table-header,
+  .service-row {
+    grid-template-columns: 90px 1fr 80px 60px;
+  }
+  /* Verstecke Kategorie, Werkstatt auf kleineren Screens */
+  .service-table-header .col-cat,
+  .service-table-header .col-shop,
+  .service-row .col-cat,
+  .service-row .col-shop {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .vehicle-cost-summary__totals {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .vehicle-cost-summary__value {
     font-size: 1.2rem;
   }
+
+  /* Service-Tabelle: Stack als Cards */
+  .service-table-header { display: none; }
+  .service-row {
+    grid-template-columns: 1fr;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+  }
+  .tire-table-header { display: none; }
+  .tire-row {
+    grid-template-columns: 1fr;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--color-border);
+  }
+  .col {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--color-bg-hover);
+  }
+  .col:last-child { border-bottom: none; }
+  .col-actions { justify-content: flex-end; }
 }
 
-/* ── Desktop responsive for mid-sized screens ─────────────── */
-@media (min-width: 769px) and (max-width: 1100px) {
-  .tire-table-header,
-  .tire-row {
-    grid-template-columns: 70px 1fr 1fr 1.2fr 1fr 80px;
+@media (max-width: 480px) {
+  .vehicle-cost-summary__totals {
+    grid-template-columns: 1fr;
   }
 }
