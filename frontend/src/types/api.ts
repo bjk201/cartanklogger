@@ -375,6 +375,9 @@ export interface VehicleRecordRead {
   is_archived?: boolean;        // Satz archiviert (separater Endzustand)
   start_odometer_km?: number;
   odometer_km?: number;
+  // Auto-abgeleiteter km-Stand aus TM-Drives (Tages-Endstand) wenn odometer_km fehlt.
+  // Backend füllt dieses Feld nur, wenn nichts manuell erfasst wurde.
+  derived_odometer_km?: number | null;
   cost_eur?: number;
   date?: string;
   title?: string;
@@ -438,6 +441,8 @@ export interface VehicleRecordsResponse {
   records?: VehicleRecordRead[];
   services?: VehicleRecordRead[];
   tires?: VehicleRecordRead[];
+  // Aktueller km-Stand des Fahrzeugs (für Reifen-km-Berechnung montierter Sätze)
+  current_odometer_km?: number | null;
   meta?: {
     count: number;
     limit: number;

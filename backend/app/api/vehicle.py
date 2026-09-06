@@ -41,6 +41,23 @@ def _create_teslamateapi_client_from_config(config: Optional[DataSourceConfig]) 
         return None
     return TeslaMateAPIClient(tm_url, tm_token)
 
+
+async def _fetch_tm_daily_km(db: Session) -> Dict[date_cls, float]:
+    """Holt einmal alle TM-Drives und liefert Tages-Endstände (sync-Version für Records-Endpoint).
+
+    Gibt leeres Dict zurück wenn TM nicht erreichbar — dann erfolgt keine Auto-Ableitung.
+    """
+    config = db.query(DataSourceConfig).filter(DataSourceConfig.is_active == True).first() \
+        if hasattr(DataSourceConfig, "is_active") else db.query(DataSourceConfig).first()
+    tm_client = _create_teslamateapi_client_from_config(config)
+    if tm_client is None:
+        return {}
+    try:
+        drives = await tm_client.get_drives()
+        return _compute_daily_km_endings(drives or [])
+    except Exception:
+        return {}
+
 router = APIRouter(prefix="/vehicle", tags=["Vehicle"])
 
 
@@ -104,6 +121,7 @@ def _get_tire_or_404(record_id: int, db: Session) -> VehicleRecordModel:
 def _to_read(
     rec: VehicleRecordModel,
     mounts: Optional[List[TireMountModel]] = None,
+    derived_km: Optional[float] = None,
 ) -> VehicleRecordRead:
     return VehicleRecordRead(
         id=rec.id,
@@ -123,14 +141,20 @@ def _to_read(
         is_active=rec.is_active,
         is_archived=bool(getattr(rec, "is_archived", False)),
         mounts=[TireMountRead.model_validate(m) for m in mounts] if mounts else [],
+        derived_odometer_km=derived_km,
     )
 
 
 @router.get("/records", response_model=VehicleRecordsResponse, summary="Get service and tire records")
-def get_vehicle_records(db: Session = Depends(get_db)) -> VehicleRecordsResponse:
+async def get_vehicle_records(db: Session = Depends(get_db)) -> VehicleRecordsResponse:
     """Return all vehicle records, split into services and tires, newest first.
 
     Reifensätze enthalten ihre komplette Montage-Historie (mounts).
+
+    Pro Record wird `derived_odometer_km` aus TM-Drives abgeleitet, wenn kein
+    eigener `odometer_km` erfasst wurde (Tages-Endstand = max odometer_end aller
+    Drives des Tages). Die Response enthält zusätzlich `current_odometer_km`
+    für die Anzeige der gefahrenen km bei aktuell montierten Reifensätzen.
     """
     records = db.query(VehicleRecordModel).order_by(
         VehicleRecordModel.date.desc()
@@ -141,15 +165,37 @@ def get_vehicle_records(db: Session = Depends(get_db)) -> VehicleRecordsResponse
     for m in all_mounts:
         mounts_by_tire.setdefault(m.tire_record_id, []).append(m)
 
+    # TM-Drives einmal laden — wird für derived_km UND current_odometer_km genutzt
+    daily_km = await _fetch_tm_daily_km(db)
+    fallback_km = _max_known_odometer(db)
+    current_odo = fallback_km
+    if daily_km:
+        sorted_days = sorted(daily_km.keys())
+        if sorted_days:
+            current_odo = daily_km[sorted_days[-1]]  # type: ignore[index]
+
+    def _derive(rec: VehicleRecordModel) -> Optional[float]:
+        if rec.odometer_km is not None:
+            return None  # manuell erfasst → derived zeigt nichts an
+        # rec.date ist zur Laufzeit datetime; Pyright sieht nur Column[datetime]
+        return _km_for_date(rec.date, daily_km, fallback_km)  # type: ignore[arg-type]
+
     services = []
     tires = []
     for rec in records:
+        derived = _derive(rec)
         if rec.record_type == VehicleRecordType.SERVICE:
-            services.append(_to_read(rec))
+            services.append(_to_read(rec, derived_km=derived))
         else:
-            tires.append(_to_read(rec, mounts_by_tire.get(rec.id, [])))
+            tires.append(_to_read(rec, mounts_by_tire.get(rec.id, []), derived_km=derived))
 
-    return VehicleRecordsResponse(ok=True, services=services, tires=tires, errors=[])
+    return VehicleRecordsResponse(
+        ok=True,
+        services=services,
+        tires=tires,
+        current_odometer_km=current_odo,
+        errors=[],
+    )
 
 
 @router.get("/records/{record_id}", response_model=VehicleSingleResponse, summary="Get single vehicle record")

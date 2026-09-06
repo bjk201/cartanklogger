@@ -314,6 +314,10 @@ export default function VehiclePage() {
         ...(data.tires || []),
       ];
       setRecords(all);
+      // Aktuellen km-Stand aus Response übernehmen (vom Backend aus TM abgeleitet)
+      if (typeof data.current_odometer_km === 'number') {
+        setCurrentOdometer(data.current_odometer_km);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler');
     } finally {
@@ -498,7 +502,15 @@ export default function VehiclePage() {
               <div className="col col-actions">Aktion</div>
             </div>
             <div className="table-body">
-              {services.map(rec => (
+              {services.map(rec => {
+                // km-Stand: manuell erfasst > auto-abgeleitet aus TM > —
+                const km = rec.odometer_km != null
+                  ? rec.odometer_km
+                  : rec.derived_odometer_km != null
+                    ? rec.derived_odometer_km
+                    : null;
+                const kmIsDerived = rec.odometer_km == null && rec.derived_odometer_km != null;
+                return (
                 <div key={rec.id} className="table-row service-row">
                   <div className="col col-date">{rec.date?.slice(0, 10) || '—'}</div>
                   <div className="col col-cat">
@@ -507,7 +519,9 @@ export default function VehiclePage() {
                       : <span className="category-pill category-pill--empty">— keine —</span>}
                   </div>
                   <div className="col col-desc">{rec.title || '—'}</div>
-                  <div className="col col-km">{rec.odometer_km != null ? rec.odometer_km.toLocaleString('de-DE') : '—'}</div>
+                  <div className={`col col-km${kmIsDerived ? ' col-km--derived' : ''}`} title={kmIsDerived ? 'Auto-abgeleitet aus TM-Drives (Tages-Endstand)' : undefined}>
+                    {km != null ? km.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '—'}
+                  </div>
                   <div className="col col-shop">{rec.shop || '—'}</div>
                   <div className="col col-cost">{rec.cost_eur != null ? rec.cost_eur.toFixed(2) + ' €' : '—'}</div>
                   <div className="col col-actions">
@@ -515,7 +529,8 @@ export default function VehiclePage() {
                     <button className="btn-icon btn-icon--danger" onClick={() => handleDelete(rec)} title="Löschen">✕</button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

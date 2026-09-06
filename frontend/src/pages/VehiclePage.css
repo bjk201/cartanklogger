@@ -243,6 +243,10 @@
 .col-km, .col-cost, .col-brand, .col-season, .col-status, .col-actions {
   white-space: nowrap;
 }
+.col-km--derived {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
 .col-actions { display: flex; gap: 0.25rem; justify-content: flex-end; flex-wrap: wrap; }
 .col-status { font-size: 0.75rem; }
 

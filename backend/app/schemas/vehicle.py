@@ -66,6 +66,9 @@ class VehicleRecordRead(BaseModel):
     is_active: bool = True          # Satz aktuell montiert?
     is_archived: bool = False       # Satz archiviert (separater Endzustand)
     mounts: List["TireMountRead"] = []  # Montage-Historie (nur Reifen)
+    # Auto-abgeleiteter km-Stand aus TM-Drives (Tages-Endstand) wenn odometer_km fehlt.
+    # None wenn weder manuell noch aus TM ableitbar.
+    derived_odometer_km: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -127,6 +130,8 @@ class VehicleRecordsResponse(BaseModel):
     ok: bool = True
     services: List[VehicleRecordRead] = []
     tires: List[VehicleRecordRead] = []
+    # Aktueller km-Stand des Fahrzeugs (für Reifen-km-Berechnung montierter Sätze)
+    current_odometer_km: Optional[float] = None
     errors: List = []
 
 
