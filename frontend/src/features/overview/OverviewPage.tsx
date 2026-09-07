@@ -163,16 +163,92 @@ export function OverviewPage() {
         <section className="overview-page__section" aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="overview-page__section-title">Kennzahlen</h2>
           <div className="overview-page__kpi-grid">
-            <KpiCard label="Geladene kWh" value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'} unit="kWh" icon={(p) => <Zap {...p} />} iconColor="var(--color-home)" horizontal />
-            <KpiCard label="Gesamtkosten" value={summary.total_cost_eur ? formatNumber(summary.total_cost_eur) : '—'} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
-            <KpiCard label="Ø Kosten/kWh" value={formatCostPerKWh(summary.avg_cost_per_kwh)} icon={(p) => <Activity {...p} />} iconColor="var(--color-primary)" horizontal />
+            <KpiCard
+              label="Geladene kWh"
+              value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'}
+              unit="kWh"
+              icon={(p) => <Zap {...p} />}
+              iconColor="var(--color-home)"
+              horizontal
+              status="good"
+              sparkData={statistics?.kpis?.daily_total_kwh && statistics?.kpis?.daily_charged_dates ? {
+                labels: statistics.kpis.daily_charged_dates,
+                values: statistics.kpis.daily_total_kwh,
+                movingAverage: statistics.kpis.daily_total_kwh.length >= 3
+                  ? movingAverage(statistics.kpis.daily_total_kwh, 7)
+                  : undefined,
+              } : undefined}
+              details={[
+                { label: 'Zuhause', value: `${summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh` },
+                { label: 'Extern', value: `${summary.external_energy_kwh ? formatNumber(summary.external_energy_kwh) : '—'} kWh` },
+                ...(summary.pv_kwh != null ? [{ label: 'PV-Anteil', value: `${formatNumber(summary.pv_kwh)} kWh (${summary.pv_share_pct?.toFixed(1) ?? '—'}%)`, emphasis: true }] : []),
+                { label: 'Sessions', value: summary.total_sessions ?? 0 },
+              ]}
+            />
+            <KpiCard
+              label="Gesamtkosten"
+              value={summary.total_cost_eur ? formatNumber(summary.total_cost_eur) : '—'}
+              unit="€"
+              icon={(p) => <Euro {...p} />}
+              iconColor="#f59e0b"
+              horizontal
+              status="neutral"
+              sparkData={statistics?.kpis?.daily_cost_eur && statistics?.kpis?.daily_cost_dates ? {
+                labels: statistics.kpis.daily_cost_dates,
+                values: statistics.kpis.daily_cost_eur,
+                movingAverage: statistics.kpis.daily_cost_eur.length >= 3
+                  ? movingAverage(statistics.kpis.daily_cost_eur, 7)
+                  : undefined,
+              } : undefined}
+              details={[
+                { label: 'Zuhause', value: `${summary.home_cost_eur ? formatNumber(summary.home_cost_eur) : '—'} €` },
+                { label: 'Extern', value: `${summary.external_cost_eur ? formatNumber(summary.external_cost_eur) : '—'} €` },
+                ...(summary.avg_cost_per_kwh != null ? [{ label: 'Ø / kWh', value: formatCostPerKWh(summary.avg_cost_per_kwh), emphasis: true }] : []),
+              ]}
+            />
+            <KpiCard
+              label="Ø Kosten/kWh"
+              value={formatCostPerKWh(summary.avg_cost_per_kwh)}
+              icon={(p) => <Activity {...p} />}
+              iconColor="var(--color-primary)"
+              horizontal
+              status="warn"
+              details={[
+                { label: 'Zuhause', value: `${summary.home_cost_eur ? formatNumber(summary.home_cost_eur) : '—'} €` },
+                { label: 'Extern', value: `${summary.external_cost_eur ? formatNumber(summary.external_cost_eur) : '—'} €` },
+              ]}
+            />
 
             {/* NEU: KPIs aus Statistics */}
             {statistics?.kpis?.avg_energy_per_session != null && (
-              <KpiCard label="Ø Energie / Session" value={formatNumber(statistics.kpis.avg_energy_per_session)} unit="kWh" icon={(p) => <Bolt {...p} />} iconColor="var(--color-home)" horizontal />
+              <KpiCard
+                label="Ø Energie / Session"
+                value={formatNumber(statistics.kpis.avg_energy_per_session)}
+                unit="kWh"
+                icon={(p) => <Bolt {...p} />}
+                iconColor="var(--color-home)"
+                horizontal
+                status="good"
+                details={[
+                  { label: 'Zuhause', value: `${summary.home_energy_kwh ? formatNumber(summary.home_energy_kwh) : '—'} kWh (${summary.home_sessions ?? 0} Sess.)` },
+                  { label: 'Extern', value: `${summary.external_energy_kwh ? formatNumber(summary.external_energy_kwh) : '—'} kWh (${summary.external_sessions ?? 0} Sess.)` },
+                ]}
+              />
             )}
             {statistics?.kpis?.avg_cost_per_session != null && (
-              <KpiCard label="Ø Kosten / Session" value={formatNumber(statistics.kpis.avg_cost_per_session)} unit="€" icon={(p) => <Euro {...p} />} iconColor="#f59e0b" horizontal />
+              <KpiCard
+                label="Ø Kosten / Session"
+                value={formatNumber(statistics.kpis.avg_cost_per_session)}
+                unit="€"
+                icon={(p) => <Euro {...p} />}
+                iconColor="#f59e0b"
+                horizontal
+                status="neutral"
+                details={[
+                  { label: 'Zuhause', value: `${summary.home_cost_eur ? formatNumber(summary.home_cost_eur) : '—'} € (${summary.home_sessions ?? 0} Sess.)` },
+                  { label: 'Extern', value: `${summary.external_cost_eur ? formatNumber(summary.external_cost_eur) : '—'} € (${summary.external_sessions ?? 0} Sess.)` },
+                ]}
+              />
             )}
 
             {/* Ladeverluste: TM used − added je Quelle (positiv = Verlust) */}
