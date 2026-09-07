@@ -156,6 +156,25 @@ export function OverviewPage() {
             <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
           </p>
         </div>
+        {/* Mobile: Zeitraum-Dropdown — sichtbar auf mobilen Geräten */}
+        <div className="overview-page__time-range-mobile">
+          <label htmlFor="overview-time-range" className="overview-page__time-range-label">
+            Zeitraum
+          </label>
+          <select
+            id="overview-time-range"
+            className="overview-page__time-range-select"
+            value={selectedRange}
+            onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
+          >
+            <option value="7d">7 Tage</option>
+            <option value="30d">30 Tage</option>
+            <option value="90d">90 Tage</option>
+            <option value="365d">365 Tage</option>
+            <option value="all">Alles</option>
+            <option value="custom">Benutzerdefiniert…</option>
+          </select>
+        </div>
       </header>
 
       {/* HEADLINE KPIs — die wichtigsten 5 Kennzahlen auf einen Blick */}
@@ -166,12 +185,22 @@ export function OverviewPage() {
         let totalPvKwh = 0;
         for (const s of sList) {
           const e = s.energy_kwh || 0;
+          const solarPct = s.solar_percentage;
           let pv = s.pv_kwh;
-          if (pv == null && s.solar_percentage != null && e > 0) {
-            pv = (s.solar_percentage / 100) * e;
+          
+          // Nur Sessions mit tatsächlichen PV-Daten (solar_percentage != null) zählen
+          // Sessions ohne PV-Daten (z.B. extern) werden als 0% PV gewertet
+          if (solarPct != null) {
+            if (pv == null && e > 0) {
+              pv = (solarPct / 100) * e;
+            }
+            totalEnergy += e;
+            totalPvKwh += (pv || 0);
+          } else {
+            // Keine PV-Daten → 0% PV (konservativ, z.B. öffentliche Ladestationen)
+            totalEnergy += e;
+            // pv stays 0
           }
-          totalEnergy += e;
-          totalPvKwh += (pv || 0);
         }
         const actualPvPct = totalEnergy > 0 ? (totalPvKwh / totalEnergy) * 100 : (summary.pv_share_pct || 0);
         const actualPvKwh = totalEnergy > 0 ? totalPvKwh : (summary.pv_kwh || 0);

@@ -27,6 +27,46 @@
   font-weight: 500;
 }
 
+/* Mobile: Zeitraum-Dropdown */
+.overview-page__time-range-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 140px;
+}
+
+.overview-page__time-range-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.overview-page__time-range-select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 0.5rem;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #111);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  padding-right: 2rem;
+}
+
+.overview-page__time-range-select:focus {
+  outline: none;
+  border-color: var(--color-primary, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
 /* Section */
 .overview-page__section {
   margin-bottom: 1.5rem;
@@ -592,6 +632,12 @@
   .overview-page__sessions-left,
   .overview-page__sessions-right {
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .overview-page__time-range-mobile {
+    display: flex;
   }
 }
 
