@@ -159,7 +159,25 @@ export function OverviewPage() {
       </header>
 
       {/* HEADLINE KPIs — die wichtigsten 5 Kennzahlen auf einen Blick */}
-      {summary && (
+      {summary && (() => {
+        // PV-Quote aus Sessions berechnen (Backend-Wert ist unzuverlässig)
+        const sList = sessions || [];
+        let totalEnergy = 0;
+        let totalPvKwh = 0;
+        for (const s of sList) {
+          const e = s.energy_kwh || 0;
+          let pv = s.pv_kwh;
+          if (pv == null && s.solar_percentage != null && e > 0) {
+            pv = (s.solar_percentage / 100) * e;
+          }
+          totalEnergy += e;
+          totalPvKwh += (pv || 0);
+        }
+        const actualPvPct = totalEnergy > 0 ? (totalPvKwh / totalEnergy) * 100 : (summary.pv_share_pct || 0);
+        const actualPvKwh = totalEnergy > 0 ? totalPvKwh : (summary.pv_kwh || 0);
+        const actualTotalEnergy = totalEnergy > 0 ? totalEnergy : (summary.total_charged_kwh || summary.total_energy_kwh || 0);
+
+        return (
         <section className="overview-page__section" aria-labelledby="headline-heading">
           <h2 id="headline-heading" className="overview-page__section-title">Auf einen Blick</h2>
           <div className="overview-page__kpi-grid">
@@ -246,7 +264,6 @@ export function OverviewPage() {
 
             {/* 4. Letzte Ladung (kWh + € + Wann) */}
             {(() => {
-              const sList = sessions || [];
               if (sList.length === 0) return null;
               const last = sList[0]; // sessions sind absteigend nach Datum
               const dateStr = last.date ? new Date(last.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '—';
@@ -268,32 +285,27 @@ export function OverviewPage() {
               );
             })()}
 
-            {/* 5. PV-Anteil der Ladevorgänge */}
-            {(() => {
-              const pv = summary.pv_share_pct;
-              const pvKwh = summary.pv_kwh;
-              if (pv == null) return null;
-              return (
-                <KpiCard
-                  label="PV-Anteil"
-                  value={pv.toFixed(1)}
-                  unit="%"
-                  icon={(p) => <Activity {...p} />}
-                  iconColor="#eab308"
-                  horizontal
-                  status={pv >= 80 ? 'good' : pv >= 50 ? 'neutral' : 'warn'}
-                  details={[
-                    ...(pvKwh != null ? [{ label: 'PV-kWh', value: `${formatNumber(pvKwh)} kWh` }] : []),
-                    ...(summary.total_charged_kwh != null && pvKwh != null
-                      ? [{ label: 'Netz', value: `${formatNumber(summary.total_charged_kwh - pvKwh)} kWh` }]
-                      : []),
-                  ]}
-                />
-              );
-            })()}
+            {/* 5. PV-Anteil — aus Sessions berechnet, nicht aus Backend */}
+            <KpiCard
+              label="PV-Anteil"
+              value={formatNumber(actualPvPct)}
+              unit="%"
+              icon={(p) => <Activity {...p} />}
+              iconColor="#eab308"
+              horizontal
+              status={actualPvPct >= 80 ? 'good' : actualPvPct >= 50 ? 'neutral' : 'warn'}
+              details={[
+                ...(actualPvKwh > 0 ? [{ label: 'PV-kWh', value: `${formatNumber(actualPvKwh)} kWh` }] : []),
+                ...(actualTotalEnergy > 0 && actualPvKwh > 0
+                  ? [{ label: 'Netz', value: `${formatNumber(actualTotalEnergy - actualPvKwh)} kWh` }]
+                  : []),
+                ...(sList.length > 0 ? [{ label: 'Sessions', value: `${sList.length}` }] : []),
+              ]}
+            />
           </div>
         </section>
-      )}
+        );
+      })()}
 
       {/* KPI CARDS */}
       {summary && (
