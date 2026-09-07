@@ -158,6 +158,143 @@ export function OverviewPage() {
         </div>
       </header>
 
+      {/* HEADLINE KPIs — die wichtigsten 5 Kennzahlen auf einen Blick */}
+      {summary && (
+        <section className="overview-page__section" aria-labelledby="headline-heading">
+          <h2 id="headline-heading" className="overview-page__section-title">Auf einen Blick</h2>
+          <div className="overview-page__kpi-grid">
+            {/* 1. Aktueller km-Stand */}
+            <KpiCard
+              label="Aktueller km-Stand"
+              value={(() => {
+                const odo = statistics?.kpis?.daily_odometer?.filter((v): v is number => v != null).slice(-1)[0];
+                if (odo != null) return formatNumber(odo);
+                if (summary.total_distance_km != null) return formatNumber(summary.total_distance_km);
+                return '—';
+              })()}
+              unit="km"
+              icon={(p) => <Gauge {...p} />}
+              iconColor="var(--color-primary)"
+              horizontal
+              status="good"
+              details={[
+                ...(summary.avg_distance_per_day_km != null
+                  ? [{ label: 'Ø / Tag', value: `${formatNumber(summary.avg_distance_per_day_km)} km` }]
+                  : []),
+                ...(summary.total_distance_km != null && summary.days_with_data != null && summary.days_with_data > 0
+                  ? [{ label: 'Tage', value: `${summary.days_with_data}` }]
+                  : []),
+              ]}
+            />
+
+            {/* 2. Ø Verbrauch letzte X Tage (kWh/100km) — TeslaMate-Style */}
+            {(() => {
+              const dailyKm = statistics?.kpis?.daily_km || [];
+              const dailyKwh = statistics?.kpis?.daily_kwh || [];
+              const totalKm = dailyKm.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+              if (totalKm <= 0) return null;
+              const totalKwh = dailyKwh.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+              const consumption = (totalKwh / totalKm) * 100;
+              return (
+                <KpiCard
+                  label="Ø Verbrauch"
+                  value={formatNumber(consumption)}
+                  unit="kWh/100km"
+                  icon={(p) => <Zap {...p} />}
+                  iconColor="var(--color-home)"
+                  horizontal
+                  status="good"
+                  sparkData={dailyKwh.length >= 3 ? {
+                    labels: statistics?.kpis?.daily_dates || [],
+                    values: dailyKm.map((km: number, i: number) => (km > 0 ? (dailyKwh[i] / km) * 100 : 0)),
+                    movingAverage: (() => {
+                      const per = dailyKm.map((km: number, i: number) => (km > 0 ? (dailyKwh[i] / km) * 100 : 0));
+                      return per.length >= 3 ? movingAverage(per, 7) : undefined;
+                    })(),
+                  } : undefined}
+                  details={[
+                    { label: 'Summe kWh', value: `${formatNumber(totalKwh)} kWh` },
+                    { label: 'Summe km', value: `${formatNumber(totalKm)} km` },
+                  ]}
+                />
+              );
+            })()}
+
+            {/* 3. Kosten pro 100 km (€) — wirtschaftliche Sicht */}
+            {(() => {
+              const dailyKm = statistics?.kpis?.daily_km || [];
+              const totalKm = dailyKm.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+              if (totalKm <= 0) return null;
+              const totalCost = summary.total_cost_eur || 0;
+              const costPer100 = (totalCost / totalKm) * 100;
+              return (
+                <KpiCard
+                  label="Kosten pro 100 km"
+                  value={formatNumber(costPer100)}
+                  unit="€"
+                  icon={(p) => <Euro {...p} />}
+                  iconColor="#f59e0b"
+                  horizontal
+                  status="warn"
+                  details={[
+                    { label: 'Summe Kosten', value: `${formatNumber(totalCost)} €` },
+                    { label: 'Pro km', value: `${(costPer100 / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} €` },
+                  ]}
+                />
+              );
+            })()}
+
+            {/* 4. Letzte Ladung (kWh + € + Wann) */}
+            {(() => {
+              const sList = sessions || [];
+              if (sList.length === 0) return null;
+              const last = sList[0]; // sessions sind absteigend nach Datum
+              const dateStr = last.date ? new Date(last.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '—';
+              return (
+                <KpiCard
+                  label="Letzte Ladung"
+                  value={last.energy_kwh != null ? formatNumber(last.energy_kwh) : '—'}
+                  unit="kWh"
+                  icon={(p) => <PlugZap {...p} />}
+                  iconColor="var(--color-external)"
+                  horizontal
+                  status="neutral"
+                  details={[
+                    { label: 'Datum', value: dateStr },
+                    ...(last.cost_eur != null ? [{ label: 'Kosten', value: `${formatNumber(last.cost_eur)} €` }] : []),
+                    ...(last.cost_per_kwh != null ? [{ label: '€/kWh', value: formatCostPerKWh(last.cost_per_kwh) }] : []),
+                  ]}
+                />
+              );
+            })()}
+
+            {/* 5. PV-Anteil der Ladevorgänge */}
+            {(() => {
+              const pv = summary.pv_share_pct;
+              const pvKwh = summary.pv_kwh;
+              if (pv == null) return null;
+              return (
+                <KpiCard
+                  label="PV-Anteil"
+                  value={pv.toFixed(1)}
+                  unit="%"
+                  icon={(p) => <Activity {...p} />}
+                  iconColor="#eab308"
+                  horizontal
+                  status={pv >= 80 ? 'good' : pv >= 50 ? 'neutral' : 'warn'}
+                  details={[
+                    ...(pvKwh != null ? [{ label: 'PV-kWh', value: `${formatNumber(pvKwh)} kWh` }] : []),
+                    ...(summary.total_charged_kwh != null && pvKwh != null
+                      ? [{ label: 'Netz', value: `${formatNumber(summary.total_charged_kwh - pvKwh)} kWh` }]
+                      : []),
+                  ]}
+                />
+              );
+            })()}
+          </div>
+        </section>
+      )}
+
       {/* KPI CARDS */}
       {summary && (
         <section className="overview-page__section" aria-labelledby="kpi-heading">
