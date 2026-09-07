@@ -147,6 +147,21 @@
   color: #16a34a;
 }
 
+.kpi-card__icon--efficiency {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.kpi-card__icon--cost {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.kpi-card__icon--pv {
+  background: #fef9c3;
+  color: #eab308;
+}
+
 .kpi-card__content {
   flex: 1;
   min-width: 0;
@@ -531,7 +546,7 @@
 .statistics-page__charts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 @media (max-width: 1024px) {
@@ -544,10 +559,9 @@
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 1rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  height: 100%;
 }
 
 .statistics-page__chart-subtitle {
@@ -555,6 +569,12 @@
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
+}
+
+.statistics-page__chart-wrapper {
+  position: relative;
+  height: 280px;
+  width: 100%;
 }
 
 @media (max-width: 1024px) {

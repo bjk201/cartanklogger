@@ -973,6 +973,423 @@ export function StatisticsPage() {
           </section>
         ) : null}
 
+        {/* ===== NEUE SEKTION 1: Fahrzeug-Effizienz (inline berechnet) ===== */}
+        {(() => {
+          const dailyKm = data?.kpis?.daily_km || [];
+          const dailyKwh = data?.kpis?.daily_kwh || [];
+          const totalKm = dailyKm.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+          if (totalKm <= 0) return null;
+          const totalKwh = dailyKwh.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+          const totalCost = data?.kpis?.total_cost_eur || 0;
+          const wallboxIn = data?.kpis?.tm_total_energy_added_kwh || 0;
+          const akkuOut = data?.kpis?.tm_total_energy_used_kwh || 0;
+          const pvKwh = data?.kpis?.pv_kwh || 0;
+          const avgPrice = data?.kpis?.avg_cost_per_kwh || 0;
+          const consumptionPer100km = (totalKwh / totalKm) * 100;
+          const costPerKmCent = (totalCost / totalKm) * 100;
+          const costPer100kmEur = (totalCost / totalKm) * 100;
+          const chargingEffPct = wallboxIn > 0 ? (akkuOut / wallboxIn) * 100 : 0;
+          const pvSavingsEur = pvKwh * (0.30 - avgPrice);
+          return (
+            <section className="statistics-page__section" aria-labelledby="efficiency-heading">
+              <h2 id="efficiency-heading" className="statistics-page__section-title">
+                Fahrzeug-Effizienz
+              </h2>
+              <div className="statistics-page__kpi-grid">
+                <article className="kpi-card">
+                  <div className="kpi-card__icon kpi-card__icon--efficiency" aria-hidden="true">
+                    <Gauge size={24} />
+                  </div>
+                  <div className="kpi-card__content">
+                    <span className="kpi-card__label">Ø Verbrauch</span>
+                    <span className="kpi-card__value">
+                      {consumptionPer100km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh/100km
+                    </span>
+                    <span className="kpi-card__value-sub">
+                      {totalKwh.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh · {totalKm.toLocaleString('de-DE', { maximumFractionDigits: 0 })} km
+                    </span>
+                  </div>
+                </article>
+                <article className="kpi-card">
+                  <div className="kpi-card__icon kpi-card__icon--cost" aria-hidden="true">
+                    <DollarSign size={24} />
+                  </div>
+                  <div className="kpi-card__content">
+                    <span className="kpi-card__label">Kosten pro km</span>
+                    <span className="kpi-card__value">
+                      {costPerKmCent.toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct/km
+                    </span>
+                    <span className="kpi-card__value-sub">
+                      {costPer100kmEur.toLocaleString('de-DE', { maximumFractionDigits: 2 })} € pro 100 km
+                    </span>
+                  </div>
+                </article>
+                <article className="kpi-card">
+                  <div className="kpi-card__icon kpi-card__icon--pv" aria-hidden="true">
+                    <Sun size={24} />
+                  </div>
+                  <div className="kpi-card__content">
+                    <span className="kpi-card__label">PV-Ersparnis</span>
+                    <span className="kpi-card__value">
+                      {pvSavingsEur.toLocaleString('de-DE', { maximumFractionDigits: 2 })} €
+                    </span>
+                    <span className="kpi-card__value-sub">
+                      {pvKwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} PV-kWh × ca. 30 ct/kWh Differenz
+                    </span>
+                  </div>
+                </article>
+                <article className="kpi-card">
+                  <div className="kpi-card__icon kpi-card__icon--loss" aria-hidden="true">
+                    <Activity size={24} />
+                  </div>
+                  <div className="kpi-card__content">
+                    <span className="kpi-card__label">Lade-Wirkungsgrad</span>
+                    <span className="kpi-card__value">
+                      {chargingEffPct > 0
+                        ? `${chargingEffPct.toLocaleString('de-DE', { maximumFractionDigits: 1 })} %`
+                        : '—'}
+                    </span>
+                    <span className="kpi-card__value-sub">
+                      Akku/Wallbox · inkl. Ladeverluste
+                    </span>
+                  </div>
+                </article>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ===== NEUE SEKTION 2: Kostenstruktur (inline) ===== */}
+        <section className="statistics-page__section" aria-labelledby="cost-compare-heading">
+          <h2 id="cost-compare-heading" className="statistics-page__section-title">
+            Kostenstruktur — Home vs. Extern
+          </h2>
+          <div className="statistics-page__kpi-grid">
+            <article className="kpi-card">
+              <div className="kpi-card__icon kpi-card__icon--home" aria-hidden="true">
+                <Zap size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Home-Preis</span>
+                <span className="kpi-card__value">
+                  {(() => {
+                    const k = kpis.home_energy_kwh || 0;
+                    const c = kpis.home_cost_eur || 0;
+                    return k > 0
+                      ? `${(c / k).toLocaleString('de-DE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/kWh`
+                      : '—';
+                  })()}
+                </span>
+                <span className="kpi-card__value-sub">
+                  {(kpis.home_energy_kwh || 0).toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh · {(kpis.home_cost_eur || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} €
+                </span>
+              </div>
+            </article>
+            <article className="kpi-card">
+              <div className="kpi-card__icon kpi-card__icon--external" aria-hidden="true">
+                <BarChart2 size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Extern-Preis</span>
+                <span className="kpi-card__value">
+                  {(() => {
+                    const k = kpis.external_energy_kwh || 0;
+                    const c = kpis.external_cost_eur || 0;
+                    return k > 0
+                      ? `${(c / k).toLocaleString('de-DE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/kWh`
+                      : '— keine externen Sessions';
+                  })()}
+                </span>
+                <span className="kpi-card__value-sub">
+                  {(kpis.external_energy_kwh || 0) > 0
+                    ? `${(kpis.external_energy_kwh || 0).toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh · ${(kpis.external_cost_eur || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} €`
+                    : 'SuC / HPC derzeit nicht aktiv'}
+                </span>
+              </div>
+            </article>
+            <article className="kpi-card">
+              <div className="kpi-card__icon" aria-hidden="true">
+                <TrendingUp size={24} />
+              </div>
+              <div className="kpi-card__content">
+                <span className="kpi-card__label">Ø alle Sessions</span>
+                <span className="kpi-card__value">
+                  {(kpis.avg_cost_per_kwh || 0).toLocaleString('de-DE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/kWh
+                </span>
+                <span className="kpi-card__value-sub">
+                  gewichteter Mittelwert
+                </span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        {/* ===== NEUE SEKTION 3: Ladeverhalten (inline) ===== */}
+        <section className="statistics-page__section" aria-labelledby="charging-behavior-heading">
+          <h2 id="charging-behavior-heading" className="statistics-page__section-title">
+            Ladeverhalten
+          </h2>
+          <div className="statistics-page__kpi-grid">
+            {(() => {
+              const totalSessions = kpis.total_sessions || 0;
+              const chargeDates = kpis.daily_charged_dates || kpis.daily_dates || [];
+              let daySpan = 1;
+              if (Array.isArray(chargeDates) && chargeDates.length > 1) {
+                const first = new Date(chargeDates[0]).getTime();
+                const last = new Date(chargeDates[chargeDates.length - 1]).getTime();
+                if (!isNaN(first) && !isNaN(last) && last > first) {
+                  daySpan = (last - first) / (1000 * 60 * 60 * 24) + 1;
+                }
+              }
+              const sessionsPerWeek = daySpan > 0 ? (totalSessions / daySpan) * 7 : 0;
+              const allCharges = [
+                ...(kpis.daily_home_kwh || []),
+                ...(kpis.daily_external_kwh || []),
+              ].filter((v) => Number(v) > 0);
+              const sorted = [...allCharges].sort((a, b) => a - b);
+              const medianKwh = sorted.length > 0
+                ? (sorted.length % 2 !== 0
+                    ? sorted[(sorted.length - 1) / 2]
+                    : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)
+                : 0;
+              const maxChargeKwh = sorted.length > 0 ? sorted[sorted.length - 1] : 0;
+              const minChargeKwh = sorted.length > 0 ? sorted[0] : 0;
+              return (
+                <>
+                  <article className="kpi-card">
+                    <div className="kpi-card__icon" aria-hidden="true">
+                      <Hash size={24} />
+                    </div>
+                    <div className="kpi-card__content">
+                      <span className="kpi-card__label">Sessions pro Woche</span>
+                      <span className="kpi-card__value">
+                        {sessionsPerWeek.toLocaleString('de-DE', { maximumFractionDigits: 1 })}
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        über {daySpan.toLocaleString('de-DE', { maximumFractionDigits: 0 })} Tage · {totalSessions} gesamt
+                      </span>
+                    </div>
+                  </article>
+                  <article className="kpi-card">
+                    <div className="kpi-card__icon" aria-hidden="true">
+                      <Battery size={24} />
+                    </div>
+                    <div className="kpi-card__content">
+                      <span className="kpi-card__label">Median pro Session</span>
+                      <span className="kpi-card__value">
+                        {medianKwh > 0
+                          ? `${medianKwh.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`
+                          : '—'}
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        robuster Mittelwert (Ausreißer-unempfindlich)
+                      </span>
+                    </div>
+                  </article>
+                  <article className="kpi-card">
+                    <div className="kpi-card__icon" aria-hidden="true">
+                      <TrendingUpIcon size={24} />
+                    </div>
+                    <div className="kpi-card__content">
+                      <span className="kpi-card__label">Größte Session</span>
+                      <span className="kpi-card__value">
+                        {maxChargeKwh > 0
+                          ? `${maxChargeKwh.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`
+                          : '—'}
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        {kpis.max_energy_session_id ? `Session #${kpis.max_energy_session_id}` : 'aus allen Ladevorgängen'}
+                      </span>
+                    </div>
+                  </article>
+                  <article className="kpi-card">
+                    <div className="kpi-card__icon" aria-hidden="true">
+                      <TrendingDown size={24} />
+                    </div>
+                    <div className="kpi-card__content">
+                      <span className="kpi-card__label">Kleinste Session</span>
+                      <span className="kpi-card__value">
+                        {minChargeKwh > 0
+                          ? `${minChargeKwh.toLocaleString('de-DE', { maximumFractionDigits: 1 })} kWh`
+                          : '—'}
+                      </span>
+                      <span className="kpi-card__value-sub">
+                        Topping-Up vs. Voll-Ladung
+                      </span>
+                    </div>
+                  </article>
+                </>
+              );
+            })()}
+          </div>
+        </section>
+
+        {/* ===== NEUE SEKTION 4: Monatsvergleich (inline aggregiert) ===== */}
+        {(() => {
+          try {
+            const dates = Array.isArray(kpis.daily_dates) ? kpis.daily_dates : [];
+            const kwhArr = Array.isArray(kpis.daily_kwh) ? kpis.daily_kwh : [];
+            const kmArr = Array.isArray(kpis.daily_km) ? kpis.daily_km : [];
+            const chargeDates = Array.isArray(kpis.daily_charged_dates) ? kpis.daily_charged_dates : [];
+            const homeKwh = Array.isArray(kpis.daily_home_kwh) ? kpis.daily_home_kwh : [];
+            const extKwh = Array.isArray(kpis.daily_external_kwh) ? kpis.daily_external_kwh : [];
+            const costDates = Array.isArray(kpis.daily_cost_dates) ? kpis.daily_cost_dates : [];
+            const costEur = Array.isArray(kpis.daily_cost_eur) ? kpis.daily_cost_eur : [];
+            if (dates.length === 0 && chargeDates.length === 0) return null;
+
+            const pvMap: Record<string, number> = {};
+            if (Array.isArray(kpis.monthly_pv)) {
+              kpis.monthly_pv.forEach((m: any) => { if (m && m.month) pvMap[m.month] = m.pv_pct ?? 0; });
+            }
+            const mKwh: Record<string, number> = {};
+            const mKm: Record<string, number> = {};
+            const mCharged: Record<string, number> = {};
+            const mCost: Record<string, number> = {};
+            const fmt = (d: string) => (d && d.length >= 7) ? d.slice(0, 7) : '';
+            dates.forEach((d: string, i: number) => {
+              const m = fmt(d); if (!m) return;
+              mKwh[m] = (mKwh[m] || 0) + (Number(kwhArr[i]) || 0);
+              mKm[m] = (mKm[m] || 0) + (Number(kmArr[i]) || 0);
+            });
+            chargeDates.forEach((d: string, i: number) => {
+              const m = fmt(d); if (!m) return;
+              mCharged[m] = (mCharged[m] || 0) + (Number(homeKwh[i]) || 0) + (Number(extKwh[i]) || 0);
+            });
+            costDates.forEach((d: string, i: number) => {
+              const m = fmt(d); if (!m) return;
+              mCost[m] = (mCost[m] || 0) + (Number(costEur[i]) || 0);
+            });
+            const months = Array.from(new Set([...Object.keys(mKwh), ...Object.keys(mCharged)])).sort();
+            if (months.length === 0) return null;
+            const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+            const labels = months.map((m) => {
+              const mo = parseInt(m.slice(5, 7), 10);
+              return isNaN(mo) || mo < 1 || mo > 12 ? m : `${monthNames[mo - 1]} ${m.slice(2, 4)}`;
+            });
+            const consumption = months.map((m) => (mKm[m] || 0) > 0 ? ((mKwh[m] || 0) / mKm[m]) * 100 : 0);
+            const costPerKm = months.map((m) => (mKm[m] || 0) > 0 ? ((mCost[m] || 0) / mKm[m]) * 100 : 0);
+            const charged = months.map((m) => mCharged[m] || 0);
+            const pvPct = months.map((m) => pvMap[m] || 0);
+
+            const consumptionData = {
+              labels,
+              datasets: [{
+                label: 'Verbrauch (kWh/100km)',
+                data: consumption,
+                backgroundColor: 'rgba(59, 130, 246, 0.75)',
+                borderColor: '#2563eb',
+                borderWidth: 1.5,
+                borderRadius: 4,
+              }],
+            };
+            const costData = {
+              labels,
+              datasets: [{
+                label: 'Kosten (ct/km)',
+                data: costPerKm,
+                backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                borderColor: '#d97706',
+                borderWidth: 1.5,
+                borderRadius: 4,
+              }],
+            };
+            const chargedData = {
+              labels,
+              datasets: [
+                {
+                  label: 'Geladen (kWh)',
+                  data: charged,
+                  backgroundColor: 'rgba(34, 197, 94, 0.75)',
+                  borderColor: '#16a34a',
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  yAxisID: 'y',
+                },
+                {
+                  label: 'PV-Anteil (%)',
+                  data: pvPct,
+                  type: 'line' as const,
+                  borderColor: '#f59e0b',
+                  backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                  borderWidth: 2.5,
+                  fill: false,
+                  tension: 0.3,
+                  pointRadius: 5,
+                  pointHoverRadius: 7,
+                  pointBackgroundColor: '#f59e0b',
+                  yAxisID: 'y1',
+                },
+              ],
+            };
+            const barOptions = {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: true, position: 'top' as const, labels: { usePointStyle: true, padding: 20, font: { size: 13 } } },
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#666' } },
+                y: { beginAtZero: true, grid: { color: '#e0e0e0' }, ticks: { font: { size: 11 }, color: '#444' } },
+              },
+            };
+            const chargedOptions = {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: true, position: 'top' as const, labels: { usePointStyle: true, padding: 20, font: { size: 13 } } },
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#666' } },
+                y: { beginAtZero: true, title: { display: true, text: 'kWh' }, grid: { color: '#e0e0e0' }, ticks: { font: { size: 11 }, color: '#444' } },
+                y1: { beginAtZero: true, max: 100, position: 'right' as const, title: { display: true, text: 'PV %' }, grid: { drawOnChartArea: false }, ticks: { font: { size: 11 }, color: '#444' } },
+              },
+            };
+
+            return (
+              <section className="statistics-page__section" aria-labelledby="monthly-compare-heading">
+                <h2 id="monthly-compare-heading" className="statistics-page__section-title">
+                  Monatsvergleich
+                </h2>
+                <div className="statistics-page__charts-grid">
+                  <div className="statistics-page__chart-card">
+                    <div className="statistics-page__chart-header">
+                      <h3 className="statistics-page__chart-subtitle">Verbrauch pro Monat (kWh/100km)</h3>
+                    </div>
+                    <div className="statistics-page__chart-container">
+                      <div className="statistics-page__chart-wrapper">
+                        <Bar data={consumptionData as any} options={barOptions as any} aria-label={`Monatlicher Verbrauch über ${labels.length} Monate`} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="statistics-page__chart-card">
+                    <div className="statistics-page__chart-header">
+                      <h3 className="statistics-page__chart-subtitle">Kosten pro Monat (ct/km)</h3>
+                    </div>
+                    <div className="statistics-page__chart-container">
+                      <div className="statistics-page__chart-wrapper">
+                        <Bar data={costData as any} options={barOptions as any} aria-label={`Monatliche Kosten über ${labels.length} Monate`} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="statistics-page__chart-card">
+                    <div className="statistics-page__chart-header">
+                      <h3 className="statistics-page__chart-subtitle">Lade-Energie pro Monat + PV-Anteil</h3>
+                    </div>
+                    <div className="statistics-page__chart-container">
+                      <div className="statistics-page__chart-wrapper">
+                        <Bar data={chargedData as any} options={chargedOptions as any} aria-label={`Lade-Energie und PV-Anteil über ${labels.length} Monate`} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            );
+          } catch (e) {
+            console.error('[StatisticsPage] monthly section error:', e);
+            return null;
+          }
+        })()}
+
         {/* Energy Distribution */}
         <section className="statistics-page__section" aria-labelledby="energy-dist-heading">
           <h2 id="energy-dist-heading" className="statistics-page__section-title">
