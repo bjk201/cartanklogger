@@ -133,9 +133,9 @@ def get_sessions(
         elif s.solar_percentage is not None and s.energy_kwh is not None and s.energy_kwh > 0:
             # PV aus Solar-Percentage berechnen
             pv_kwh = round(s.energy_kwh * s.solar_percentage / 100, 2)
-        elif s.energy_kwh is not None and s.energy_kwh > 0:
-            # Fallback: gesamter Energieverbrauch (für externe Sessions)
-            pv_kwh = s.energy_kwh
+        elif s.source_type == "external" and s.energy_kwh is not None and s.energy_kwh > 0:
+            # Externe Sessions (TM): keine PV → pv_kwh = 0 (nicht energy_kwh!)
+            pv_kwh = 0.0
 
         if s.cost_per_kwh is not None and s.cost_per_kwh > 0:
             # Bereits gespeicherte Kosten pro kWh

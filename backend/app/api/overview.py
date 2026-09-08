@@ -236,11 +236,20 @@ async def get_overview_summary(
     days_count = len(days_with_distance) if days_with_distance else 0
     avg_distance_per_day = round(total_distance / days_count, 1) if days_count > 0 and total_distance > 0 else None
 
-    # Calculate PV share: PV kWh from EVCC home sessions / (home kWh + external kWh) * 100
+    # Calculate PV share: PV kWh from actual session data (solar_percentage × energy_kwh),
+    # NOT from home_energy (which is total home energy, not just PV).
+    # Sessions without solar_percentage (e.g. external/TM) count as 0% PV.
+    total_pv_kwh = 0.0
+    for s in home_sessions_list:
+        if s.pv_kwh is not None and s.pv_kwh > 0:
+            total_pv_kwh += s.pv_kwh
+        elif s.solar_percentage is not None and s.energy_kwh is not None and s.energy_kwh > 0:
+            total_pv_kwh += round(s.energy_kwh * s.solar_percentage / 100, 2)
+
     total_charged = home_energy + external_energy
-    if total_charged > 0 and home_energy > 0:
-        pv_share_pct = round((home_energy / total_charged) * 100, 1)
-        pv_kwh = round(home_energy, 2)
+    if total_charged > 0 and total_pv_kwh > 0:
+        pv_share_pct = round((total_pv_kwh / total_charged) * 100, 1)
+        pv_kwh = round(total_pv_kwh, 2)
         total_charged_kwh = round(total_charged, 2)
     else:
         pv_share_pct = None

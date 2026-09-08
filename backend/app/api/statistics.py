@@ -397,9 +397,29 @@ async def get_statistics(
         stats['kpis']['trip_avg_distance_km'] = None
 
     # Calculate PV share of all charging sessions
-    # Formula: PV_kWh from EVCC Home-Sessions / (EVCC Home-kWh + externe TM-kWh) * 100
-    # Uses charge_energy_added from TM (not energy_kwh which may differ)
-    total_pv_kwh = stats["energy_by_source"].get("home", 0.0)  # EVCC home sessions include PV data
+    # PV kWh from actual session data (solar_percentage × energy_kwh),
+    # NOT from home_energy (which is total home energy, not just PV).
+    from sqlalchemy import func as sql_func
+    from app.models.session import SessionModel as SM
+    pv_q = db.query(
+        sql_func.coalesce(sql_func.sum(
+            sql_func.case(
+                (SM.pv_kwh.isnot(None) & (SM.pv_kwh > 0), SM.pv_kwh),
+                (SM.solar_percentage.isnot(None) & SM.energy_kwh.isnot(None) & (SM.energy_kwh > 0),
+                 SM.energy_kwh * SM.solar_percentage / 100.0),
+                else_=0.0
+            )
+        ), 0.0).label('total_pv')
+    ).filter(SM.source_type == 'home')
+    if range_days:
+        from datetime import datetime as dt2, timezone as tz2, timedelta as td2
+        pv_q = pv_q.filter(SM.date >= dt2.now(tz2.utc) - td2(days=range_days))
+    if from_date:
+        pv_q = pv_q.filter(sql_func.date(SM.date) >= from_date)
+    if to_date:
+        pv_q = pv_q.filter(sql_func.date(SM.date) <= to_date)
+    total_pv_kwh = float(pv_q.first()[0] or 0.0)
+
     total_external_kwh = stats["energy_by_source"].get("external", 0.0)
     total_charged = total_pv_kwh + total_external_kwh
     if total_charged > 0 and total_pv_kwh > 0:
