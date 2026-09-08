@@ -240,7 +240,7 @@ export function OverviewPage() {
               ]}
             />
 
-            {/* 2. Ø Verbrauch letzte X Tage (kWh/100km) — TeslaMate-Style */}
+            {/* 2. Verbrauch + Kosten pro 100 km — kombinierte Kachel */}
             {(() => {
               const dailyKm = statistics?.kpis?.daily_km || [];
               const dailyKwh = statistics?.kpis?.daily_kwh || [];
@@ -248,54 +248,29 @@ export function OverviewPage() {
               if (totalKm <= 0) return null;
               const totalKwh = dailyKwh.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
               const consumption = (totalKwh / totalKm) * 100;
+              const totalCost = summary.total_cost_eur || 0;
+              const costPer100 = (totalCost / totalKm) * 100;
               return (
                 <KpiCard
-                  label="Ø Verbrauch"
+                  label="Verbrauch + Kosten / 100 km"
                   value={formatNumber(consumption)}
                   unit="kWh/100km"
                   icon={(p) => <Zap {...p} />}
                   iconColor="var(--color-home)"
                   horizontal
                   status="good"
-                  sparkData={dailyKwh.length >= 3 ? {
-                    labels: statistics?.kpis?.daily_dates || [],
-                    values: dailyKm.map((km: number, i: number) => (km > 0 ? (dailyKwh[i] / km) * 100 : 0)),
-                    movingAverage: (() => {
-                      const per = dailyKm.map((km: number, i: number) => (km > 0 ? (dailyKwh[i] / km) * 100 : 0));
-                      return per.length >= 3 ? movingAverage(per, 7) : undefined;
-                    })(),
-                  } : undefined}
                   details={[
-                    { label: 'Summe kWh', value: `${formatNumber(totalKwh)} kWh` },
+                    { label: 'Ø Verbrauch', value: `${formatNumber(consumption)} kWh/100km` },
+                    { label: 'Ø Kosten', value: `${formatNumber(costPer100)} €/100km`, emphasis: true },
                     { label: 'Summe km', value: `${formatNumber(totalKm)} km` },
+                    { label: 'Summe kWh', value: `${formatNumber(totalKwh)} kWh` },
+                    { label: 'Summe Kosten', value: `${formatNumber(totalCost)} €` },
                   ]}
                 />
               );
             })()}
 
-            {/* 3. Kosten pro 100 km (€) — wirtschaftliche Sicht */}
-            {(() => {
-              const dailyKm = statistics?.kpis?.daily_km || [];
-              const totalKm = dailyKm.reduce((s: number, v: any) => s + (Number(v) || 0), 0);
-              if (totalKm <= 0) return null;
-              const totalCost = summary.total_cost_eur || 0;
-              const costPer100 = (totalCost / totalKm) * 100;
-              return (
-                <KpiCard
-                  label="Kosten pro 100 km"
-                  value={formatNumber(costPer100)}
-                  unit="€"
-                  icon={(p) => <Euro {...p} />}
-                  iconColor="#f59e0b"
-                  horizontal
-                  status="warn"
-                  details={[
-                    { label: 'Summe Kosten', value: `${formatNumber(totalCost)} €` },
-                    { label: 'Pro km', value: `${(costPer100 / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} €` },
-                  ]}
-                />
-              );
-            })()}
+            
 
             {/* 4. Letzte Ladung (kWh + € + Wann) */}
             {(() => {
