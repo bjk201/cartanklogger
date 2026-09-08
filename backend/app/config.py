@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # TeslaMate Postgres (kontrollierter Kosten-Writeback, NIEMALS ans Frontend)
     TESLAMATE_DB_HOST: str = ""
-    TESLAMATE_DB_PORT: int = 5432
+    TESLAMATE_DB_PORT: str = "5432"
     TESLAMATE_DB_NAME: str = "teslamate"
     TESLAMATE_DB_USER: str = "teslamate"
     TESLAMATE_DB_PASSWORD: str = ""
