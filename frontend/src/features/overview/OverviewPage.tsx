@@ -179,17 +179,20 @@ export function OverviewPage() {
 
       {/* HEADLINE KPIs — die wichtigsten 5 Kennzahlen auf einen Blick */}
       {summary && (() => {
-        // PV-Quote aus Sessions berechnen (Backend-Wert ist unzuverlässig)
+        // PV-Quote: primär aus Backend (korrigiert), Fallback aus Sessions
         const sList = sessions || [];
+        const backendPvKwh = summary.pv_kwh;
+        const backendPvPct = summary.pv_share_pct;
+        const backendTotalEnergy = summary.total_charged_kwh || summary.total_energy_kwh || 0;
+
+        // Fallback: PV aus Sessions berechnen (falls Backend-Werte fehlen)
         let totalEnergy = 0;
         let totalPvKwh = 0;
         for (const s of sList) {
           const e = s.energy_kwh || 0;
           const solarPct = s.solar_percentage;
           let pv = s.pv_kwh;
-          
-          // Nur Sessions mit tatsächlichen PV-Daten (solar_percentage != null) zählen
-          // Sessions ohne PV-Daten (z.B. extern) werden als 0% PV gewertet
+
           if (solarPct != null) {
             if (pv == null && e > 0) {
               pv = (solarPct / 100) * e;
@@ -197,14 +200,17 @@ export function OverviewPage() {
             totalEnergy += e;
             totalPvKwh += (pv || 0);
           } else {
-            // Keine PV-Daten → 0% PV (konservativ, z.B. öffentliche Ladestationen)
+            // Keine PV-Daten → 0% PV (z.B. externe Ladestationen)
             totalEnergy += e;
-            // pv stays 0
           }
         }
-        const actualPvPct = totalEnergy > 0 ? (totalPvKwh / totalEnergy) * 100 : (summary.pv_share_pct || 0);
-        const actualPvKwh = totalEnergy > 0 ? totalPvKwh : (summary.pv_kwh || 0);
-        const actualTotalEnergy = totalEnergy > 0 ? totalEnergy : (summary.total_charged_kwh || summary.total_energy_kwh || 0);
+
+        const actualPvPct = backendPvPct != null ? backendPvPct
+          : (totalEnergy > 0 ? (totalPvKwh / totalEnergy) * 100 : 0);
+        const actualPvKwh = backendPvKwh != null ? backendPvKwh
+          : (totalEnergy > 0 ? totalPvKwh : 0);
+        const actualTotalEnergy = backendTotalEnergy > 0 ? backendTotalEnergy
+          : (totalEnergy > 0 ? totalEnergy : 0);
 
         return (
         <section className="overview-page__section" aria-labelledby="headline-heading">
