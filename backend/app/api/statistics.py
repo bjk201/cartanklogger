@@ -418,7 +418,10 @@ async def get_statistics(
         pv_q = pv_q.filter(sql_func.date(SM.date) >= from_date)
     if to_date:
         pv_q = pv_q.filter(sql_func.date(SM.date) <= to_date)
-    total_pv_kwh = float(pv_q.first()[0] or 0.0)
+    total_pv_kwh = 0.0
+    pv_row = pv_q.first()
+    if pv_row is not None and pv_row[0] is not None:
+        total_pv_kwh = float(pv_row[0])
 
     total_external_kwh = stats["energy_by_source"].get("external", 0.0)
     total_charged = total_pv_kwh + total_external_kwh
