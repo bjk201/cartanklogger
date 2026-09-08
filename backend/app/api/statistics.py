@@ -399,11 +399,11 @@ async def get_statistics(
     # Calculate PV share of all charging sessions
     # PV kWh from actual session data (solar_percentage × energy_kwh),
     # NOT from home_energy (which is total home energy, not just PV).
-    from sqlalchemy import func as sql_func
+    from sqlalchemy import case as sql_case, func as sql_func
     from app.models.session import SessionModel as SM
     pv_q = db.query(
         sql_func.coalesce(sql_func.sum(
-            sql_func.case(
+            sql_case(
                 (SM.pv_kwh.isnot(None) & (SM.pv_kwh > 0), SM.pv_kwh),
                 (SM.solar_percentage.isnot(None) & SM.energy_kwh.isnot(None) & (SM.energy_kwh > 0),
                  SM.energy_kwh * SM.solar_percentage / 100.0),
