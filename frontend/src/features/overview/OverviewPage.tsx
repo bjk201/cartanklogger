@@ -177,7 +177,7 @@ export function OverviewPage() {
         </div>
       </header>
 
-      {/* HEADLINE KPIs — die wichtigsten 5 Kennzahlen auf einen Blick */}
+      {/* HEADLINE KPIs — die wichtigsten Kennzahlen auf einen Blick */}
       {summary && (() => {
         // PV-Quote: primär aus Backend (korrigiert), Fallback aus Sessions
         const sList = sessions || [];

@@ -109,29 +109,29 @@
 .overview-page__kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
-  grid-auto-rows: minmax(60px, auto);
+  gap: 1rem;
+  grid-auto-rows: minmax(80px, auto);
   align-items: stretch;
 }
 
 .overview-page__kpi-grid--single {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: minmax(60px, auto);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(80px, auto);
 }
 
 .overview-page__kpi-grid--km {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
-  grid-auto-rows: minmax(60px, auto);
+  gap: 1rem;
+  grid-auto-rows: minmax(80px, auto);
   align-items: stretch;
 }
 
 .overview-page__kpi-grid--km > *:only-child {
-  max-width: 300px;
+  max-width: 420px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .overview-page__kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -141,14 +141,19 @@
   .overview-page__kpi-grid--km {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .kpi-card--double-width { grid-column: span 2; }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .overview-page__kpi-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .overview-page__kpi-grid--single {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .kpi-card--double-width {
+    grid-column: span 1;
+    max-height: none;
   }
 }
 
@@ -180,7 +185,7 @@
 /* ===== Trend Charts ===== */
 .overview-page__trends-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -204,7 +209,7 @@
 
 .overview-page__trend-chart-container {
   width: 100%;
-  height: 150px;
+  height: 220px;
   position: relative;
 }
 
@@ -215,27 +220,35 @@
   font-size: 0.8125rem;
 }
 
+@media (max-width: 1100px) {
+  .overview-page__trends-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .overview-page__trend-chart-container {
+    height: 200px;
+  }
+}
+
 @media (max-width: 768px) {
   .overview-page__trends-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-
   .overview-page__trend-chart-container {
-    height: 140px;
+    height: 180px;
   }
 }
 
 @media (max-width: 480px) {
   .overview-page__trend-chart-container {
-    height: 130px;
+    height: 160px;
   }
 }
 
 /* ===== Pie Chart Wrapper ===== */
 .pie-chart-wrapper {
   position: relative;
-  width: 110px;
-  height: 110px;
+  width: 130px;
+  height: 130px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -245,10 +258,9 @@
 /* ===== Split Chart Layout ===== */
 .overview-page__split-chart {
   display: grid;
-  /* 1fr | pie | 1fr → donut always exactly centered, independent of side content width */
-  grid-template-columns: 1fr minmax(110px, 150px) 1fr;
+  grid-template-columns: 1fr minmax(130px, 160px) 1fr;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   flex: 1;
   min-height: 0;
   height: 100%;
@@ -258,7 +270,7 @@
   justify-self: start;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .overview-page__split-center {
@@ -270,14 +282,14 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  max-height: 140px;
+  max-height: 160px;
 }
 
 .overview-page__split-right {
   justify-self: end;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
   align-items: flex-end;
   justify-content: center;
 }
@@ -295,8 +307,8 @@
 }
 
 .overview-page__split-icon {
-  width: 50px;
-  height: 50px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -325,13 +337,13 @@
 }
 
 .overview-page__split-value {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .overview-page__split-sub {
-  font-size: 0.6875rem;
+  font-size: 0.7rem;
   color: var(--color-text-muted);
 }
 
@@ -378,17 +390,17 @@
 
 /* ===== PV Radar ===== */
 .overview-page__radar-card {
-  /* Breite einer KPI-Kachel (4 Spalten, 0.75rem Gap), aber doppelte Höhe */
-  max-width: calc((100% - 2.25rem) / 4);
+  /* Breite einer KPI-Kachel (3 Spalten, 1rem Gap), aber doppelte Höhe */
+  max-width: calc((100% - 2rem) / 3);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .overview-page__radar-card {
-    max-width: calc((100% - 0.75rem) / 2);
+    max-width: calc((100% - 1rem) / 2);
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .overview-page__radar-card {
     max-width: none;
   }
@@ -397,8 +409,8 @@
 .overview-page__radar-wrapper {
   position: relative;
   width: 100%;
-  max-width: 320px;
-  height: 300px;
+  max-width: 360px;
+  height: 340px;
   margin: 0 auto;
 }
 
@@ -414,14 +426,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.25rem 0.5rem 0.125rem;
+  gap: 1.5rem;
+  padding: 0.375rem 0.5rem 0.25rem;
 }
 
 .overview-page__losses-item {
   display: flex;
   flex-direction: column;
-  gap: 0.0625rem;
+  gap: 0.125rem;
 }
 
 .overview-page__losses-item--total {
@@ -433,7 +445,7 @@
 }
 
 .overview-page__losses-key {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -441,7 +453,7 @@
 }
 
 .overview-page__losses-val {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   color: var(--color-text);
   line-height: 1.2;
@@ -451,7 +463,6 @@
   color: #ef4444;
 }
 
-/* Neutrale Akzentfarbe für Mittelwerte (z. B. Kilometer-Kachel) */
 /* ===== Kilometer-Kachel mit Hintergrund-Chart ===== */
 .overview-page__km-card {
   position: relative;
