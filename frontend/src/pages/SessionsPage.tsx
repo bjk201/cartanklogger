@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Edit2, Link2, ChevronRight as ChevronRightIcon, ExternalLink, Trash2 } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Edit2, Link2, ChevronRight as ChevronRightIcon, ExternalLink, Trash2, Database } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../app/TimeRangeContext';
 import { SessionsTable } from '../components/SessionsTable';
 import { SessionMobileCard } from '../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateViews';
-import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge, type SessionExportStatesResponse } from '../lib/apiClient';
+import { api, updateSession, deleteSession, type Session, type PaginationInfo, type MatchingRawDataResponse, type UnmatchedChargeItem, type MatchedCharge, type SessionExportStatesResponse, createSessionFromTm, type CreateSessionFromTmRequest } from '../lib/apiClient';
 import { TmCostExportPanel } from '../components/TmCostExportPanel';
 import './SessionsPage.css';
 
@@ -21,6 +21,104 @@ const TABS: TabConfig[] = [
   { key: 'unmatched', label: 'Ungematchte TM' },
   { key: 'tmexport', label: 'TM-Export' },
 ];
+
+/* ===== Import Modal (TM-Charge → Import-Session) ===== */
+interface ImportModalProps {
+  charge: any;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function ImportModal({ charge, onClose, onSaved }: ImportModalProps) {
+  const [date, setDate] = useState(charge.date ? charge.date.slice(0, 16) : '');
+  const [energy, setEnergy] = useState(charge.energy_added != null ? String(charge.energy_added) : '');
+  const [cost, setCost] = useState(charge.cost != null ? String(charge.cost) : '');
+  const [location, setLocation] = useState(charge.location || 'Zuhause');
+  const [odometer, setOdometer] = useState(charge.odometer != null ? String(charge.odometer) : '');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!date) { setError('Datum ist erforderlich'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const body: CreateSessionFromTmRequest = {
+        tm_charge_id: Number(charge.tm_charge_id ?? charge.charge_id ?? charge.id),
+        date,
+        energy_kwh: energy === '' ? undefined : Number(energy),
+        cost_eur: cost === '' ? undefined : Number(cost),
+        location: location || undefined,
+        odometer_km: odometer === '' ? undefined : Number(odometer),
+        note: note || undefined,
+      };
+      const result = await createSessionFromTm(body);
+      if (!result.ok) throw new Error(result.error || 'Fehler');
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Speichern');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>TM-Charge als Session speichern</h3>
+        <p className="modal-subtitle">
+          TM #{charge.tm_charge_id ?? charge.charge_id ?? charge.id} — Daten manuell anpassen
+        </p>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="import-date">Datum &amp; Zeit *</label>
+            <input id="import-date" type="datetime-local" value={date}
+              onChange={(e) => setDate(e.target.value)} required />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="import-energy">Energie (kWh)</label>
+              <input id="import-energy" type="number" step="0.1" min="0" value={energy}
+                onChange={(e) => setEnergy(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="import-cost">Kosten (€)</label>
+              <input id="import-cost" type="number" step="0.01" min="0" value={cost}
+                onChange={(e) => setCost(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="import-location">Ort</label>
+              <input id="import-location" type="text" value={location}
+                onChange={(e) => setLocation(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="import-odometer">km-Stand</label>
+              <input id="import-odometer" type="number" step="1" min="0" value={odometer}
+                onChange={(e) => setOdometer(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="import-note">Notiz</label>
+            <input id="import-note" type="text" value={note}
+              onChange={(e) => setNote(e.target.value)} placeholder="z.B. manuell erfasst" />
+          </div>
+          {error && <div className="form-error">{error}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn btn--secondary" onClick={onClose}>Abbrechen</button>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? 'Speichere…' : 'Als Session speichern'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 /* ===== Edit Modal ===== */
 interface EditModalProps {
@@ -219,6 +317,9 @@ export function SessionsPage() {
   const [matchSaving, setMatchSaving] = useState(false);
   const [matchMessage, setMatchMessage] = useState<string | null>(null);
 
+  // Import dialog (unmatched TM → Import-Session)
+  const [importTarget, setImportTarget] = useState<any | null>(null);
+
   const openMatchDialog = async (charge: any) => {
     setMatchTarget(charge);
     setMatchSelector('');
@@ -235,6 +336,21 @@ export function SessionsPage() {
     } catch {
       setHomeSessions([]);
     }
+  };
+
+  const openImportDialog = (charge: any) => {
+    setImportTarget(charge);
+  };
+
+  const closeImportDialog = () => {
+    setImportTarget(null);
+  };
+
+  const handleImportSaved = () => {
+    // Refetch unmatched charges after import
+    api.getUnmatchedCharges(getDaysFromRange(selectedRange) || 36500)
+      .then(setRawData)
+      .catch(() => {});
   };
 
   // Odometer delta (km, one decimal) between a home session and the charge in the dialog
@@ -478,7 +594,6 @@ export function SessionsPage() {
           /* === TM-EXPORT TAB (eingebettetes Export-Panel) === */
           <TmCostExportPanel key={`tmexp-${tmExportNonce}`} initialSessionId={tmExportSeed} />
         ) : activeTab === 'unmatched' ? (
-          /* === UNMATCHED TM TAB === */
           loadingRaw ? (
             <LoadingState message="Ungematchte TM-Daten werden geladen…" />
           ) : unmatchedTMCharges.length === 0 ? (
@@ -486,7 +601,8 @@ export function SessionsPage() {
           ) : (
             <div className="unmatched-table-wrapper">
               <p className="unmatched-hint">
-                Diese TeslaMate-Charges haben keine passende EVCC-Session. Du kannst sie manuell zuordnen.
+                Diese TeslaMate-Charges haben keine passende EVCC-Session. Du kannst sie manuell zuordnen
+                oder als Import-Session mit eigenem Preis speichern.
               </p>
               <table className="unmatched-table">
                 <thead>
@@ -512,6 +628,9 @@ export function SessionsPage() {
                       <td>
                         <button className="btn-match" title="Manuell einer EVCC-Session zuordnen" onClick={() => openMatchDialog(charge)}>
                           <Link2 size={14} /> Matchen
+                        </button>
+                        <button className="btn-import" title="Als Import-Session speichern" onClick={() => openImportDialog(charge)}>
+                          <Database size={14} /> Import
                         </button>
                       </td>
                     </tr>
@@ -615,6 +734,15 @@ export function SessionsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Import Modal */}
+      {importTarget && (
+        <ImportModal
+          charge={importTarget}
+          onClose={closeImportDialog}
+          onSaved={handleImportSaved}
+        />
       )}
     </div>
   );

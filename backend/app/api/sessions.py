@@ -605,6 +605,112 @@ async def update_session(
     }
 
 
+@router.post("/from-tm")
+async def create_session_from_tm(
+    body: dict,
+    db: Session = Depends(get_db),
+):
+    """Ungematchte TM-Charge als Import-Session in CTL speichern.
+
+    Body: {
+      "tm_charge_id": 2449,
+      "date": "2026-06-23T14:30:00",
+      "energy_kwh": 12.5,
+      "cost_eur": 4.20,
+      "location": "Zuhause",
+      "odometer_km": 2814.75,
+      "note": "Manuell importiert"
+    }
+
+    Erstellt einen SessionModel-Eintrag (source_type='import') und setzt
+    gleich einen MatchingOverride, damit die Charge nicht erneut als
+    ungematcht angezeigt wird.
+    """
+    from app.models.session import SessionModel
+    from app.models.matching_override import MatchingOverride, OverrideType
+    from datetime import datetime as _dt
+
+    tm_charge_id = body.get("tm_charge_id")
+    if not tm_charge_id:
+        return {"ok": False, "error": "tm_charge_id is required"}
+
+    date_str = body.get("date")
+    if not date_str:
+        return {"ok": False, "error": "date is required"}
+
+    # Datum parsen
+    raw = date_str.replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            date_val = _dt.strptime(raw, fmt)
+            break
+        except ValueError:
+            continue
+    else:
+        return {"ok": False, "error": f"Ungültiges Datum: {date_str}"}
+
+    energy_kwh = body.get("energy_kwh")
+    cost_eur = body.get("cost_eur")
+    location = body.get("location") or "Zuhause"
+    odometer_km = body.get("odometer_km")
+    note = body.get("note") or ""
+
+    # cost_per_kwh ableiten
+    cost_per_kwh = None
+    cost_per_kwh_source = "derived"
+    if energy_kwh and cost_eur and energy_kwh > 0:
+        cost_per_kwh = round(cost_eur / energy_kwh, 4)
+
+    session = SessionModel(
+        source_id=f"tm-import-{tm_charge_id}",
+        source_type="import",
+        date=date_val,
+        location=location,
+        energy_kwh=energy_kwh,
+        cost_eur=cost_eur,
+        cost_per_kwh=cost_per_kwh,
+        cost_per_kwh_source=cost_per_kwh_source,
+        odometer_km=odometer_km,
+        note=note,
+        legacy_source="manual",
+        legacy_table="tm_import",
+        legacy_id=tm_charge_id,
+    )
+    db.add(session)
+    db.flush()
+
+    # Override setzen, damit die TM-Charge nicht erneut als ungematcht erscheint
+    override = MatchingOverride(
+        evcc_session_id=session.id,
+        teslamate_charge_id=tm_charge_id,
+        override_type=OverrideType.manual_assign,
+        reason="Manuell als Import-Session gespeichert",
+        created_by="user",
+    )
+    db.add(override)
+    db.commit()
+    db.refresh(session)
+
+    return {
+        "ok": True,
+        "message": "TM-Charge als Import-Session gespeichert",
+        "session_id": session.id,
+        "override_id": override.id,
+        "tm_charge_id": tm_charge_id,
+        "data": {
+            "id": session.id,
+            "source_type": session.source_type,
+            "date": session.date.isoformat() if session.date else None,
+            "energy_kwh": session.energy_kwh,
+            "cost_eur": session.cost_eur,
+            "cost_per_kwh": session.cost_per_kwh,
+            "location": session.location,
+            "odometer_km": session.odometer_km,
+            "note": session.note,
+        },
+    }
+
+
 @router.delete("/{session_id}")
 async def delete_session(session_id: int, db: Session = Depends(get_db)):
     """Session aus CTL loeschen.

@@ -250,6 +250,46 @@ export function createSessionMatch(
   });
 }
 
+// --- TM Import Session ---
+export interface CreateSessionFromTmRequest {
+  tm_charge_id: number;
+  date: string;
+  energy_kwh?: number;
+  cost_eur?: number;
+  location?: string;
+  odometer_km?: number;
+  note?: string;
+}
+
+export interface CreateSessionFromTmResponse {
+  ok: boolean;
+  message?: string;
+  session_id?: number;
+  override_id?: number;
+  tm_charge_id?: number;
+  data?: {
+    id: number;
+    source_type: string;
+    date: string | null;
+    energy_kwh: number | null;
+    cost_eur: number | null;
+    cost_per_kwh: number | null;
+    location: string | null;
+    odometer_km: number | null;
+    note: string | null;
+  };
+  error?: string;
+}
+
+export function createSessionFromTm(
+  body: CreateSessionFromTmRequest
+): Promise<CreateSessionFromTmResponse> {
+  return request('/sessions/from-tm', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // --- Matching ---
 export function getMatchingRawData(
   limit?: number,
@@ -537,6 +577,7 @@ export const api = {
   getSessions,
   getSessionMatches,
   createSessionMatch,
+  createSessionFromTm,
   getMatchingRawData,
   getUnmatchedCharges,
   getSessionTmSums,
