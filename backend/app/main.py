@@ -258,11 +258,20 @@ def health_check():
         info = get_data_source_info_from_db(db)
     finally:
         db.close()
-    
+
+    # Git commit hash from version.txt (written during deploy)
+    git_commit = "unknown"
+    try:
+        with open("/app/app/version.txt", "r") as f:
+            git_commit = f.read().strip()
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "service": "cartanklogger-backend",
         "version": "2.0.0",
+        "git_commit": git_commit,
         "database": "connected",
         "data_source": info["data_source"],
         "data_source_description": info["data_source_description"],
@@ -319,6 +328,41 @@ async def data_source_status():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "evcc": evcc_status,
         "teslamateapi": teslamateapi_status,
+    }
+
+
+@app.get("/api/update/check", tags=["Update"])
+def update_check():
+    """Check if there are new commits on GitHub remote.
+    
+    Note: Git operations run on host, not in container. This returns
+    current version; actual update check should run on host via ./update.sh --check
+    """
+    # Current version from version.txt
+    git_commit = "unknown"
+    try:
+        with open("/app/app/version.txt", "r") as f:
+            git_commit = f.read().strip()
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "local_commit": git_commit[:8] if git_commit != "unknown" else "unknown",
+        "remote_commit": "unknown (check on host)",
+        "behind_count": 0,
+        "update_available": False,
+        "note": "Für Update-Prüfung ./update.sh auf dem Server ausführen",
+    }
+
+
+@app.post("/api/update/apply", tags=["Update"])
+def update_apply():
+    """Trigger update.sh (git pull + rebuild). Runs on host, not in container."""
+    return {
+        "ok": False,
+        "started": False,
+        "message": "Update läuft auf dem Host-Server (./update.sh). Nicht im Container verfügbar.",
     }
 
 

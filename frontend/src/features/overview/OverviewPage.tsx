@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Euro, Activity, House, Bolt, Gauge, PlugZap, TrendingUp, TrendingDown } from 'lucide-react';
+import { Zap, Euro, Activity, House, Bolt, Gauge, PlugZap, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { useTimeRange, type RangeValue } from '../../app/TimeRangeContext';
 import { KpiCard } from '../../components/KpiCard';
 import { SessionsTable } from '../../components/SessionsTable';
 import { SessionMobileCard } from '../../components/SessionMobileCard';
 import { LoadingState, ErrorState, EmptyState } from '../../components/StateViews';
-import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs, type MonthlyPvPoint } from '../../lib/apiClient';
+import { api, type Session, type OverviewSummaryResponse, type VehicleInfoResponse, type StatisticsResponse, type StatisticsKPIs, type MonthlyPvPoint, getUpdateCheck, applyUpdate, type UpdateCheckResponse } from '../../lib/apiClient';
 import {
   Chart as ChartJS,
   ChartDataset,
@@ -58,11 +58,59 @@ export function OverviewPage() {
   const [statistics, setStatistics] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Version / Update state
+  const [versionInfo, setVersionInfo] = useState<UpdateCheckResponse | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const { selectedRange, customFrom, customTo, getRangeLabel, getDaysFromRange, getFromDate, getToDate, setSelectedRange } = useTimeRange();
 
+  // Fetch version info on mount
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const res = await getUpdateCheck();
+        if (res.ok) setVersionInfo(res);
+      } catch {
+        // ignore
+      }
+    };
+    fetchVersion();
+  }, []);
+
   const handleRangeChange = (value: RangeValue) => {
     setSelectedRange(value);
+  };
+
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const res = await getUpdateCheck();
+      if (res.ok) setVersionInfo(res);
+    } catch {
+      // ignore
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const triggerUpdate = async () => {
+    setUpdating(true);
+    try {
+      const res = await applyUpdate();
+      if (res.ok && res.started) {
+        alert(res.message);
+        // Refresh version after a delay
+        setTimeout(() => checkForUpdates(), 5000);
+      } else {
+        alert(res.message || 'Update fehlgeschlagen');
+      }
+    } catch {
+      alert('Update konnte nicht gestartet werden');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const fetchData = useCallback(async () => {
@@ -155,6 +203,42 @@ export function OverviewPage() {
           <p className="overview-page__subtitle">
             <span className="overview-page__status">{getRangeLabel(selectedRange)}</span>
           </p>
+          {/* Version & Update */}
+          <div className="overview-page__version">
+            <span className="overview-page__version-label">Version:</span>
+            <span className="overview-page__version-commit">
+              {versionInfo?.local_commit || '—'}
+            </span>
+            <button
+              className="btn btn--ghost btn--small overview-page__version-refresh"
+              onClick={checkForUpdates}
+              disabled={checkingUpdate}
+              title="Auf Updates prüfen"
+            >
+              {checkingUpdate ? (
+                <RefreshCw className="spin" size={14} />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+            </button>
+            {versionInfo?.update_available && (
+              <span className="overview-page__update-badge">Update verfügbar</span>
+            )}
+            <button
+              className="btn btn--secondary btn--small overview-page__update-btn"
+              onClick={triggerUpdate}
+              disabled={updating || !versionInfo?.update_available}
+              title="Update anwenden"
+            >
+              {updating ? (
+                <>
+                  <RefreshCw className="spin" size={14} /> Update läuft…
+                </>
+              ) : (
+                'Update anwenden'
+              )}
+            </button>
+          </div>
         </div>
         {/* Mobile: Zeitraum-Dropdown — sichtbar auf mobilen Geräten */}
         <div className="overview-page__time-range-mobile">

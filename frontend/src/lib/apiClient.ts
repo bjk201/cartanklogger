@@ -560,6 +560,31 @@ export function getVehicleCostSummary(): Promise<VehicleCostSummaryResponse> {
   return request('/vehicle/cost-summary');
 }
 
+// --- Update Check ---
+export interface UpdateCheckResponse {
+  ok: boolean;
+  local_commit: string;
+  remote_commit: string;
+  behind_count: number;
+  update_available: boolean;
+  note?: string;
+  error?: string;
+}
+
+export interface UpdateApplyResponse {
+  ok: boolean;
+  started: boolean;
+  message: string;
+}
+
+export function getUpdateCheck(): Promise<UpdateCheckResponse> {
+  return request('/update/check');
+}
+
+export function applyUpdate(): Promise<UpdateApplyResponse> {
+  return request('/update/apply', { method: 'POST' });
+}
+
 // ===== API Object (convenience wrapper) =====
 export const api = {
   health,
@@ -607,4 +632,6 @@ export const api = {
   getMatchingLiveStatus,
   getVehicleInfo,
   getVehicleCostSummary,
+  getUpdateCheck,
+  applyUpdate,
 };

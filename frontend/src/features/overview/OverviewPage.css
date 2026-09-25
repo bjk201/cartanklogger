@@ -27,6 +27,49 @@
   font-weight: 500;
 }
 
+/* Version & Update */
+.overview-page__version {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.overview-page__version-label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.overview-page__version-commit {
+  font-family: monospace;
+  background: var(--color-bg-hover);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+.overview-page__version-refresh {
+  padding: 0.25rem;
+}
+
+.overview-page__update-badge {
+  background: var(--color-warning, #f59e0b);
+  color: white;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.overview-page__update-btn {
+  margin-left: 0.5rem;
+}
+
 /* Mobile: Zeitraum-Dropdown */
 .overview-page__time-range-mobile {
   display: none;
