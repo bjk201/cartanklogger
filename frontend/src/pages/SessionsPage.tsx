@@ -81,7 +81,7 @@ function ImportModal({ charge, onClose, onSaved }: ImportModalProps) {
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="import-energy">Energie (kWh)</label>
-              <input id="import-energy" type="number" step="0.1" min="0" value={energy}
+              <input id="import-energy" type="number" step="any" min="0" value={energy}
                 onChange={(e) => setEnergy(e.target.value)} />
             </div>
             <div className="form-group">

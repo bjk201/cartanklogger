@@ -515,7 +515,9 @@
   }
 
   .sessions-page__table-container {
-    display: none;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /*display: none;  /* removed - table must be visible on all viewports*/
   }
 
   .sessions-page__filter-bar {
