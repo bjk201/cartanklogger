@@ -98,7 +98,7 @@ function ImportModal({ charge, onClose, onSaved }: ImportModalProps) {
             </div>
             <div className="form-group">
               <label htmlFor="import-odometer">km-Stand</label>
-              <input id="import-odometer" type="number" step="1" min="0" value={odometer}
+              <input id="import-odometer" type="number" step="any" min="0" value={odometer}
                 onChange={(e) => setOdometer(e.target.value)} />
             </div>
           </div>
