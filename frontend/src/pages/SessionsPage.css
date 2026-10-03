@@ -563,6 +563,7 @@
 
 .modal-container {
   background: var(--color-bg-card);
+  background-color: var(--color-bg-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   max-width: 550px;
