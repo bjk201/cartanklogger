@@ -1,20 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import { useTheme } from '../app/ThemeContext';
-import { useTimeRange } from '../app/TimeRangeContext';
-import { Sun, Moon, Menu, RefreshCw, Calendar, X } from 'lucide-react';
-import { api } from '../lib/apiClient';
+import React, { useState } from 'react';
+import { useTheme, useDesignMode } from '../app/ThemeContext';
+import { Sun, Moon, Menu, RefreshCw, Calendar, X, CheckCircle } from "lucide-react";
 import './TopBar.css';
-
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '365d', label: '365 Tage' },
-  { value: 'all', label: 'Alles' },
-  { value: 'custom', label: 'Benutzerdefiniert…' },
-] as const;
-
-type RangeValue = '7d' | '30d' | '90d' | '365d' | 'all' | 'custom';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -22,193 +9,17 @@ interface TopBarProps {
 
 export function TopBar({ onMenuClick }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
-  const { selectedRange, setSelectedRange, customFrom, setCustomFrom, customTo, setCustomTo, showCustomPicker, setShowCustomPicker, getRangeLabel } = useTimeRange();
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncSuccess, setSyncSuccess] = useState(false);
-  const [mobileRangeOpen, setMobileRangeOpen] = useState(false);
-
-  const handleRangeChange = (value: RangeValue) => {
-    setSelectedRange(value);
-    setMobileRangeOpen(false);
-  };
-
-  const handleCustomRangeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customFrom && customTo) {
-      setShowCustomPicker(false);
-      setMobileRangeOpen(false);
-    }
-  };
-
-  const handleSync = useCallback(async () => {
-    setSyncing(true);
-    setSyncError(null);
-    setSyncSuccess(false);
-    try {
-      const result = await api.syncDataSources();
-      if (result.ok) {
-        setSyncSuccess(true);
-        setTimeout(() => setSyncSuccess(false), 3000);
-      } else {
-        setSyncError('Sync fehlgeschlagen');
-      }
-    } catch (err) {
-      setSyncError(err instanceof Error ? err.message : 'Sync-Fehler');
-    } finally {
-      setSyncing(false);
-    }
-  }, []);
+  const { designMode, toggleDesignMode } = useDesignMode();
 
   return (
     <header className="topbar" role="banner">
       <div className="topbar__left">
-        <button
-          className="topbar__btn topbar__btn--icon topbar__menu-btn"
-          onClick={onMenuClick}
-          aria-label="Hauptmenü öffnen"
-        >
+        <button className="topbar__btn topbar__btn--icon topbar__menu-btn" onClick={onMenuClick} aria-label="Hauptmenü öffnen">
           <Menu size={24} />
         </button>
         <h1 className="topbar__title">CarTankLogger 2.0</h1>
-        <div className="topbar__status" role="status" aria-live="polite">
-          <span className="status-indicator status-indicator--connected" aria-hidden="true" />
-        </div>
-      </div>
-      <div className="topbar__center">
-        <div className="topbar__range-selector">
-          <label htmlFor="range-select" className="sr-only">Zeitraum</label>
-          <div className="topbar__range-wrapper">
-            <select
-              id="range-select"
-              value={selectedRange}
-              onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-              className="topbar__range-select"
-            >
-              {RANGE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-
-            {showCustomPicker && (
-              <form onSubmit={handleCustomRangeSubmit} className="topbar__custom-range">
-                <div className="topbar__date-inputs">
-                  <div className="topbar__date-input-group">
-                    <label htmlFor="custom-from" className="topbar__date-label">Von</label>
-                    <input
-                      id="custom-from"
-                      type="date"
-                      value={customFrom}
-                      onChange={(e) => setCustomFrom(e.target.value)}
-                      className="topbar__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                  <div className="topbar__date-input-group">
-                    <label htmlFor="custom-to" className="topbar__date-label">Bis</label>
-                    <input
-                      id="custom-to"
-                      type="date"
-                      value={customTo}
-                      onChange={(e) => setCustomTo(e.target.value)}
-                      className="topbar__date-input"
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                </div>
-                <div className="topbar__custom-actions">
-                  <button type="submit" className="topbar__apply-btn">Anwenden</button>
-                  <button type="button" onClick={() => setSelectedRange('30d')} className="topbar__cancel-btn">
-                    <X size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-          <span className="topbar__range-label">{getRangeLabel(selectedRange)}</span>
-        </div>
       </div>
       <div className="topbar__right">
-        {/* Mobile/Tablet (<=1024px): Zeitraum als Kalender-Icon mit Overlay */}
-        <div className="topbar__range-mobile" style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className={`topbar__btn topbar__btn--icon topbar__range-btn ${mobileRangeOpen ? 'topbar__range-btn--active' : ''}`}
-            onClick={() => setMobileRangeOpen(o => !o)}
-            aria-label={`Zeitraum wählen (aktuell: ${getRangeLabel(selectedRange)})`}
-            aria-expanded={mobileRangeOpen}
-            title={`Zeitraum: ${getRangeLabel(selectedRange)}`}
-          >
-            <Calendar size={20} />
-            <span className="topbar__range-btn-badge" aria-hidden="true">
-              {selectedRange === 'custom' ? '✓' : selectedRange === 'all' ? '∞' : selectedRange.replace('d', '')}
-            </span>
-          </button>
-          {mobileRangeOpen && (
-            <div className="topbar__range-overlay" role="dialog" aria-label="Zeitraum wählen">
-              <div className="topbar__range-selector">
-                <div className="topbar__range-wrapper">
-                  <select
-                    value={selectedRange}
-                    onChange={(e) => handleRangeChange(e.target.value as RangeValue)}
-                    className="topbar__range-select"
-                    aria-label="Zeitraum"
-                  >
-                    {RANGE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                {selectedRange === 'custom' && (
-                  <div className="topbar__custom-range" style={{ position: 'static', animation: 'none' }}>
-                    <div className="topbar__date-inputs">
-                      <div className="topbar__date-input-group">
-                        <label htmlFor="custom-from-m" className="topbar__date-label">Von</label>
-                        <input
-                          id="custom-from-m"
-                          type="date"
-                          value={customFrom}
-                          onChange={(e) => setCustomFrom(e.target.value)}
-                          className="topbar__date-input"
-                          max={new Date().toISOString().split('T')[0]}
-                        />
-                      </div>
-                      <div className="topbar__date-input-group">
-                        <label htmlFor="custom-to-m" className="topbar__date-label">Bis</label>
-                        <input
-                          id="custom-to-m"
-                          type="date"
-                          value={customTo}
-                          onChange={(e) => setCustomTo(e.target.value)}
-                          className="topbar__date-input"
-                          max={new Date().toISOString().split('T')[0]}
-                        />
-                      </div>
-                    </div>
-                    <div className="topbar__custom-actions">
-                      <button type="button" className="topbar__apply-btn" onClick={handleCustomRangeSubmit}>Anwenden</button>
-                      <button type="button" onClick={() => setSelectedRange('30d')} className="topbar__cancel-btn">
-                        <X size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        <button
-          className={`topbar__btn topbar__btn--icon ${syncing ? 'topbar__btn--syncing' : ''} ${syncSuccess ? 'topbar__btn--sync-success' : ''}`}
-          onClick={handleSync}
-          disabled={syncing}
-          aria-label="Daten synchronisieren"
-          title="Sync (EVCC + TeslaMate)"
-        >
-          <RefreshCw size={20} className={syncing ? 'topbar__sync-spin' : ''} />
-        </button>
-        {syncError && (
-          <span className="topbar__sync-error">{syncError}</span>
-        )}
         <button
           className="topbar__btn topbar__btn--icon"
           onClick={toggleTheme}
@@ -216,6 +27,14 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           title={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
         >
           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+        </button>
+        <button
+          className="topbar__btn topbar__btn--icon"
+          onClick={toggleDesignMode}
+          aria-label={designMode === 'legacy' ? 'Modernes Design aktivieren' : 'Legacy Design aktivieren'}
+          title={designMode === 'legacy' ? 'Modernes Design' : 'Legacy Design'}
+        >
+          {designMode === 'legacy' ? <RefreshCw size={20} /> : <CheckCircle size={20} />}
         </button>
       </div>
     </header>

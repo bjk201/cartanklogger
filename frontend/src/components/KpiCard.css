@@ -1,37 +1,56 @@
 /* ============================================================
-   KpiCard — State of the Art Modern Minimal (2026)
-   - Großer Wert, kleines Label, dezente Akzente
-   - Sehr leichte Schatten, viel Weißraum, ruhiges Premium-Design
-   - Konsistent mit modernem Apple/Linear-Stil
-   ============================================================ */
+   KpiCard — Two Design Modes: Legacy & Modern
+   ---------------------------------------------------
+   Mode: legacy (original CTL Design)
+   Mode: new (Modern Minimal Design per Referenz C/D/E)
+   --------------------------------------------------- */
 
+/* === Common Styles (applies to both modes) === */
 /* Card Basis */
 .kpi-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border-subtle, #e2e8f0);
-  border-radius: 16px;
-  padding: 1.5rem 2rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: all 200ms ease;
+  border-radius: var(--radius-sm, 10px);
+  padding: var(--padding-card, 1rem 1.5rem);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.02));
+  transition: all 150ms ease;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--gap, 0.5rem);
   position: relative;
   overflow: hidden;
-  position: relative;
 }
 
-/* Statuserklärung: Klassen kpi-card--status-good/neutral/warn werden
-   vom Komponenten-Logik ergänzt. Hier die Standard-Null-Opazität, falls
-   keine zusätzliche Klasse gesetzt ist. */
-.kpi-card--status-good,
-.kpi-card--status-neutral,
-.kpi-card--status-warn {
-  border: none;
+/* Hover-Effekt */
+.kpi-card:hover {
+  border-color: var(--color-border, #cbd5e1);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover, 0 4px 12px rgba(0, 0, 0, 0.04));
 }
 
-/* Good-Status: grüner Punkt oben rechts */
-.kpi-card--status-good::after {
+/* === LEGACY Mode Styles (Standard CTL Design) === */
+.kpi-card--mode-legacy {
+  /* Kein spezielles Hintergrund-Override; nutzt --color-bg-card */
+}
+
+/* Status-Indikator: linke 3px-Stripe in Status-Farbe (Legacy) */
+.kpi-card--status-good::before { background: #16a34a; }
+.kpi-card--status-neutral::before { background: #4f46e5; }
+.kpi-card--status-warn::before { background: #f59e0b; }
+
+/* Vergleichs-Badge (Legacy) */
+.kpi-card__trend--up { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
+.kpi-card__trend--down { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.kpi-card__trend--neutral { background: rgba(100, 116, 139, 0.08); color: #64748b; }
+
+/* === NEW Mode Styles (Modern Minimal) === */
+.kpi-card--mode-new {
+  --color-bg-card: var(--color-bg-card-new, #0c141e);
+  --color-border-subtle: var(--color-border-subtle-new, #334155);
+}
+
+/* Status-Indikator: oben-rechter Punkt (NEW) */
+.kpi-card--mode-new.kpi-card--status-good::after {
   content: '';
   position: absolute;
   right: 1.5rem;
@@ -43,10 +62,8 @@
   opacity: 0.2;
   transition: opacity 150ms ease;
 }
-.kpi-card--status-good:hover::after { opacity: 0.3; }
-
-/* Neutral-Status: grauer Punkt */
-.kpi-card--status-neutral::after {
+.kpi-card--mode-new.kpi-card--status-good:hover::after { opacity: 0.3; }
+.kpi-card--mode-new.kpi-card--status-neutral::after {
   content: '';
   position: absolute;
   right: 1.5rem;
@@ -58,10 +75,8 @@
   opacity: 0.2;
   transition: opacity 150ms ease;
 }
-.kpi-card--status-neutral:hover::after { opacity: 0.3; }
-
-/* Warn-Status: orangener Punkt */
-.kpi-card--status-warn::after {
+.kpi-card--mode-new.kpi-card--status-neutral:hover::after { opacity: 0.3; }
+.kpi-card--mode-new.kpi-card--status-warn::after {
   content: '';
   position: absolute;
   right: 1.5rem;
@@ -73,83 +88,9 @@
   opacity: 0.2;
   transition: opacity 150ms ease;
 }
-.kpi-card--status-warn:hover::after { opacity: 0.3; }
+.kpi-card--mode-new.kpi-card--status-warn:hover::after { opacity: 0.3; }
 
-/* Hover-Effekt: Karte hebt sich leicht, Shadow wird sanfter */
-.kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-  border-color: var(--color-border, #cbd5e1);
-}
-
-/* Details-Popup bei Hover (wenn hasDetails class gesetzt) */
-.kpi-card--has-details:hover .kpi-card__details-popup {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-  pointer-events: auto;
-}
-
-/* === Icon-Bereich (oben) === */
-.kpi-card__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--icon-color, #f1f5f9);
-  color: var(--icon-text-color, #64748b);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 0.5rem;
-  flex-shrink: 0;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-.kpi-card__icon svg { width: 24px !important; height: 24px !important; }
-.kpi-card__icon--sm { width: 32px; height: 32px; }
-.kpi-card__icon--sm svg { width: 20px !important; height: 20px !important; }
-
-/* === Wert-Zeile (groß im Mittelpunkt) === */
-.kpi-card__value-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-.kpi-card__value {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--color-text, #0f172a);
-  font-variant-numeric: tabular-nums;
-  margin: 0;
-  white-space: nowrap;
-}
-
-/* Einheit unter dem Wert */
-.kpi-card__unit {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #64748b);
-  margin: 0.125rem 0 0;
-  white-space: nowrap;
-}
-
-/* === Label (oben klein, dezent) === */
-.kpi-card__label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* === Trend-Pill (optional, oben rechts) === */
+/* Vergleichs-Badge (NEW) - oben rechts */
 .kpi-card__trend {
   position: absolute;
   right: 1.5rem;
@@ -166,95 +107,16 @@
   background: rgba(15, 23, 42, 0.04);
   color: var(--color-text-muted, #64748b);
 }
-.kpi-card__trend-icon { display: inline-flex; align-items: center; justify-content: center; }
-.kpi-card__trend-value { font-variant-numeric: tabular-nums; }
 .kpi-card__trend--up { background: rgba(16, 185, 129, 0.08); color: #10b981; }
 .kpi-card__trend--down { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
 .kpi-card__trend--neutral { background: rgba(100, 116, 139, 0.08); color: #64748b; }
 
-/* === Sparkline (optional unten) === */
-.kpi-card__spark {
-  height: 28px;
-  width: 100%;
-  margin: 0.5rem 0 0;
-  flex-shrink: 0;
-}
-.kpi-card__spark--horizontal {
-  height: 24px;
-  width: 100%;
-  margin: 0;
-  flex-shrink: 0;
-}
-
-/* === Grid-Layout (für Overview-Seite) === */
-.kpi-card__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-/* === Dark-Mode Anpassungen === */
-html[data-theme="dark"] .kpi-card {
-  background: #0f172a;
-  border-color: var(--color-border-subtle, #334155);
-}
-html[data-theme="dark"] .kpi-card:hover {
-  border-color: var(--color-border, #475569);
-}
-html[data-theme="dark"] .kpi-card__icon {
-  background: var(--icon-color, #334155);
-  color: var(--icon-text-color, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__value {
-  color: #f8fafc;
-}
-html[data-theme="dark"] .kpi-card__unit {
-  color: var(--color-text-muted, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__label {
-  color: var(--color-text-muted, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__trend {
-  background: rgba(15, 23, 42, 0.06);
-  color: var(--color-text-muted, #94a3b8);
-}
-
-/* === Responsive === */
-@media (max-width: 1200px) {
-  .kpi-card__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .kpi-card__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 600px) {
-  .kpi-card__grid {
-    grid-template-columns: 1fr;
-  }
-  .kpi-card {
-    padding: 1.25rem 1.5rem;
-  }
-  .kpi-card__value {
-    font-size: 1.75rem;
-  }
-  .kpi-card__icon {
-    width: 36px;
-    height: 36px;
-  }
-}
-
-/* === Icon-Bereich (oben) === */
+/* NEU: Icon-Kreis oben */
 .kpi-card__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--icon-color, #f1f5f9);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--icon-color, #e2e8f9);
   color: var(--icon-text-color, #64748b);
   display: flex;
   align-items: center;
@@ -263,22 +125,20 @@ html[data-theme="dark"] .kpi-card__trend {
   flex-shrink: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
-.kpi-card__icon svg { width: 24px !important; height: 24px !important; }
-.kpi-card__icon--sm { width: 32px; height: 32px; }
+.kpi-card__icon svg { width: 18px !important; height: 18px !important; }
+.kpi-card__icon--sm { width: 28px; height: 28px; }
 .kpi-card__icon--sm svg { width: 20px !important; height: 20px !important; }
 
-/* === Wert-Zeile (groß im Mittelpunkt) === */
+/* Wert-Zeile */
 .kpi-card__value-row {
   display: flex;
   align-items: baseline;
-  justify-content: center;
   gap: 0.5rem;
   width: 100%;
 }
-
 .kpi-card__value {
-  font-size: 2rem;
-  font-weight: 700;
+  font-size: var(--font-size-value, 1.5rem);
+  font-weight: var(--font-weight-value, 700);
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--color-text, #0f172a);
@@ -286,125 +146,56 @@ html[data-theme="dark"] .kpi-card__trend {
   margin: 0;
   white-space: nowrap;
 }
-
-/* Einheit unter dem Wert */
 .kpi-card__unit {
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--font-size-unit, 0.875rem);
+  font-weight: var(--font-weight-unit, 500);
   color: var(--color-text-muted, #64748b);
   margin: 0.125rem 0 0;
   white-space: nowrap;
 }
 
-/* === Label (oben klein, dezent) === */
+/* Label */
 .kpi-card__label {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: var(--font-size-label, 0.75rem);
+  font-weight: var(--font-weight-label, 600);
   color: var(--color-text-muted, #64748b);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: var(--text-transform-label, uppercase);
+  letter-spacing: var(--letter-spacing-label, 0.05em);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* === Trend-Pill (optional, oben rechts) === */
-.kpi-card__trend {
-  position: absolute;
-  right: 1.5rem;
-  top: 1.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  background: rgba(15, 23, 42, 0.04);
-  color: var(--color-text-muted, #64748b);
-}
-.kpi-card__trend-icon { display: inline-flex; align-items: center; justify-content: center; }
-.kpi-card__trend-value { font-variant-numeric: tabular-nums; }
-.kpi-card__trend--up { background: rgba(16, 185, 129, 0.08); color: #10b981; }
-.kpi-card__trend--down { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
-.kpi-card__trend--neutral { background: rgba(100, 116, 139, 0.08); color: #64748b; }
-
-/* === Sparkline (optional unten) === */
-.kpi-card__spark {
-  height: 28px;
-  width: 100%;
-  margin: 0.5rem 0 0;
-  flex-shrink: 0;
-}
-.kpi-card__spark--horizontal {
-  height: 24px;
-  width: 100%;
-  margin: 0;
-  flex-shrink: 0;
+/* === Custom Properties (werden per CSS-in-JS oder global gesetzt) === */
+/* Dark Mode Variablen (standardmäßig) */
+:root {
+  --color-bg-card: #0c141e;
+  --color-border-subtle: #334155;
+  --radius-sm: 10px;
+  --padding-card: 1rem 1.5rem;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --color-text: #f3f5f7;
+  --color-text-muted: #a2acb9;
+  --color-border: #9ca3af;
+  --font-size-value: 1.5rem;
+  --font-weight-value: 700;
+  --font-size-unit: 0.875rem;
+  --font-weight-unit: 500;
+  --font-size-label: 0.75rem;
+  --font-weight-label: 600;
+  --letter-spacing-label: 0.05em;
 }
 
-/* === Grid-Layout (für Overview-Seite) === */
-.kpi-card__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-/* === Dark-Mode Anpassungen === */
-html[data-theme="dark"] .kpi-card {
-  background: #0f172a;
-  border-color: var(--color-border-subtle, #334155);
-}
-html[data-theme="dark"] .kpi-card:hover {
-  border-color: var(--color-border, #475569);
-}
-html[data-theme="dark"] .kpi-card__icon {
-  background: var(--icon-color, #334155);
-  color: var(--icon-text-color, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__value {
-  color: #f8fafc;
-}
-html[data-theme="dark"] .kpi-card__unit {
-  color: var(--color-text-muted, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__label {
-  color: var(--color-text-muted, #94a3b8);
-}
-html[data-theme="dark"] .kpi-card__trend {
-  background: rgba(15, 23, 42, 0.06);
-  color: var(--color-text-muted, #94a3b8);
-}
-
-/* === Responsive === */
-@media (max-width: 1200px) {
-  .kpi-card__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .kpi-card__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 600px) {
-  .kpi-card__grid {
-    grid-template-columns: 1fr;
-  }
-  .kpi-card {
-    padding: 1.25rem 1.5rem;
-  }
-  .kpi-card__value {
-    font-size: 1.75rem;
-  }
-  .kpi-card__icon {
-    width: 36px;
-    height: 36px;
-  }
+/* Legacy Mode Overrides (bei data-theme="legacy") */
+[data-theme="legacy"] {
+  --color-bg-card: #f8fafc;
+  --color-border-subtle: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-border: #d1d5db;
+  --font-size-value: 1.375rem;
+  --font-size-unit: 0.8125rem;
+  --font-size-label: 0.6875rem;
 }
