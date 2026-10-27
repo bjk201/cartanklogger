@@ -310,7 +310,7 @@ export function OverviewPage() {
                 return '—';
               })()}
               unit="km"
-              icon={(p) => <Gauge {...p} />}
+              icon={(p: any) => <Gauge {...p} />}
               iconColor="var(--color-primary)"
               horizontal
               status="good"
@@ -339,7 +339,7 @@ export function OverviewPage() {
                   label="Verbrauch + Kosten / 100 km"
                   value={formatNumber(consumption)}
                   unit="kWh/100km"
-                  icon={(p) => <Zap {...p} />}
+                  icon={(p: any) => <Zap {...p} />}
                   iconColor="var(--color-home)"
                   horizontal
                   status="good"
@@ -366,7 +366,7 @@ export function OverviewPage() {
                   label="Letzte Ladung"
                   value={last.energy_kwh != null ? formatNumber(last.energy_kwh) : '—'}
                   unit="kWh"
-                  icon={(p) => <PlugZap {...p} />}
+                  icon={(p: any) => <PlugZap {...p} />}
                   iconColor="var(--color-external)"
                   horizontal
                   status="neutral"
@@ -384,7 +384,7 @@ export function OverviewPage() {
               label="PV-Anteil"
               value={formatNumber(actualPvPct)}
               unit="%"
-              icon={(p) => <Activity {...p} />}
+              icon={(p: any) => <Activity {...p} />}
               iconColor="#eab308"
               horizontal
               status={actualPvPct >= 80 ? 'good' : actualPvPct >= 50 ? 'neutral' : 'warn'}
@@ -410,7 +410,7 @@ export function OverviewPage() {
               label="Geladene kWh"
               value={summary.total_energy_kwh ? formatNumber(summary.total_energy_kwh) : '—'}
               unit="kWh"
-              icon={(p) => <Zap {...p} />}
+              icon={(p: any) => <Zap {...p} />}
               iconColor="var(--color-home)"
               horizontal
               status="good"
@@ -432,7 +432,7 @@ export function OverviewPage() {
               label="Gesamtkosten"
               value={summary.total_cost_eur ? formatNumber(summary.total_cost_eur) : '—'}
               unit="€"
-              icon={(p) => <Euro {...p} />}
+              icon={(p: any) => <Euro {...p} />}
               iconColor="#f59e0b"
               horizontal
               status="neutral"
@@ -452,7 +452,7 @@ export function OverviewPage() {
             <KpiCard
               label="Ø Kosten/kWh"
               value={formatCostPerKWh(summary.avg_cost_per_kwh)}
-              icon={(p) => <Activity {...p} />}
+              icon={(p: any) => <Activity {...p} />}
               iconColor="var(--color-primary)"
               horizontal
               status="warn"
@@ -468,7 +468,7 @@ export function OverviewPage() {
                 label="Ø Energie / Session"
                 value={formatNumber(statistics.kpis.avg_energy_per_session)}
                 unit="kWh"
-                icon={(p) => <Bolt {...p} />}
+                icon={(p: any) => <Bolt {...p} />}
                 iconColor="var(--color-home)"
                 horizontal
                 status="good"
@@ -483,7 +483,7 @@ export function OverviewPage() {
                 label="Ø Kosten / Session"
                 value={formatNumber(statistics.kpis.avg_cost_per_session)}
                 unit="€"
-                icon={(p) => <Euro {...p} />}
+                icon={(p: any) => <Euro {...p} />}
                 iconColor="#f59e0b"
                 horizontal
                 status="neutral"
@@ -527,7 +527,7 @@ export function OverviewPage() {
                 value={formatNumber(statistics.kpis.charging_loss_costs.total_cost_eur)}
                 unit="€"
                 subtitle={`Zuhause ${formatNumber(statistics.kpis.charging_loss_costs.home_cost_eur ?? 0)} € · Ext. ${formatNumber(statistics.kpis.charging_loss_costs.external_cost_eur ?? 0)} €`}
-                icon={(p) => <Euro {...p} />}
+                icon={(p: any) => <Euro {...p} />}
                 iconColor="#ef4444"
                 horizontal
               />
